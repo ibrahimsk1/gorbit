@@ -1,6 +1,8 @@
 module github.com/gorbit/orbitalrush
 
-go 1.23
+go 1.23.0
+
+toolchain go1.23.3
 
 require (
 	github.com/onsi/ginkgo/v2 v2.27.2
