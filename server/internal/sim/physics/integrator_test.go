@@ -4,9 +4,9 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gorbit/orbitalrush/internal/sim/entities"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/gorbit/orbitalrush/internal/sim/entities"
 )
 
 func TestIntegrator(t *testing.T) {
@@ -89,7 +89,7 @@ var _ = Describe("Integrator", Label("scope:unit", "loop:g1-physics", "layer:sim
 			It("follows parabolic path with constant acceleration", func() {
 				pos := entities.NewVec2(0.0, 0.0)
 				vel := entities.NewVec2(0.0, 0.0) // Starting from rest
-				acc := entities.NewVec2(1.0, 0.0)  // Constant acceleration in x direction
+				acc := entities.NewVec2(1.0, 0.0) // Constant acceleration in x direction
 
 				newPos, newVel := SemiImplicitEuler(pos, vel, acc, dt)
 
@@ -307,7 +307,7 @@ var _ = Describe("Integrator", Label("scope:unit", "loop:g1-physics", "layer:sim
 				pos := entities.NewVec2(0.0, 0.0)
 				vel := entities.NewVec2(0.0, 0.0)
 				acc := entities.NewVec2(1e10, 1e10) // Very large acceleration
-				dt := 1e-6 // Small time step
+				dt := 1e-6                          // Small time step
 
 				// Should not panic
 				newPos, newVel := SemiImplicitEuler(pos, vel, acc, dt)
@@ -336,4 +336,3 @@ var _ = Describe("Integrator", Label("scope:unit", "loop:g1-physics", "layer:sim
 		})
 	})
 })
-

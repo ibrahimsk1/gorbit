@@ -6,8 +6,8 @@ import "github.com/gorbit/orbitalrush/internal/sim/entities"
 // This method updates velocity first, then uses the new velocity to update position.
 //
 // Algorithm:
-//   1. v_new = v_old + a * dt
-//   2. p_new = p_old + v_new * dt
+//  1. v_new = v_old + a * dt
+//  2. p_new = p_old + v_new * dt
 //
 // This method is symplectic, meaning it better conserves energy compared to
 // explicit Euler, making it suitable for physics simulations.
@@ -30,4 +30,3 @@ func SemiImplicitEuler(pos, vel, acc entities.Vec2, dt float64) (newPos, newVel 
 
 	return newPos, newVel
 }
-
