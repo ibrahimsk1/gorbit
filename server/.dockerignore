@@ -1,0 +1,10 @@
+bin/
+*.test
+*.out
+.git/
+.gitignore
+.env
+.env.local
+*.md
+development/
+
