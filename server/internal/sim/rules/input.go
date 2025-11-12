@@ -142,4 +142,3 @@ func ApplyInput(ship entities.Ship, input InputCommand, dt float64) entities.Shi
 		newEnergy,
 	)
 }
-
