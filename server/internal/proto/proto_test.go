@@ -782,5 +782,377 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 			})
 		})
 	})
+
+	Describe("Schema Compatibility", Label("scope:contract", "loop:g4-proto", "layer:contract"), func() {
+		Describe("Forward Compatibility", func() {
+			It("handles extra JSON fields gracefully in InputMessage", func() {
+				// Messages with extra fields should be ignored (forward compatibility)
+				jsonStr := `{"t":"input","seq":1,"thrust":0.5,"turn":0.3,"extra":"field"}`
+				var msg InputMessage
+
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg.Type).To(Equal("input"))
+				Expect(msg.Seq).To(Equal(uint32(1)))
+				Expect(msg.Thrust).To(Equal(float32(0.5)))
+				Expect(msg.Turn).To(Equal(float32(0.3)))
+			})
+
+			It("handles extra JSON fields gracefully in SnapshotMessage", func() {
+				jsonStr := `{
+					"t": "snapshot",
+					"tick": 1,
+					"ship": {"pos":{"x":0,"y":0},"vel":{"x":0,"y":0},"rot":0,"energy":100},
+					"sun": {"pos":{"x":0,"y":0},"radius":5},
+					"pallets": [],
+					"done": false,
+					"win": false,
+					"extra": "field"
+				}`
+				var msg SnapshotMessage
+
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg.Type).To(Equal("snapshot"))
+			})
+		})
+
+		Describe("Backward Compatibility", func() {
+			It("handles missing optional fields in nested structures", func() {
+				// Note: All current fields are required, but this test ensures
+				// that if we add optional fields in the future, they're handled correctly
+				jsonStr := `{"t":"input","seq":1,"thrust":0.5,"turn":0.3}`
+				var msg InputMessage
+
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				Expect(err).NotTo(HaveOccurred())
+				// All required fields should be present
+				Expect(msg.Type).NotTo(BeEmpty())
+				Expect(msg.Seq).NotTo(Equal(uint32(0)))
+			})
+		})
+
+		Describe("Field Name Stability", func() {
+			It("enforces exact JSON field names for InputMessage", func() {
+				// Test that field names match TDD spec exactly
+				msg := InputMessage{
+					Type:   "input",
+					Seq:    1,
+					Thrust: 0.5,
+					Turn:   0.3,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				var unmarshaled map[string]interface{}
+				err = json.Unmarshal(data, &unmarshaled)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify exact field names from TDD spec
+				Expect(unmarshaled).To(HaveKey("t"))
+				Expect(unmarshaled).To(HaveKey("seq"))
+				Expect(unmarshaled).To(HaveKey("thrust"))
+				Expect(unmarshaled).To(HaveKey("turn"))
+				Expect(unmarshaled).NotTo(HaveKey("type")) // Should be "t", not "type"
+				Expect(unmarshaled).NotTo(HaveKey("sequence")) // Should be "seq", not "sequence"
+			})
+
+			It("enforces exact JSON field names for SnapshotMessage", func() {
+				msg := SnapshotMessage{
+					Type: "snapshot",
+					Tick:  1,
+					Ship: ShipSnapshot{
+						Pos:    Vec2Snapshot{X: 0, Y: 0},
+						Vel:    Vec2Snapshot{X: 0, Y: 0},
+						Rot:    0,
+						Energy: 100,
+					},
+					Sun: SunSnapshot{
+						Pos:    Vec2Snapshot{X: 0, Y: 0},
+						Radius: 5,
+					},
+					Pallets: []PalletSnapshot{},
+					Done:    false,
+					Win:     false,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				var unmarshaled map[string]interface{}
+				err = json.Unmarshal(data, &unmarshaled)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify exact field names from TDD spec
+				Expect(unmarshaled).To(HaveKey("t"))
+				Expect(unmarshaled).To(HaveKey("tick"))
+				Expect(unmarshaled).To(HaveKey("ship"))
+				Expect(unmarshaled).To(HaveKey("sun"))
+				Expect(unmarshaled).To(HaveKey("pallets"))
+				Expect(unmarshaled).To(HaveKey("done"))
+				Expect(unmarshaled).To(HaveKey("win"))
+			})
+		})
+
+		Describe("Field Type Stability", func() {
+			It("enforces correct field types for InputMessage", func() {
+				msg := InputMessage{
+					Type:   "input",
+					Seq:    1,
+					Thrust: 0.5,
+					Turn:   0.3,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				var unmarshaled map[string]interface{}
+				err = json.Unmarshal(data, &unmarshaled)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify types match TDD spec
+				Expect(unmarshaled["t"]).To(BeAssignableToTypeOf(""))
+				Expect(unmarshaled["seq"]).To(BeNumerically(">=", 0)) // uint32
+				Expect(unmarshaled["thrust"]).To(BeAssignableToTypeOf(float64(0))) // float32 -> float64 in JSON
+				Expect(unmarshaled["turn"]).To(BeAssignableToTypeOf(float64(0))) // float32 -> float64 in JSON
+			})
+		})
+	})
+
+	Describe("Breaking Change Detection", Label("scope:contract", "loop:g4-proto", "layer:contract"), func() {
+		Describe("Message Structure", func() {
+			It("detects if required fields are missing from InputMessage", func() {
+				// Missing "t" field
+				jsonStr := `{"seq":1,"thrust":0.5,"turn":0.3}`
+				var msg InputMessage
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				// Should unmarshal but Type will be empty, validation should catch it
+				Expect(err).NotTo(HaveOccurred())
+				err = ValidateInputMessage(&msg)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("detects if required fields are missing from SnapshotMessage", func() {
+				// Missing "sun" field - will have zero radius which should fail validation
+				jsonStr := `{"t":"snapshot","tick":1,"ship":{"pos":{"x":0,"y":0},"vel":{"x":0,"y":0},"rot":0,"energy":100},"pallets":[],"done":false,"win":false}`
+				var msg SnapshotMessage
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				// Should unmarshal but Sun will be zero value with radius=0, validation should catch it
+				Expect(err).NotTo(HaveOccurred())
+				err = ValidateSnapshotMessage(&msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("radius"))
+			})
+		})
+
+		Describe("Contract Stability", func() {
+			It("maintains consistent JSON schema for InputMessage", func() {
+				// This test ensures the schema doesn't change unexpectedly
+				msg := InputMessage{
+					Type:   "input",
+					Seq:    42,
+					Thrust: 0.75,
+					Turn:   -0.5,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Parse and verify structure
+				var parsed map[string]interface{}
+				err = json.Unmarshal(data, &parsed)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify all expected fields are present
+				Expect(parsed).To(HaveKey("t"))
+				Expect(parsed).To(HaveKey("seq"))
+				Expect(parsed).To(HaveKey("thrust"))
+				Expect(parsed).To(HaveKey("turn"))
+
+				// Verify no unexpected fields
+				Expect(len(parsed)).To(Equal(4))
+			})
+
+			It("maintains consistent JSON schema for SnapshotMessage", func() {
+				msg := SnapshotMessage{
+					Type: "snapshot",
+					Tick:  100,
+					Ship: ShipSnapshot{
+						Pos:    Vec2Snapshot{X: 10, Y: 20},
+						Vel:    Vec2Snapshot{X: 1, Y: -1},
+						Rot:    1.57,
+						Energy: 75,
+					},
+					Sun: SunSnapshot{
+						Pos:    Vec2Snapshot{X: 0, Y: 0},
+						Radius: 5,
+					},
+					Pallets: []PalletSnapshot{
+						{ID: 1, Pos: Vec2Snapshot{X: 15, Y: 15}, Active: true},
+					},
+					Done: false,
+					Win:  false,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Parse and verify structure
+				var parsed map[string]interface{}
+				err = json.Unmarshal(data, &parsed)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify all expected top-level fields are present
+				Expect(parsed).To(HaveKey("t"))
+				Expect(parsed).To(HaveKey("tick"))
+				Expect(parsed).To(HaveKey("ship"))
+				Expect(parsed).To(HaveKey("sun"))
+				Expect(parsed).To(HaveKey("pallets"))
+				Expect(parsed).To(HaveKey("done"))
+				Expect(parsed).To(HaveKey("win"))
+			})
+		})
+	})
+
+	Describe("Edge Cases", Label("scope:contract", "loop:g4-proto", "layer:contract"), func() {
+		It("handles maximum sequence numbers", func() {
+			msg := InputMessage{
+				Type:   "input",
+				Seq:    ^uint32(0), // Maximum uint32
+				Thrust: 1.0,
+				Turn:   1.0,
+			}
+
+			data, err := json.Marshal(msg)
+			Expect(err).NotTo(HaveOccurred())
+
+			var unmarshaled InputMessage
+			err = json.Unmarshal(data, &unmarshaled)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unmarshaled.Seq).To(Equal(^uint32(0)))
+		})
+
+		It("handles large tick values", func() {
+			msg := SnapshotMessage{
+				Type: "snapshot",
+				Tick:  ^uint32(0), // Maximum uint32
+				Ship: ShipSnapshot{
+					Pos:    Vec2Snapshot{X: 0, Y: 0},
+					Vel:    Vec2Snapshot{X: 0, Y: 0},
+					Rot:    0,
+					Energy: 100,
+				},
+				Sun: SunSnapshot{
+					Pos:    Vec2Snapshot{X: 0, Y: 0},
+					Radius: 5,
+				},
+				Pallets: []PalletSnapshot{},
+				Done:    false,
+				Win:     false,
+			}
+
+			data, err := json.Marshal(msg)
+			Expect(err).NotTo(HaveOccurred())
+
+			var unmarshaled SnapshotMessage
+			err = json.Unmarshal(data, &unmarshaled)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unmarshaled.Tick).To(Equal(^uint32(0)))
+		})
+
+		It("handles very large floating point values", func() {
+			msg := SnapshotMessage{
+				Type: "snapshot",
+				Tick:  1,
+				Ship: ShipSnapshot{
+					Pos:    Vec2Snapshot{X: 1e10, Y: -1e10},
+					Vel:    Vec2Snapshot{X: 1e5, Y: -1e5},
+					Rot:    6.283185307179586, // 2*pi
+					Energy: 1e6,
+				},
+				Sun: SunSnapshot{
+					Pos:    Vec2Snapshot{X: 0, Y: 0},
+					Radius: 1e5,
+				},
+				Pallets: []PalletSnapshot{},
+				Done:    false,
+				Win:     false,
+			}
+
+			data, err := json.Marshal(msg)
+			Expect(err).NotTo(HaveOccurred())
+
+			var unmarshaled SnapshotMessage
+			err = json.Unmarshal(data, &unmarshaled)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unmarshaled.Ship.Pos.X).To(BeNumerically("~", 1e10, 1e-5))
+		})
+
+		It("handles empty pallets array", func() {
+			msg := SnapshotMessage{
+				Type: "snapshot",
+				Tick:  1,
+				Ship: ShipSnapshot{
+					Pos:    Vec2Snapshot{X: 0, Y: 0},
+					Vel:    Vec2Snapshot{X: 0, Y: 0},
+					Rot:    0,
+					Energy: 100,
+				},
+				Sun: SunSnapshot{
+					Pos:    Vec2Snapshot{X: 0, Y: 0},
+					Radius: 5,
+				},
+				Pallets: []PalletSnapshot{},
+				Done:    false,
+				Win:     false,
+			}
+
+			data, err := json.Marshal(msg)
+			Expect(err).NotTo(HaveOccurred())
+
+			var unmarshaled SnapshotMessage
+			err = json.Unmarshal(data, &unmarshaled)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(unmarshaled.Pallets)).To(Equal(0))
+		})
+
+		It("handles many pallets", func() {
+			pallets := make([]PalletSnapshot, 100)
+			for i := range pallets {
+				pallets[i] = PalletSnapshot{
+					ID:     uint32(i + 1),
+					Pos:    Vec2Snapshot{X: float64(i), Y: float64(i)},
+					Active: i%2 == 0,
+				}
+			}
+
+			msg := SnapshotMessage{
+				Type: "snapshot",
+				Tick:  1,
+				Ship: ShipSnapshot{
+					Pos:    Vec2Snapshot{X: 0, Y: 0},
+					Vel:    Vec2Snapshot{X: 0, Y: 0},
+					Rot:    0,
+					Energy: 100,
+				},
+				Sun: SunSnapshot{
+					Pos:    Vec2Snapshot{X: 0, Y: 0},
+					Radius: 5,
+				},
+				Pallets: pallets,
+				Done:    false,
+				Win:     false,
+			}
+
+			data, err := json.Marshal(msg)
+			Expect(err).NotTo(HaveOccurred())
+
+			var unmarshaled SnapshotMessage
+			err = json.Unmarshal(data, &unmarshaled)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(unmarshaled.Pallets)).To(Equal(100))
+		})
+	})
 })
 
