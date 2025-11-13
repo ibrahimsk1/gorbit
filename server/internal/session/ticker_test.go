@@ -186,15 +186,18 @@ var _ = Describe("Fixed-Rate Ticker", Label("scope:unit", "loop:g3-orch", "layer
 
 			// Jump forward by multiple intervals
 			clock.Advance(tickInterval * 5)
-			ticked := ticker.Tick(clock.Now())
+			now := clock.Now()
+			ticked := ticker.Tick(now)
 
-			// Should tick once (not multiple times)
+			// Should tick once (not multiple times in a single call)
 			Expect(ticked).To(BeTrue())
 
-			// Next tick should require another interval
-			ticked2 := ticker.Tick(clock.Now())
+			// After tick, lastTick = now, so calling Tick() again with same now should not tick
+			// This is the expected behavior - Tick() only ticks once per call
+			ticked2 := ticker.Tick(now)
 			Expect(ticked2).To(BeFalse())
 
+			// Advance time by one more interval and tick should work again
 			clock.Advance(tickInterval)
 			ticked3 := ticker.Tick(clock.Now())
 			Expect(ticked3).To(BeTrue())

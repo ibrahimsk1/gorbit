@@ -372,7 +372,7 @@ var _ = Describe("Rules Integration", Label("scope:unit", "loop:g2-rules", "laye
 
 		It("win condition with no pallets", func() {
 			world := entities.NewWorld(
-				entities.NewShip(entities.NewVec2(0.0, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0),
+				entities.NewShip(entities.NewVec2(100.0, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0),
 				entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
 				nil, // No pallets
 			)
@@ -380,9 +380,8 @@ var _ = Describe("Rules Integration", Label("scope:unit", "loop:g2-rules", "laye
 			// Evaluate game state
 			world = EvaluateGameState(world)
 
-			// Win condition should be met (no pallets = win)
-			Expect(world.Done).To(BeTrue())
-			Expect(world.Win).To(BeTrue())
+			// No pallets means no win condition can trigger, so game continues
+			Expect(world.Done).To(BeFalse())
 		})
 
 		It("lose condition with sun collision", func() {

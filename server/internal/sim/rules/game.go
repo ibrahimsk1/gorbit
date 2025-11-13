@@ -7,17 +7,17 @@ import (
 
 // CheckWinCondition checks if the win condition is met.
 // Win condition: all pallets are collected (all Pallets have Active=false).
-// If there are no pallets, the win condition is considered met.
+// If there are no pallets configured, the win condition cannot trigger.
 //
 // Parameters:
 //   - world: Current world state
 //
 // Returns:
-//   - true if all pallets are collected (or no pallets exist), false otherwise
+//   - true if all pallets are collected, false otherwise (including when no pallets exist)
 func CheckWinCondition(world entities.World) bool {
-	// If there are no pallets, win condition is met
+	// No pallets means there is no collection objective yet, so the win condition cannot trigger.
 	if len(world.Pallets) == 0 {
-		return true
+		return false
 	}
 
 	// Check if all pallets are collected (Active=false)

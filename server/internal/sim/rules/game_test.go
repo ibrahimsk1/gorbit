@@ -33,7 +33,7 @@ var _ = Describe("Game State Transitions", Label("scope:unit", "loop:g2-rules", 
 			Expect(result).To(BeTrue())
 		})
 
-		It("returns true when there are no pallets", func() {
+		It("returns false when there are no pallets", func() {
 			ship := entities.NewShip(
 				entities.NewVec2(0.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
@@ -45,7 +45,7 @@ var _ = Describe("Game State Transitions", Label("scope:unit", "loop:g2-rules", 
 			world := entities.NewWorld(ship, sun, pallets)
 
 			result := CheckWinCondition(world)
-			Expect(result).To(BeTrue())
+			Expect(result).To(BeFalse())
 		})
 
 		It("returns false when at least one pallet is active", func() {
@@ -405,7 +405,7 @@ var _ = Describe("Game State Transitions", Label("scope:unit", "loop:g2-rules", 
 			Expect(world2.Win).To(Equal(world3.Win))
 		})
 
-		It("handles empty world (no pallets) as win", func() {
+		It("handles empty world (no pallets) as not done", func() {
 			ship := entities.NewShip(
 				entities.NewVec2(100.0, 100.0),
 				entities.NewVec2(0.0, 0.0),
@@ -418,8 +418,8 @@ var _ = Describe("Game State Transitions", Label("scope:unit", "loop:g2-rules", 
 
 			updatedWorld := EvaluateGameState(world)
 
-			Expect(updatedWorld.Done).To(BeTrue())
-			Expect(updatedWorld.Win).To(BeTrue())
+			// No pallets means no win condition can trigger, so game continues
+			Expect(updatedWorld.Done).To(BeFalse())
 		})
 	})
 })
