@@ -2,6 +2,7 @@ package proto
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -310,6 +311,364 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 
 			expected := `{"id":42,"pos":{"x":15.0,"y":25.0},"active":true}`
 			Expect(string(data)).To(MatchJSON(expected))
+		})
+	})
+
+	Describe("Message Validation", Label("scope:contract", "loop:g4-proto", "layer:contract"), func() {
+		Describe("ValidateInputMessage", func() {
+			It("accepts valid messages", func() {
+				msg := &InputMessage{
+					Type:   "input",
+					Seq:    1,
+					Thrust: 0.5,
+					Turn:   0.3,
+				}
+				err := ValidateInputMessage(msg)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("accepts boundary values", func() {
+				msg1 := &InputMessage{Type: "input", Seq: 1, Thrust: 0.0, Turn: -1.0}
+				err1 := ValidateInputMessage(msg1)
+				Expect(err1).NotTo(HaveOccurred())
+
+				msg2 := &InputMessage{Type: "input", Seq: 1, Thrust: 1.0, Turn: 1.0}
+				err2 := ValidateInputMessage(msg2)
+				Expect(err2).NotTo(HaveOccurred())
+			})
+
+			It("rejects invalid type", func() {
+				msg := &InputMessage{Type: "invalid", Seq: 1, Thrust: 0.5, Turn: 0.3}
+				err := ValidateInputMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("type"))
+			})
+
+			It("rejects seq = 0", func() {
+				msg := &InputMessage{Type: "input", Seq: 0, Thrust: 0.5, Turn: 0.3}
+				err := ValidateInputMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("seq"))
+			})
+
+			It("rejects thrust < 0.0", func() {
+				msg := &InputMessage{Type: "input", Seq: 1, Thrust: -0.1, Turn: 0.3}
+				err := ValidateInputMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("thrust"))
+			})
+
+			It("rejects thrust > 1.0", func() {
+				msg := &InputMessage{Type: "input", Seq: 1, Thrust: 1.1, Turn: 0.3}
+				err := ValidateInputMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("thrust"))
+			})
+
+			It("rejects turn < -1.0", func() {
+				msg := &InputMessage{Type: "input", Seq: 1, Thrust: 0.5, Turn: -1.1}
+				err := ValidateInputMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("turn"))
+			})
+
+			It("rejects turn > 1.0", func() {
+				msg := &InputMessage{Type: "input", Seq: 1, Thrust: 0.5, Turn: 1.1}
+				err := ValidateInputMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("turn"))
+			})
+		})
+
+		Describe("ValidateRestartMessage", func() {
+			It("accepts valid messages", func() {
+				msg := &RestartMessage{Type: "restart"}
+				err := ValidateRestartMessage(msg)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("rejects invalid type", func() {
+				msg := &RestartMessage{Type: "invalid"}
+				err := ValidateRestartMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("type"))
+			})
+		})
+
+		Describe("ValidateSnapshotMessage", func() {
+			It("accepts valid messages", func() {
+				msg := &SnapshotMessage{
+					Type: "snapshot",
+					Tick:  1,
+					Ship: ShipSnapshot{
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Vel:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Rot:    0.0,
+						Energy: 100.0,
+					},
+					Sun: SunSnapshot{
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Radius: 5.0,
+					},
+					Pallets: []PalletSnapshot{},
+					Done:    false,
+					Win:     false,
+				}
+				err := ValidateSnapshotMessage(msg)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("rejects invalid type", func() {
+				msg := &SnapshotMessage{Type: "invalid"}
+				err := ValidateSnapshotMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("type"))
+			})
+
+			It("validates nested ship structure", func() {
+				msg := &SnapshotMessage{
+					Type: "snapshot",
+					Tick:  1,
+					Ship: ShipSnapshot{
+						Pos:    Vec2Snapshot{X: math.NaN(), Y: 0.0},
+						Vel:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Rot:    0.0,
+						Energy: 100.0,
+					},
+					Sun: SunSnapshot{
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Radius: 5.0,
+					},
+					Pallets: []PalletSnapshot{},
+				}
+				err := ValidateSnapshotMessage(msg)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("validates nested sun structure", func() {
+				msg := &SnapshotMessage{
+					Type: "snapshot",
+					Tick:  1,
+					Ship: ShipSnapshot{
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Vel:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Rot:    0.0,
+						Energy: 100.0,
+					},
+					Sun: SunSnapshot{
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Radius: 0.0, // Invalid: radius must be > 0
+					},
+					Pallets: []PalletSnapshot{},
+				}
+				err := ValidateSnapshotMessage(msg)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("validates pallets array", func() {
+				msg := &SnapshotMessage{
+					Type: "snapshot",
+					Tick:  1,
+					Ship: ShipSnapshot{
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Vel:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Rot:    0.0,
+						Energy: 100.0,
+					},
+					Sun: SunSnapshot{
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Radius: 5.0,
+					},
+					Pallets: []PalletSnapshot{
+						{ID: 0, Pos: Vec2Snapshot{X: 10.0, Y: 10.0}, Active: true}, // Invalid: ID must be > 0
+					},
+				}
+				err := ValidateSnapshotMessage(msg)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Describe("ValidateShipSnapshot", func() {
+			It("accepts valid ship snapshots", func() {
+				ship := &ShipSnapshot{
+					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
+					Vel:    Vec2Snapshot{X: 1.0, Y: -1.0},
+					Rot:    1.57,
+					Energy: 75.5,
+				}
+				err := ValidateShipSnapshot(ship)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("rejects invalid position (NaN)", func() {
+				ship := &ShipSnapshot{
+					Pos:    Vec2Snapshot{X: math.NaN(), Y: 20.0},
+					Vel:    Vec2Snapshot{X: 1.0, Y: -1.0},
+					Rot:    1.57,
+					Energy: 75.5,
+				}
+				err := ValidateShipSnapshot(ship)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("rejects invalid velocity (Inf)", func() {
+				ship := &ShipSnapshot{
+					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
+					Vel:    Vec2Snapshot{X: math.Inf(1), Y: -1.0},
+					Rot:    1.57,
+					Energy: 75.5,
+				}
+				err := ValidateShipSnapshot(ship)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("rejects negative energy", func() {
+				ship := &ShipSnapshot{
+					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
+					Vel:    Vec2Snapshot{X: 1.0, Y: -1.0},
+					Rot:    1.57,
+					Energy: -10.0,
+				}
+				err := ValidateShipSnapshot(ship)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("energy"))
+			})
+
+			It("accepts zero energy", func() {
+				ship := &ShipSnapshot{
+					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
+					Vel:    Vec2Snapshot{X: 1.0, Y: -1.0},
+					Rot:    1.57,
+					Energy: 0.0,
+				}
+				err := ValidateShipSnapshot(ship)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Describe("ValidateSunSnapshot", func() {
+			It("accepts valid sun snapshots", func() {
+				sun := &SunSnapshot{
+					Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+					Radius: 5.0,
+				}
+				err := ValidateSunSnapshot(sun)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("rejects invalid position (NaN)", func() {
+				sun := &SunSnapshot{
+					Pos:    Vec2Snapshot{X: math.NaN(), Y: 0.0},
+					Radius: 5.0,
+				}
+				err := ValidateSunSnapshot(sun)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("rejects zero radius", func() {
+				sun := &SunSnapshot{
+					Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+					Radius: 0.0,
+				}
+				err := ValidateSunSnapshot(sun)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("radius"))
+			})
+
+			It("rejects negative radius", func() {
+				sun := &SunSnapshot{
+					Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+					Radius: -1.0,
+				}
+				err := ValidateSunSnapshot(sun)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("radius"))
+			})
+		})
+
+		Describe("ValidatePalletSnapshot", func() {
+			It("accepts valid pallet snapshots", func() {
+				pallet := &PalletSnapshot{
+					ID:     1,
+					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
+					Active: true,
+				}
+				err := ValidatePalletSnapshot(pallet)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("rejects ID = 0", func() {
+				pallet := &PalletSnapshot{
+					ID:     0,
+					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
+					Active: true,
+				}
+				err := ValidatePalletSnapshot(pallet)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("id"))
+			})
+
+			It("rejects invalid position (NaN)", func() {
+				pallet := &PalletSnapshot{
+					ID:     1,
+					Pos:    Vec2Snapshot{X: math.NaN(), Y: 20.0},
+					Active: true,
+				}
+				err := ValidatePalletSnapshot(pallet)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("rejects invalid position (Inf)", func() {
+				pallet := &PalletSnapshot{
+					ID:     1,
+					Pos:    Vec2Snapshot{X: 10.0, Y: math.Inf(-1)},
+					Active: true,
+				}
+				err := ValidatePalletSnapshot(pallet)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Describe("ValidateVec2Snapshot", func() {
+			It("accepts valid vectors", func() {
+				vec := &Vec2Snapshot{X: 10.5, Y: -20.3}
+				err := ValidateVec2Snapshot(vec)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("accepts zero vector", func() {
+				vec := &Vec2Snapshot{X: 0.0, Y: 0.0}
+				err := ValidateVec2Snapshot(vec)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("rejects NaN in X", func() {
+				vec := &Vec2Snapshot{X: math.NaN(), Y: 10.0}
+				err := ValidateVec2Snapshot(vec)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("x"))
+			})
+
+			It("rejects NaN in Y", func() {
+				vec := &Vec2Snapshot{X: 10.0, Y: math.NaN()}
+				err := ValidateVec2Snapshot(vec)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("y"))
+			})
+
+			It("rejects Inf in X", func() {
+				vec := &Vec2Snapshot{X: math.Inf(1), Y: 10.0}
+				err := ValidateVec2Snapshot(vec)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("x"))
+			})
+
+			It("rejects Inf in Y", func() {
+				vec := &Vec2Snapshot{X: 10.0, Y: math.Inf(-1)}
+				err := ValidateVec2Snapshot(vec)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("y"))
+			})
 		})
 	})
 })
