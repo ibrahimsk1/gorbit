@@ -563,4 +563,277 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			Expect(session.IsRunning()).To(BeFalse())
 		})
 	})
+
+	Describe("Orchestration Integration", Label("scope:unit", "loop:g3-orch", "layer:sim", "double:fake-io", "b:orchestration-integration", "r:high"), func() {
+		It("end-to-end tick determinism with multiple sessions", func() {
+			// Create two sessions with identical initial state
+			clock1 := NewFakeClock()
+			clock2 := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world1 := entities.NewWorld(ship, sun, nil)
+			world2 := entities.NewWorld(ship, sun, nil)
+
+			session1 := NewSession(clock1, world1, 100)
+			session2 := NewSession(clock2, world2, 100)
+
+			// Apply same sequence of commands
+			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session1.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+
+			session2.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session2.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session2.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+
+			// Advance time identically
+			clock1.Advance(33 * time.Millisecond * 3)
+			clock2.Advance(33 * time.Millisecond * 3)
+
+			// Run both sessions
+			session1.Run(3)
+			session2.Run(3)
+
+			// Verify final states match exactly
+			final1 := session1.GetWorld()
+			final2 := session2.GetWorld()
+
+			Expect(final1.Tick).To(Equal(final2.Tick))
+			Expect(final1.Ship.Pos.X).To(BeNumerically("~", final2.Ship.Pos.X, 0.001))
+			Expect(final1.Ship.Pos.Y).To(BeNumerically("~", final2.Ship.Pos.Y, 0.001))
+			Expect(final1.Ship.Vel.X).To(BeNumerically("~", final2.Ship.Vel.X, 0.001))
+			Expect(final1.Ship.Vel.Y).To(BeNumerically("~", final2.Ship.Vel.Y, 0.001))
+			Expect(final1.Ship.Energy).To(BeNumerically("~", final2.Ship.Energy, 0.001))
+		})
+
+		It("end-to-end command ordering with out-of-order enqueue", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld(ship, sun, nil)
+			session := NewSession(clock, world, 100)
+
+			// Enqueue commands out of order
+			session.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			session.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+
+			// Advance time and run
+			clock.Advance(33 * time.Millisecond * 3)
+			session.Run(3)
+
+			// Verify commands were applied in order (1, 2, 3)
+			// First tick: thrust=1.0, second tick: thrust=0.5, third tick: turn=0.3
+			final := session.GetWorld()
+			Expect(final.Tick).To(Equal(uint32(3)))
+			// Ship should have moved forward (thrust applied first two ticks)
+			Expect(final.Ship.Pos.X).To(BeNumerically(">", 10.0))
+		})
+
+		It("end-to-end rollback and replay produces same result", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			initialWorld := entities.NewWorld(ship, sun, nil)
+
+			// First run: apply commands and capture snapshot
+			session1 := NewSession(clock, initialWorld, 100)
+			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			clock.Advance(33 * time.Millisecond * 2)
+			session1.Run(2)
+
+			// Capture snapshot at tick 2
+			manager := NewSnapshotManager()
+			snapshot := manager.CaptureSnapshot(session1.GetWorld(), 2, clock)
+
+			// Continue with more commands
+			session1.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			clock.Advance(33 * time.Millisecond)
+			session1.Run(1)
+			final1 := session1.GetWorld()
+
+			// Second run: restore from snapshot and replay same commands
+			restoredWorld := manager.RestoreSnapshot(snapshot)
+			session2 := NewSession(clock, restoredWorld, 100)
+			session2.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			clock.Advance(33 * time.Millisecond)
+			session2.Run(1)
+			final2 := session2.GetWorld()
+
+			// Verify final states match
+			Expect(final1.Tick).To(Equal(final2.Tick))
+			Expect(final1.Ship.Pos.X).To(BeNumerically("~", final2.Ship.Pos.X, 0.001))
+			Expect(final1.Ship.Pos.Y).To(BeNumerically("~", final2.Ship.Pos.Y, 0.001))
+			Expect(final1.Ship.Energy).To(BeNumerically("~", final2.Ship.Energy, 0.001))
+		})
+
+		It("end-to-end ticker queue session integration", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld(ship, sun, nil)
+			session := NewSession(clock, world, 100)
+
+			initialPos := world.Ship.Pos
+
+			// Enqueue commands
+			session.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+
+			// Advance clock by multiple intervals
+			clock.Advance(33 * time.Millisecond * 5)
+
+			// Run session (should process up to 5 ticks, but only 2 commands available)
+			session.Run(5)
+
+			final := session.GetWorld()
+
+			// Verify correct number of ticks processed
+			Expect(final.Tick).To(Equal(uint32(5)))
+
+			// Verify commands were applied and world state changed
+			// (Position may change due to gravity + thrust, but should be different from initial)
+			Expect(final.Ship.Pos.X).NotTo(Equal(initialPos.X))
+			// Energy should have decreased due to thrust commands
+			Expect(final.Ship.Energy).To(BeNumerically("<", 100.0))
+		})
+
+		It("end-to-end rollback hooks with session integration", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld(ship, sun, nil)
+			session := NewSession(clock, world, 100)
+
+			// Apply command and run
+			session.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			clock.Advance(33 * time.Millisecond)
+			session.Run(1)
+
+			// Create snapshot manager with hook
+			manager := NewSnapshotManager()
+			beforeCalled := false
+			afterCalled := false
+
+			hook := &testRollbackHook{
+				beforeSnapshot: func(snapshot *Snapshot) {
+					beforeCalled = true
+				},
+				afterRestore: func(snapshot *Snapshot) {
+					afterCalled = true
+				},
+			}
+			manager.RegisterHook(hook)
+
+			// Capture snapshot
+			snapshot := manager.CaptureSnapshot(session.GetWorld(), 1, clock)
+			Expect(beforeCalled).To(BeTrue())
+
+			// Restore snapshot
+			restored := manager.RestoreSnapshot(snapshot)
+			Expect(afterCalled).To(BeTrue())
+
+			// Verify restored state matches
+			Expect(restored.Tick).To(Equal(uint32(1)))
+			Expect(restored.Ship.Pos.X).To(BeNumerically("~", session.GetWorld().Ship.Pos.X, 0.001))
+		})
+
+		It("end-to-end complex multi-tick scenario with rollback and replay", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			initialWorld := entities.NewWorld(ship, sun, nil)
+
+			manager := NewSnapshotManager()
+
+			// First run: apply commands and capture snapshots
+			session1 := NewSession(clock, initialWorld, 100)
+			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			clock.Advance(33 * time.Millisecond)
+			session1.Run(1)
+			snapshot1 := manager.CaptureSnapshot(session1.GetWorld(), 1, clock)
+
+			session1.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			clock.Advance(33 * time.Millisecond)
+			session1.Run(1)
+			snapshot2 := manager.CaptureSnapshot(session1.GetWorld(), 2, clock)
+
+			session1.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			clock.Advance(33 * time.Millisecond)
+			session1.Run(1)
+			final1 := session1.GetWorld()
+
+			// Second run: rollback to snapshot1 and replay
+			restoredWorld1 := manager.RestoreSnapshot(snapshot1)
+			session2 := NewSession(clock, restoredWorld1, 100)
+			session2.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			clock.Advance(33 * time.Millisecond)
+			session2.Run(1)
+
+			// Verify state matches snapshot2
+			state2 := session2.GetWorld()
+			Expect(state2.Tick).To(Equal(snapshot2.Tick))
+			Expect(state2.Ship.Pos.X).To(BeNumerically("~", snapshot2.World.Ship.Pos.X, 0.001))
+
+			// Continue replay
+			session2.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			clock.Advance(33 * time.Millisecond)
+			session2.Run(1)
+			final2 := session2.GetWorld()
+
+			// Verify final states match
+			Expect(final1.Tick).To(Equal(final2.Tick))
+			Expect(final1.Ship.Pos.X).To(BeNumerically("~", final2.Ship.Pos.X, 0.001))
+			Expect(final1.Ship.Energy).To(BeNumerically("~", final2.Ship.Energy, 0.001))
+		})
+	})
 })
+
+// testRollbackHook is a test implementation of RollbackHook for integration tests.
+type testRollbackHook struct {
+	beforeSnapshot func(*Snapshot)
+	afterRestore   func(*Snapshot)
+}
+
+func (h *testRollbackHook) BeforeSnapshot(snapshot *Snapshot) {
+	if h.beforeSnapshot != nil {
+		h.beforeSnapshot(snapshot)
+	}
+}
+
+func (h *testRollbackHook) AfterRestore(snapshot *Snapshot) {
+	if h.afterRestore != nil {
+		h.afterRestore(snapshot)
+	}
+}
