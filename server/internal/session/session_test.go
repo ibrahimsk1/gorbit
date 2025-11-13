@@ -335,6 +335,182 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 		})
 	})
 
+	Describe("Command Idempotency", Label("scope:unit", "loop:g3-orch", "layer:sim", "double:fake-io", "b:command-idempotency", "r:medium"), func() {
+		It("applying same command to same initial state produces identical results", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			initialWorld := entities.NewWorld(ship, sun, nil)
+
+			// First application
+			session1 := NewSession(clock, initialWorld, 100)
+			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			clock.Advance(33 * time.Millisecond)
+			session1.Run(1)
+			state1 := session1.GetWorld()
+
+			// Second application (same initial state, same command)
+			session2 := NewSession(clock, initialWorld, 100)
+			session2.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			clock.Advance(33 * time.Millisecond)
+			session2.Run(1)
+			state2 := session2.GetWorld()
+
+			// Verify states are identical
+			Expect(state1.Tick).To(Equal(state2.Tick))
+			Expect(state1.Ship.Pos.X).To(BeNumerically("~", state2.Ship.Pos.X, 0.001))
+			Expect(state1.Ship.Pos.Y).To(BeNumerically("~", state2.Ship.Pos.Y, 0.001))
+			Expect(state1.Ship.Vel.X).To(BeNumerically("~", state2.Ship.Vel.X, 0.001))
+			Expect(state1.Ship.Vel.Y).To(BeNumerically("~", state2.Ship.Vel.Y, 0.001))
+			Expect(state1.Ship.Energy).To(BeNumerically("~", state2.Ship.Energy, 0.001))
+		})
+
+		It("applying same command multiple times produces identical results", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			initialWorld := entities.NewWorld(ship, sun, nil)
+			cmd := rules.InputCommand{Thrust: 0.5, Turn: 0.3}
+
+			// Apply command three times, each time from the same initial state
+			var states []entities.World
+			for i := 0; i < 3; i++ {
+				session := NewSession(clock, initialWorld, 100)
+				session.EnqueueCommand(1, cmd)
+				clock.Advance(33 * time.Millisecond)
+				session.Run(1)
+				states = append(states, session.GetWorld())
+			}
+
+			// Verify all three states are identical
+			Expect(states[0].Tick).To(Equal(states[1].Tick))
+			Expect(states[1].Tick).To(Equal(states[2].Tick))
+			Expect(states[0].Ship.Pos.X).To(BeNumerically("~", states[1].Ship.Pos.X, 0.001))
+			Expect(states[1].Ship.Pos.X).To(BeNumerically("~", states[2].Ship.Pos.X, 0.001))
+			Expect(states[0].Ship.Energy).To(BeNumerically("~", states[1].Ship.Energy, 0.001))
+			Expect(states[1].Ship.Energy).To(BeNumerically("~", states[2].Ship.Energy, 0.001))
+		})
+
+		It("queue rejects duplicate sequence numbers", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld(ship, sun, nil)
+			session := NewSession(clock, world, 100)
+
+			// Enqueue command with sequence 1
+			success1 := session.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			Expect(success1).To(BeTrue())
+
+			// Try to enqueue same sequence again (should fail)
+			success2 := session.EnqueueCommand(1, rules.InputCommand{Thrust: 0.5, Turn: 0.5})
+			Expect(success2).To(BeFalse())
+
+			// Verify first command is still in queue
+			clock.Advance(33 * time.Millisecond)
+			session.Run(1)
+			finalWorld := session.GetWorld()
+			// Ship should have moved due to thrust=1.0, not thrust=0.5
+			Expect(finalWorld.Ship.Pos.X).To(BeNumerically(">", 10.0))
+		})
+
+		It("commands are deterministic (not just cached)", func() {
+			clock := NewFakeClock()
+			cmd := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
+
+			// Create two different initial states
+			ship1 := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			ship2 := entities.NewShip(
+				entities.NewVec2(20.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world1 := entities.NewWorld(ship1, sun, nil)
+			world2 := entities.NewWorld(ship2, sun, nil)
+
+			// Apply same command to different initial states
+			session1 := NewSession(clock, world1, 100)
+			session1.EnqueueCommand(1, cmd)
+			clock.Advance(33 * time.Millisecond)
+			session1.Run(1)
+			state1 := session1.GetWorld()
+
+			session2 := NewSession(clock, world2, 100)
+			session2.EnqueueCommand(1, cmd)
+			clock.Advance(33 * time.Millisecond)
+			session2.Run(1)
+			state2 := session2.GetWorld()
+
+			// States should be different (different initial positions)
+			Expect(state1.Ship.Pos.X).NotTo(BeNumerically("~", state2.Ship.Pos.X, 0.1))
+
+			// But applying same command to same initial state should produce same result
+			session3 := NewSession(clock, world1, 100)
+			session3.EnqueueCommand(1, cmd)
+			clock.Advance(33 * time.Millisecond)
+			session3.Run(1)
+			state3 := session3.GetWorld()
+
+			Expect(state1.Ship.Pos.X).To(BeNumerically("~", state3.Ship.Pos.X, 0.001))
+			Expect(state1.Ship.Pos.Y).To(BeNumerically("~", state3.Ship.Pos.Y, 0.001))
+		})
+
+		It("idempotency holds across multiple ticks", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			initialWorld := entities.NewWorld(ship, sun, nil)
+
+			// First run: apply command sequence 1, then sequence 2
+			session1 := NewSession(clock, initialWorld, 100)
+			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			clock.Advance(33 * time.Millisecond * 2)
+			session1.Run(2)
+			state1 := session1.GetWorld()
+
+			// Second run: same commands, same initial state
+			session2 := NewSession(clock, initialWorld, 100)
+			session2.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session2.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			clock.Advance(33 * time.Millisecond * 2)
+			session2.Run(2)
+			state2 := session2.GetWorld()
+
+			// Verify states are identical
+			Expect(state1.Tick).To(Equal(state2.Tick))
+			Expect(state1.Ship.Pos.X).To(BeNumerically("~", state2.Ship.Pos.X, 0.001))
+			Expect(state1.Ship.Energy).To(BeNumerically("~", state2.Ship.Energy, 0.001))
+		})
+	})
+
 	Describe("Session Control", func() {
 		It("GetWorld() returns current world state", func() {
 			clock := NewFakeClock()
