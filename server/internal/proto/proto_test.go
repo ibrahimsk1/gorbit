@@ -671,5 +671,116 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 			})
 		})
 	})
+
+	Describe("Protocol Versioning", Label("scope:contract", "loop:g4-proto", "layer:contract", "net:proto:v1"), func() {
+		Describe("Version Constants", func() {
+			It("defines ProtocolVersionV1 constant", func() {
+				Expect(ProtocolVersionV1).NotTo(BeEmpty())
+				Expect(string(ProtocolVersionV1)).To(Equal("v1"))
+			})
+
+			It("exports version constant for adapters", func() {
+				// Verify constant is accessible
+				version := ProtocolVersionV1
+				Expect(string(version)).To(Equal("v1"))
+			})
+		})
+
+		Describe("ParseVersion", func() {
+			It("parses valid version strings", func() {
+				version, err := ParseVersion("v1")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(version)).To(Equal("v1"))
+
+				version2, err := ParseVersion("v2")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(version2)).To(Equal("v2"))
+			})
+
+			It("rejects invalid version strings", func() {
+				_, err := ParseVersion("invalid")
+				Expect(err).To(HaveOccurred())
+
+				_, err2 := ParseVersion("1")
+				Expect(err2).To(HaveOccurred())
+
+				_, err3 := ParseVersion("version1")
+				Expect(err3).To(HaveOccurred())
+			})
+
+			It("rejects empty string", func() {
+				_, err := ParseVersion("")
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("rejects malformed version strings", func() {
+				_, err := ParseVersion("v")
+				Expect(err).To(HaveOccurred())
+
+				_, err2 := ParseVersion("v-1")
+				Expect(err2).To(HaveOccurred())
+
+				_, err3 := ParseVersion("v1.0")
+				Expect(err3).To(HaveOccurred())
+			})
+		})
+
+		Describe("IsCompatible", func() {
+			It("returns true for same major version", func() {
+				compatible := IsCompatible("v1", "v1")
+				Expect(compatible).To(BeTrue())
+			})
+
+			It("returns false for different major versions", func() {
+				compatible := IsCompatible("v1", "v2")
+				Expect(compatible).To(BeFalse())
+
+				compatible2 := IsCompatible("v2", "v1")
+				Expect(compatible2).To(BeFalse())
+			})
+
+			It("handles version comparison correctly", func() {
+				// v1 should be compatible with v1
+				Expect(IsCompatible("v1", "v1")).To(BeTrue())
+
+				// v1 should not be compatible with v2
+				Expect(IsCompatible("v1", "v2")).To(BeFalse())
+
+				// v2 should not be compatible with v1
+				Expect(IsCompatible("v2", "v1")).To(BeFalse())
+			})
+		})
+
+		Describe("CompareVersion", func() {
+			It("returns 0 for equal versions", func() {
+				result := CompareVersion("v1", "v1")
+				Expect(result).To(Equal(0))
+			})
+
+			It("returns -1 when v1 < v2", func() {
+				result := CompareVersion("v1", "v2")
+				Expect(result).To(Equal(-1))
+
+				result2 := CompareVersion("v2", "v3")
+				Expect(result2).To(Equal(-1))
+			})
+
+			It("returns 1 when v1 > v2", func() {
+				result := CompareVersion("v2", "v1")
+				Expect(result).To(Equal(1))
+
+				result2 := CompareVersion("v3", "v2")
+				Expect(result2).To(Equal(1))
+			})
+
+			It("compares versions correctly", func() {
+				Expect(CompareVersion("v1", "v1")).To(Equal(0))
+				Expect(CompareVersion("v1", "v2")).To(Equal(-1))
+				Expect(CompareVersion("v2", "v1")).To(Equal(1))
+				Expect(CompareVersion("v5", "v10")).To(Equal(-1))
+				Expect(CompareVersion("v10", "v5")).To(Equal(1))
+			})
+		})
+	})
 })
 
