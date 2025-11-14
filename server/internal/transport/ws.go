@@ -337,12 +337,13 @@ func NewErrorMessage(err error) []byte {
 }
 
 // NewInitialWorld creates a default initial world state for new sessions.
-// Ship at position (10, 0) with zero velocity, 100 energy.
+// Ship at position (70, 0) with zero velocity, 100 energy.
 // Sun at origin (0, 0) with radius 50, mass 1000.
+// Ship starts outside sun radius (70 > 50) to avoid immediate collision.
 // Initial pallets positioned around the world in a circular pattern.
 func NewInitialWorld() entities.World {
 	ship := entities.NewShip(
-		entities.NewVec2(10.0, 0.0),
+		entities.NewVec2(70.0, 0.0),
 		entities.NewVec2(0.0, 0.0),
 		0.0,
 		100.0,
