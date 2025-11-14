@@ -1,6 +1,9 @@
 /**
  * Orbital Rush Client - Main entry point
  * Initializes Pixi Application, Scene, and Render Loop
+ * 
+ * Note: Full game integration (WebSocket, input, prediction, reconciliation, interpolation, renderer)
+ * will be added in future CUs. This is the minimal initialization.
  */
 
 import { App } from './core/app'
@@ -28,4 +31,3 @@ async function init() {
 }
 
 init().catch(console.error)
-
