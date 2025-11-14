@@ -20,7 +20,7 @@ import type { SnapshotMessage } from './net/protocol'
 
 // Configuration
 const WS_URL = 'ws://localhost:8080/ws'
-const INPUT_SEND_INTERVAL_MS = 16 // ~60fps input rate
+const INPUT_SEND_INTERVAL_MS = 1000 / 30 // 30Hz input rate (matches server tick rate)
 
 async function init() {
   // Initialize Pixi Application
