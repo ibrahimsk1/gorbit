@@ -43,7 +43,7 @@ function cloneGameState(state: GameState): GameState {
       pos: { ...state.ship.pos },
       vel: { ...state.ship.vel },
       rot: state.ship.rot,
-      energy: state.energy
+      energy: state.ship.energy
     },
     planets: state.planets.map(planet => ({
       pos: { ...planet.pos },
@@ -83,6 +83,13 @@ export class StateManager {
    */
   updatePredicted(state: GameState): void {
     this.predictedState = cloneGameState(state)
+  }
+
+  /**
+   * Clears predicted state (used during reconciliation rollback).
+   */
+  clearPredicted(): void {
+    this.predictedState = null
   }
 
   /**
