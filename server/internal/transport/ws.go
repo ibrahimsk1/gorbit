@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/gorbit/orbitalrush/internal/proto"
+	"github.com/gorbit/orbitalrush/internal/session"
+	"github.com/gorbit/orbitalrush/internal/sim/entities"
+	"github.com/gorbit/orbitalrush/internal/sim/rules"
 	"github.com/gorilla/websocket"
 )
 
@@ -230,5 +233,125 @@ func NewErrorMessage(err error) []byte {
 	}
 	data, _ := json.Marshal(errorMsg)
 	return data
+}
+
+// NewInitialWorld creates a default initial world state for new sessions.
+// Ship at position (10, 0) with zero velocity, 100 energy.
+// Sun at origin (0, 0) with radius 50, mass 1000.
+// Empty pallets array.
+func NewInitialWorld() entities.World {
+	ship := entities.NewShip(
+		entities.NewVec2(10.0, 0.0),
+		entities.NewVec2(0.0, 0.0),
+		0.0,
+		100.0,
+	)
+	sun := entities.NewSun(
+		entities.NewVec2(0.0, 0.0),
+		50.0,
+		1000.0,
+	)
+	return entities.NewWorld(ship, sun, nil)
+}
+
+// SessionHandler manages a session for a WebSocket connection.
+// It implements InputMessageHandler and RestartMessageHandler interfaces.
+type SessionHandler struct {
+	session       *session.Session
+	conn          *Connection
+	clock         session.Clock
+	initialWorld  entities.World
+	done          chan struct{}
+	snapshotTicker *time.Ticker
+}
+
+// NewSessionHandler creates a new SessionHandler with a new session.
+func NewSessionHandler(conn *Connection, clock session.Clock, initialWorld entities.World) *SessionHandler {
+	sess := session.NewSession(clock, initialWorld, 100) // maxQueueSize = 100
+	snapshotInterval := 100 * time.Millisecond // 10 Hz (100ms = 10 snapshots per second)
+	
+	return &SessionHandler{
+		session:        sess,
+		conn:           conn,
+		clock:          clock,
+		initialWorld:   initialWorld,
+		done:           make(chan struct{}),
+		snapshotTicker: time.NewTicker(snapshotInterval),
+	}
+}
+
+// HandleInput enqueues an input command to the session.
+func (h *SessionHandler) HandleInput(msg *proto.InputMessage) error {
+	cmd := rules.InputCommand{
+		Thrust: msg.Thrust,
+		Turn:   msg.Turn,
+	}
+	
+	success := h.session.EnqueueCommand(msg.Seq, cmd)
+	if !success {
+		return fmt.Errorf("failed to enqueue command with seq %d", msg.Seq)
+	}
+	
+	return nil
+}
+
+// HandleRestart resets the session to the initial world state.
+func (h *SessionHandler) HandleRestart(msg *proto.RestartMessage) error {
+	// Stop current session
+	h.session.Stop()
+	
+	// Create new session with initial world state
+	h.session = session.NewSession(h.clock, h.initialWorld, 100)
+	
+	return nil
+}
+
+// Start starts the session run loop and snapshot broadcasting.
+func (h *SessionHandler) Start() {
+	// Start session run loop (30Hz = ~33ms per tick)
+	sessionTicker := time.NewTicker(33 * time.Millisecond)
+	go func() {
+		defer sessionTicker.Stop()
+		for {
+			select {
+			case <-h.done:
+				return
+			case <-sessionTicker.C:
+				// Run session to process ticks (limit to 10 ticks per call to prevent lag)
+				h.session.Run(10)
+			}
+		}
+	}()
+	
+	// Start snapshot broadcasting loop (~10 Hz = 100ms per snapshot)
+	go func() {
+		for {
+			select {
+			case <-h.done:
+				return
+			case <-h.snapshotTicker.C:
+				// Get world state and broadcast snapshot
+				world := h.session.GetWorld()
+				snapshot := WorldToSnapshot(world)
+				
+				// Serialize and send snapshot
+				data, err := json.Marshal(snapshot)
+				if err != nil {
+					// Log error but continue
+					continue
+				}
+				
+				// Write snapshot (ignore errors - connection may be closed)
+				_ = h.conn.WriteMessage(data)
+			}
+		}
+	}()
+}
+
+// Stop stops the session handler and cleans up resources.
+func (h *SessionHandler) Stop() {
+	close(h.done)
+	h.snapshotTicker.Stop()
+	h.session.Stop()
 }
 
