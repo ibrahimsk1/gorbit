@@ -92,12 +92,15 @@ function updateRotation(currentRot: number, turnInput: number, dt: number): numb
 
 /**
  * Calculates thrust acceleration vector in direction of rotation (matching server rules.CalculateThrustAcceleration).
+ * Y component is negated to match screen coordinate system where Y increases downward.
  */
 function calculateThrustAcceleration(rotation: number, thrustInput: number): Vec2Snapshot {
   const directionX = Math.cos(rotation)
   const directionY = Math.sin(rotation)
   const magnitude = thrustInput * THRUST_ACCELERATION
-  return { x: directionX * magnitude, y: directionY * magnitude }
+  // Negate Y component to match screen coordinate system (Y-down)
+  // World uses Y-up, but rendering flips Y, so we flip thrust Y to compensate
+  return { x: directionX * magnitude, y: -directionY * magnitude }
 }
 
 /**

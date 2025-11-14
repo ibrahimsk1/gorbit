@@ -142,9 +142,9 @@ var _ = Describe("Input Processing", Label("scope:unit", "loop:g2-rules", "layer
 			rotation := math.Pi / 2.0
 			thrustInput := float32(1.0)
 			acc := CalculateThrustAcceleration(rotation, thrustInput)
-			// At rotation π/2, should point in +Y direction
+			// At rotation π/2, should point in -Y direction (negated to match screen coords)
 			Expect(acc.X).To(BeNumerically("~", 0.0, epsilon))
-			Expect(acc.Y).To(BeNumerically("~", ThrustAcceleration, epsilon))
+			Expect(acc.Y).To(BeNumerically("~", -ThrustAcceleration, epsilon))
 		})
 
 		It("calculates thrust acceleration at 180 degrees (rotation = π)", func() {
@@ -177,9 +177,9 @@ var _ = Describe("Input Processing", Label("scope:unit", "loop:g2-rules", "layer
 			rotation := math.Pi / 4.0
 			thrustInput := float32(1.0)
 			acc := CalculateThrustAcceleration(rotation, thrustInput)
-			// At 45 degrees, both X and Y should be positive and equal
+			// At 45 degrees, X should be positive, Y should be negated (to match screen coords)
 			expectedX := ThrustAcceleration * math.Cos(rotation)
-			expectedY := ThrustAcceleration * math.Sin(rotation)
+			expectedY := -ThrustAcceleration * math.Sin(rotation) // Y is negated
 			Expect(acc.X).To(BeNumerically("~", expectedX, epsilon))
 			Expect(acc.Y).To(BeNumerically("~", expectedY, epsilon))
 		})

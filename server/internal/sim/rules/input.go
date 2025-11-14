@@ -88,6 +88,7 @@ func normalizeRotation(rot float64) float64 {
 //
 // Returns:
 //   - Acceleration vector in the direction of ship's rotation
+//     Note: Y component is negated to match screen coordinate system where Y increases downward.
 func CalculateThrustAcceleration(rotation float64, thrustInput float32) entities.Vec2 {
 	// Calculate direction vector from rotation angle
 	// In standard math coordinates: x = cos(θ), y = sin(θ)
@@ -97,7 +98,9 @@ func CalculateThrustAcceleration(rotation float64, thrustInput float32) entities
 	// Scale by thrust input and acceleration constant
 	magnitude := float64(thrustInput) * ThrustAcceleration
 
-	return entities.NewVec2(directionX*magnitude, directionY*magnitude)
+	// Negate Y component to match screen coordinate system (Y-down)
+	// World uses Y-up, but rendering flips Y, so we flip thrust Y to compensate
+	return entities.NewVec2(directionX*magnitude, -directionY*magnitude)
 }
 
 // ApplyInput applies input commands to the ship, updating rotation, velocity, and energy.
