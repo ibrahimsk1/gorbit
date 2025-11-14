@@ -64,8 +64,8 @@ func NewConnection(conn *websocket.Conn) *Connection {
 		return nil
 	})
 
-	// Start ping ticker
-	go c.pingTicker()
+	// Start write pump (handles all writes including pings)
+	go c.writePump()
 
 	return c
 }
@@ -112,27 +112,20 @@ func (c *Connection) ReadMessage() ([]byte, error) {
 	return data, nil
 }
 
-// WriteMessage writes a JSON text message to the WebSocket connection.
-// Returns an error if the write fails.
+// WriteMessage enqueues a JSON text message to be written to the WebSocket connection.
+// Returns an error if the connection is closed or the message cannot be enqueued.
 func (c *Connection) WriteMessage(data []byte) error {
-	c.conn.SetWriteDeadline(time.Now().Add(WriteDeadline))
-	err := c.conn.WriteMessage(websocket.TextMessage, data)
-	
-	// Record bytes out and message count (even if write failed, we attempted to send)
-	if len(data) > 0 {
-		if bytesCounter := observability.GetConnectionBytesCounter(); bytesCounter != nil {
-			bytesCounter.WithLabelValues("out").Add(float64(len(data)))
-		}
-		if msgCounter := observability.GetMessagesCounter(); msgCounter != nil {
-			msgCounter.WithLabelValues("out").Inc()
-		}
+	select {
+	case <-c.done:
+		return fmt.Errorf("connection closed")
+	case c.writeChan <- data:
+		return nil
 	}
-	
-	return err
 }
 
 // Close gracefully closes the WebSocket connection.
 // It can be called multiple times safely.
+// Closing c.done signals writePump to exit, then the underlying connection is closed.
 func (c *Connection) Close() error {
 	select {
 	case <-c.done:
@@ -140,24 +133,101 @@ func (c *Connection) Close() error {
 		return nil
 	default:
 		close(c.done)
+		// Close writeChan to signal writePump to exit
+		// This is safe because writePump will see c.done is closed and exit,
+		// and WriteMessage checks c.done before sending, so no new sends will occur.
+		close(c.writeChan)
 		return c.conn.Close()
 	}
 }
 
-// pingTicker sends ping messages periodically to keep the connection alive.
-func (c *Connection) pingTicker() {
-	ticker := time.NewTicker(PingPeriod)
-	defer ticker.Stop()
+// writePump handles all writes to the WebSocket connection.
+// It processes messages from writeChan and sends periodic ping messages.
+// This ensures only one goroutine writes to the connection, preventing concurrent write panics.
+// Messages are prioritized over pings, and pending messages are batched for efficiency.
+func (c *Connection) writePump() {
+	pingTicker := time.NewTicker(PingPeriod)
+	defer pingTicker.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(WriteDeadline))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
 		case <-c.done:
 			return
+
+		case data, ok := <-c.writeChan:
+			if !ok {
+				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			if err := c.writeMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case <-pingTicker.C:
+			// Before sending a ping, check if there is a message ready.
+			select {
+			case data, ok := <-c.writeChan:
+				if !ok {
+					_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+					return
+				}
+
+				if err := c.writeMessage(websocket.TextMessage, data); err != nil {
+					return
+				}
+			default:
+				// Truly idle: safe to ping
+				if err := c.writeMessage(websocket.PingMessage, nil); err != nil {
+					return
+				}
+			}
+		}
+
+		// Drain pending messages after any write for efficiency
+	drain:
+		for {
+			select {
+			case <-c.done:
+				return
+			case data, ok := <-c.writeChan:
+				if !ok {
+					_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+					return
+				}
+
+				if err := c.writeMessage(websocket.TextMessage, data); err != nil {
+					return
+				}
+			default:
+				break drain
+			}
+		}
+	}
+}
+
+// writeMessage writes a message to the WebSocket connection and records metrics.
+func (c *Connection) writeMessage(messageType int, data []byte) error {
+	c.conn.SetWriteDeadline(time.Now().Add(WriteDeadline))
+	if err := c.conn.WriteMessage(messageType, data); err != nil {
+		return err
+	}
+
+	if messageType == websocket.TextMessage && len(data) > 0 {
+		c.recordMetrics(data)
+	}
+
+	return nil
+}
+
+// recordMetrics records bytes and message count metrics for outgoing messages.
+func (c *Connection) recordMetrics(data []byte) {
+	if len(data) > 0 {
+		if bytesCounter := observability.GetConnectionBytesCounter(); bytesCounter != nil {
+			bytesCounter.WithLabelValues("out").Add(float64(len(data)))
+		}
+		if msgCounter := observability.GetMessagesCounter(); msgCounter != nil {
+			msgCounter.WithLabelValues("out").Inc()
 		}
 	}
 }
@@ -288,11 +358,11 @@ func NewInitialWorld() entities.World {
 // SessionHandler manages a session for a WebSocket connection.
 // It implements InputMessageHandler and RestartMessageHandler interfaces.
 type SessionHandler struct {
-	session       *session.Session
-	conn          *Connection
-	clock         session.Clock
-	initialWorld  entities.World
-	done          chan struct{}
+	session        *session.Session
+	conn           *Connection
+	clock          session.Clock
+	initialWorld   entities.World
+	done           chan struct{}
 	snapshotTicker *time.Ticker
 }
 
@@ -305,7 +375,7 @@ func NewSessionHandler(conn *Connection, clock session.Clock, initialWorld entit
 		sess.SetLogger(logger)
 	}
 	snapshotInterval := 100 * time.Millisecond // 10 Hz (100ms = 10 snapshots per second)
-	
+
 	return &SessionHandler{
 		session:        sess,
 		conn:           conn,
@@ -322,12 +392,12 @@ func (h *SessionHandler) HandleInput(msg *proto.InputMessage) error {
 		Thrust: msg.Thrust,
 		Turn:   msg.Turn,
 	}
-	
+
 	success := h.session.EnqueueCommand(msg.Seq, cmd)
 	if !success {
 		return fmt.Errorf("failed to enqueue command with seq %d", msg.Seq)
 	}
-	
+
 	return nil
 }
 
@@ -335,10 +405,10 @@ func (h *SessionHandler) HandleInput(msg *proto.InputMessage) error {
 func (h *SessionHandler) HandleRestart(msg *proto.RestartMessage) error {
 	// Stop current session
 	h.session.Stop()
-	
+
 	// Create new session with initial world state
 	h.session = session.NewSession(h.clock, h.initialWorld, 100)
-	
+
 	return nil
 }
 
@@ -358,7 +428,7 @@ func (h *SessionHandler) Start() {
 			}
 		}
 	}()
-	
+
 	// Start snapshot broadcasting loop (~10 Hz = 100ms per snapshot)
 	go func() {
 		for {
@@ -369,14 +439,14 @@ func (h *SessionHandler) Start() {
 				// Get world state and broadcast snapshot
 				world := h.session.GetWorld()
 				snapshot := WorldToSnapshot(world)
-				
+
 				// Serialize and send snapshot
 				data, err := json.Marshal(snapshot)
 				if err != nil {
 					// Log error but continue
 					continue
 				}
-				
+
 				// Write snapshot (ignore errors - connection may be closed)
 				_ = h.conn.WriteMessage(data)
 			}
@@ -390,4 +460,3 @@ func (h *SessionHandler) Stop() {
 	h.snapshotTicker.Stop()
 	h.session.Stop()
 }
-
