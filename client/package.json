@@ -21,6 +21,8 @@
     "@typescript-eslint/parser": "^8.46.3",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
+    "gl": "^8.1.6",
+    "happy-dom": "^20.0.10",
     "jsdom": "^27.0.1",
     "patch-package": "^8.0.1",
     "prettier": "^3.6.2",
