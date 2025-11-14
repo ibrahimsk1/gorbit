@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/gorbit/orbitalrush/internal/proto"
 	"github.com/gorbit/orbitalrush/internal/session"
 	"github.com/gorbit/orbitalrush/internal/sim/entities"
@@ -717,7 +718,7 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			defer connection.Close()
 
 			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld)
+			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
 
 			Expect(handler).NotTo(BeNil())
 			Expect(handler.session).NotTo(BeNil())
@@ -755,7 +756,7 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			defer connection.Close()
 
 			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld)
+			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
 
 			// Enqueue input command
 			inputMsg := &proto.InputMessage{
@@ -808,7 +809,7 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			defer connection.Close()
 
 			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld)
+			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
 
 			// Advance session to tick 10
 			clock.Advance(10 * 33 * time.Millisecond)
@@ -864,7 +865,7 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			defer connection.Close()
 
 			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld)
+			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
 			handler.Start()
 			defer handler.Stop()
 
@@ -930,7 +931,7 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			defer connection.Close()
 
 			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld)
+			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
 			handler.Start()
 			defer handler.Stop()
 
@@ -990,7 +991,7 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			defer connection.Close()
 
 			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld)
+			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
 			handler.Start()
 			defer handler.Stop()
 
@@ -1048,7 +1049,7 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			defer connection.Close()
 
 			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld)
+			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
 			handler.Start()
 			defer handler.Stop()
 
@@ -1109,7 +1110,7 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			defer connection.Close()
 
 			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld)
+			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
 			handler.Start()
 
 			// Advance time a bit to let session start running

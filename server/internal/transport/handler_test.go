@@ -7,9 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorilla/websocket"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	dto "github.com/prometheus/client_model/go"
 )
 
 func TestHandler(t *testing.T) {
@@ -135,6 +137,11 @@ var _ = Describe("HTTP Route Handlers", Label("scope:integration", "loop:g5-adap
 	})
 
 	Describe("HealthzHandler", func() {
+		BeforeEach(func() {
+			// Initialize metrics before each test
+			observability.InitMetrics()
+		})
+
 		It("returns JSON response with status ok", func() {
 			resp, err := http.Get(testServer.URL + "/healthz")
 			Expect(err).NotTo(HaveOccurred())
@@ -142,7 +149,7 @@ var _ = Describe("HTTP Route Handlers", Label("scope:integration", "loop:g5-adap
 
 			Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-			var result map[string]string
+			var result map[string]interface{}
 			err = json.NewDecoder(resp.Body).Decode(&result)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result["status"]).To(Equal("ok"))
@@ -175,6 +182,174 @@ var _ = Describe("HTTP Route Handlers", Label("scope:integration", "loop:g5-adap
 
 			// Should succeed normally
 			Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		})
+	})
+
+	Describe("Enhanced HealthzHandler with observability metrics", Label("scope:integration", "loop:g7-ops", "layer:server", "b:health-endpoint", "r:medium"), func() {
+		BeforeEach(func() {
+			// Initialize metrics before each test
+			observability.InitMetrics()
+		})
+
+		It("returns JSON response with status field", func() {
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result["status"]).To(Equal("ok"))
+		})
+
+		It("returns JSON response with uptime_seconds field", func() {
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveKey("uptime_seconds"))
+			Expect(result["uptime_seconds"]).To(BeNumerically(">=", 0))
+		})
+
+		It("returns JSON response with metrics object", func() {
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveKey("metrics"))
+			Expect(result["metrics"]).To(BeAssignableToTypeOf(map[string]interface{}{}))
+		})
+
+		It("returns JSON response with metrics.active_connections field", func() {
+			// Set some test metrics
+			activeGauge := observability.GetActiveConnectionsGauge()
+			activeGauge.Set(5.0)
+
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+
+			metrics, ok := result["metrics"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(metrics).To(HaveKey("active_connections"))
+			Expect(metrics["active_connections"]).To(BeNumerically("==", 5.0))
+		})
+
+		It("returns JSON response with metrics.queue_depth field", func() {
+			// Set some test metrics
+			queueGauge := observability.GetQueueDepthGauge()
+			queueGauge.Set(3.0)
+
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+
+			metrics, ok := result["metrics"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(metrics).To(HaveKey("queue_depth"))
+			Expect(metrics["queue_depth"]).To(BeNumerically("==", 3.0))
+		})
+
+		It("returns JSON response with metrics.tick_time field", func() {
+			// Record some tick durations
+			tickHistogram := observability.GetTickDurationHistogram()
+			tickHistogram.Observe(0.002) // 2ms
+			tickHistogram.Observe(0.003) // 3ms
+			tickHistogram.Observe(0.005) // 5ms
+
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+
+			metrics, ok := result["metrics"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(metrics).To(HaveKey("tick_time"))
+
+			tickTime, ok := metrics["tick_time"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(tickTime).To(HaveKey("average_ms"))
+			Expect(tickTime).To(HaveKey("count"))
+			Expect(tickTime["count"]).To(BeNumerically(">=", 3))
+			// Average should be around 3.33ms (10ms / 3)
+			Expect(tickTime["average_ms"]).To(BeNumerically(">=", 2.0))
+			Expect(tickTime["average_ms"]).To(BeNumerically("<=", 5.0))
+		})
+
+		It("returns JSON response with metrics.gc_pause field", func() {
+			// Record some GC pause durations
+			gcHistogram := observability.GetGCPauseHistogram()
+			gcHistogram.Observe(0.001) // 1ms
+			gcHistogram.Observe(0.002) // 2ms
+
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+
+			metrics, ok := result["metrics"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(metrics).To(HaveKey("gc_pause"))
+
+			gcPause, ok := metrics["gc_pause"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(gcPause).To(HaveKey("average_ms"))
+			Expect(gcPause).To(HaveKey("count"))
+			Expect(gcPause["count"]).To(BeNumerically(">=", 2))
+			// Average should be around 1.5ms (3ms / 2)
+			Expect(gcPause["average_ms"]).To(BeNumerically(">=", 1.0))
+			Expect(gcPause["average_ms"]).To(BeNumerically("<=", 2.0))
+		})
+
+		It("responds quickly without blocking", func() {
+			start := time.Now()
+			resp, err := http.Get(testServer.URL + "/healthz")
+			duration := time.Since(start)
+
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			// Health endpoint should respond quickly (< 10ms)
+			Expect(duration).To(BeNumerically("<", 10*time.Millisecond))
+			Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		})
+
+		It("handles missing metrics gracefully", func() {
+			// Test with metrics initialized but no data recorded
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should still return valid JSON with status
+			Expect(result["status"]).To(Equal("ok"))
+			Expect(result).To(HaveKey("uptime_seconds"))
+			Expect(result).To(HaveKey("metrics"))
 		})
 	})
 
@@ -233,6 +408,322 @@ var _ = Describe("HTTP Route Handlers", Label("scope:integration", "loop:g5-adap
 				defer httpResp.Body.Close()
 				Expect(httpResp.StatusCode).To(BeNumerically(">=", 400))
 			}
+		})
+	})
+})
+
+var _ = Describe("Connection Metrics", Label("scope:integration", "loop:g7-ops", "layer:server", "dep:ws", "b:connection-metrics", "r:high"), func() {
+	var testServer *httptest.Server
+	var serverURL string
+
+	BeforeEach(func() {
+		// Initialize metrics before each test
+		observability.InitMetrics()
+
+		// Create test HTTP server with handlers
+		mux := http.NewServeMux()
+		mux.HandleFunc("/ws", WebSocketHandler)
+		mux.HandleFunc("/healthz", HealthzHandler)
+		mux.HandleFunc("/metrics", observability.MetricsHandler)
+
+		testServer = httptest.NewServer(mux)
+		serverURL = "ws" + testServer.URL[4:] + "/ws" // Convert http:// to ws://
+	})
+
+	AfterEach(func() {
+		if testServer != nil {
+			testServer.Close()
+		}
+	})
+
+	Describe("Connection Events Counter", func() {
+		It("increments on connect", func() {
+			// Get initial value
+			var initialMetric dto.Metric
+			err := observability.GetConnectionEventsCounter().WithLabelValues("connect").Write(&initialMetric)
+			Expect(err).NotTo(HaveOccurred())
+			initialValue := initialMetric.Counter.GetValue()
+
+			// Connect
+			dialer := websocket.Dialer{}
+			conn, _, err := dialer.Dial(serverURL, nil)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close()
+
+			// Wait a bit for handler to process
+			time.Sleep(100 * time.Millisecond)
+
+			// Verify counter incremented
+			var metric dto.Metric
+			err = observability.GetConnectionEventsCounter().WithLabelValues("connect").Write(&metric)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metric.Counter.GetValue()).To(BeNumerically(">", initialValue))
+		})
+
+		It("increments on disconnect", func() {
+			// Connect first
+			dialer := websocket.Dialer{}
+			conn, _, err := dialer.Dial(serverURL, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Wait for connect event
+			time.Sleep(100 * time.Millisecond)
+
+			// Get initial disconnect value
+			var initialMetric dto.Metric
+			err = observability.GetConnectionEventsCounter().WithLabelValues("disconnect").Write(&initialMetric)
+			Expect(err).NotTo(HaveOccurred())
+			initialValue := initialMetric.Counter.GetValue()
+
+			// Disconnect
+			conn.Close()
+			time.Sleep(100 * time.Millisecond)
+
+			// Verify counter incremented
+			var metric dto.Metric
+			err = observability.GetConnectionEventsCounter().WithLabelValues("disconnect").Write(&metric)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metric.Counter.GetValue()).To(BeNumerically(">", initialValue))
+		})
+	})
+
+	Describe("Active Connections Gauge", func() {
+		It("increments on connect", func() {
+			// Get initial value
+			var initialMetric dto.Metric
+			err := observability.GetActiveConnectionsGauge().Write(&initialMetric)
+			Expect(err).NotTo(HaveOccurred())
+			initialValue := initialMetric.Gauge.GetValue()
+
+			// Connect
+			dialer := websocket.Dialer{}
+			conn, _, err := dialer.Dial(serverURL, nil)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close()
+
+			// Wait a bit for handler to process
+			time.Sleep(100 * time.Millisecond)
+
+			// Verify gauge incremented
+			var metric dto.Metric
+			err = observability.GetActiveConnectionsGauge().Write(&metric)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metric.Gauge.GetValue()).To(BeNumerically(">", initialValue))
+		})
+
+		It("decrements on disconnect", func() {
+			// Connect first
+			dialer := websocket.Dialer{}
+			conn, _, err := dialer.Dial(serverURL, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Wait for connect
+			time.Sleep(100 * time.Millisecond)
+
+			// Get value after connect
+			var afterConnectMetric dto.Metric
+			err = observability.GetActiveConnectionsGauge().Write(&afterConnectMetric)
+			Expect(err).NotTo(HaveOccurred())
+			afterConnectValue := afterConnectMetric.Gauge.GetValue()
+
+			// Disconnect
+			conn.Close()
+			time.Sleep(100 * time.Millisecond)
+
+			// Verify gauge decremented
+			var metric dto.Metric
+			err = observability.GetActiveConnectionsGauge().Write(&metric)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metric.Gauge.GetValue()).To(BeNumerically("<", afterConnectValue))
+		})
+	})
+
+	Describe("Connection Duration Histogram", func() {
+		It("records connection duration on disconnect", func() {
+			// Get initial sample count
+			var initialMetric dto.Metric
+			err := observability.GetConnectionDurationHistogram().Write(&initialMetric)
+			Expect(err).NotTo(HaveOccurred())
+			initialCount := uint64(0)
+			if initialMetric.Histogram != nil {
+				initialCount = initialMetric.Histogram.GetSampleCount()
+			}
+
+			// Connect and wait a bit
+			dialer := websocket.Dialer{}
+			conn, _, err := dialer.Dial(serverURL, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			time.Sleep(100 * time.Millisecond)
+
+			// Disconnect
+			conn.Close()
+			time.Sleep(100 * time.Millisecond)
+
+			// Verify histogram recorded a sample
+			var metric dto.Metric
+			err = observability.GetConnectionDurationHistogram().Write(&metric)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metric.Histogram).NotTo(BeNil())
+			Expect(metric.Histogram.GetSampleCount()).To(BeNumerically(">", initialCount))
+		})
+	})
+
+	Describe("Connection Bytes Counter", func() {
+		It("increments bytes in counter on ReadMessage", func() {
+			// Connect
+			dialer := websocket.Dialer{}
+			conn, _, err := dialer.Dial(serverURL, nil)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close()
+
+			// Wait for connection to be established
+			time.Sleep(100 * time.Millisecond)
+
+			// Get initial bytes in value
+			var initialMetric dto.Metric
+			err = observability.GetConnectionBytesCounter().WithLabelValues("in").Write(&initialMetric)
+			Expect(err).NotTo(HaveOccurred())
+			initialValue := initialMetric.Counter.GetValue()
+
+			// Send a message from client
+			testMsg := map[string]interface{}{
+				"t": "input",
+				"seq": 1,
+				"thrust": true,
+				"turn": 0.0,
+			}
+			err = conn.WriteJSON(testMsg)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Wait for message to be read
+			time.Sleep(200 * time.Millisecond)
+
+			// Verify bytes in counter incremented
+			var metric dto.Metric
+			err = observability.GetConnectionBytesCounter().WithLabelValues("in").Write(&metric)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metric.Counter.GetValue()).To(BeNumerically(">", initialValue))
+		})
+
+		It("increments bytes out counter on WriteMessage", func() {
+			// Connect
+			dialer := websocket.Dialer{}
+			conn, _, err := dialer.Dial(serverURL, nil)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close()
+
+			// Wait for connection and snapshot to be sent
+			time.Sleep(200 * time.Millisecond)
+
+			// Get initial bytes out value
+			var initialMetric dto.Metric
+			err = observability.GetConnectionBytesCounter().WithLabelValues("out").Write(&initialMetric)
+			Expect(err).NotTo(HaveOccurred())
+			initialValue := initialMetric.Counter.GetValue()
+
+			// Wait a bit more for another snapshot
+			time.Sleep(200 * time.Millisecond)
+
+			// Verify bytes out counter incremented (snapshots are sent periodically)
+			var metric dto.Metric
+			err = observability.GetConnectionBytesCounter().WithLabelValues("out").Write(&metric)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metric.Counter.GetValue()).To(BeNumerically(">=", initialValue))
+		})
+	})
+
+	Describe("Messages Counter", func() {
+		It("increments messages in counter on ReadMessage", func() {
+			// Connect
+			dialer := websocket.Dialer{}
+			conn, _, err := dialer.Dial(serverURL, nil)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close()
+
+			// Wait for connection
+			time.Sleep(100 * time.Millisecond)
+
+			// Get initial messages in value
+			var initialMetric dto.Metric
+			err = observability.GetMessagesCounter().WithLabelValues("in").Write(&initialMetric)
+			Expect(err).NotTo(HaveOccurred())
+			initialValue := initialMetric.Counter.GetValue()
+
+			// Send a message
+			testMsg := map[string]interface{}{
+				"t": "input",
+				"seq": 1,
+				"thrust": true,
+				"turn": 0.0,
+			}
+			err = conn.WriteJSON(testMsg)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Wait for message to be processed
+			time.Sleep(200 * time.Millisecond)
+
+			// Verify messages in counter incremented
+			var metric dto.Metric
+			err = observability.GetMessagesCounter().WithLabelValues("in").Write(&metric)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metric.Counter.GetValue()).To(BeNumerically(">", initialValue))
+		})
+
+		It("increments messages out counter on WriteMessage", func() {
+			// Connect
+			dialer := websocket.Dialer{}
+			conn, _, err := dialer.Dial(serverURL, nil)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close()
+
+			// Wait for initial snapshot
+			time.Sleep(200 * time.Millisecond)
+
+			// Get initial messages out value
+			var initialMetric dto.Metric
+			err = observability.GetMessagesCounter().WithLabelValues("out").Write(&initialMetric)
+			Expect(err).NotTo(HaveOccurred())
+			initialValue := initialMetric.Counter.GetValue()
+
+			// Wait for another snapshot
+			time.Sleep(200 * time.Millisecond)
+
+			// Verify messages out counter incremented
+			var metric dto.Metric
+			err = observability.GetMessagesCounter().WithLabelValues("out").Write(&metric)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(metric.Counter.GetValue()).To(BeNumerically(">=", initialValue))
+		})
+	})
+
+	Describe("/metrics endpoint", func() {
+		It("exposes connection metrics", func() {
+			// Make a connection to generate some metrics
+			dialer := websocket.Dialer{}
+			conn, _, err := dialer.Dial(serverURL, nil)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close()
+
+			time.Sleep(100 * time.Millisecond)
+
+			// Query metrics endpoint
+			resp, err := http.Get(testServer.URL + "/metrics")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+			// Read response body
+			body := make([]byte, 10000)
+			n, _ := resp.Body.Read(body)
+			bodyStr := string(body[:n])
+
+			// Verify connection metrics are present
+			Expect(bodyStr).To(ContainSubstring("connection_events_total"))
+			Expect(bodyStr).To(ContainSubstring("active_connections"))
+			Expect(bodyStr).To(ContainSubstring("connection_duration_seconds"))
+			Expect(bodyStr).To(ContainSubstring("connection_bytes_total"))
 		})
 	})
 })
