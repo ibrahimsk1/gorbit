@@ -3,17 +3,19 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorbit/orbitalrush/internal/transport"
 )
 
 func main() {
+	logger := observability.NewLogger().WithValues("component", "server")
+	
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -33,12 +35,11 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		fmt.Printf("Orbital Rush Server starting on %s\n", addr)
-		fmt.Println("WebSocket endpoint available at /ws")
-		fmt.Println("Health check available at /healthz")
+		logger.Info("Server starting", "address", addr, "ws_endpoint", "/ws", "health_endpoint", "/healthz")
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+			logger.Error(err, "Server failed to start", "address", addr)
+			os.Exit(1)
 		}
 	}()
 
@@ -47,15 +48,16 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	logger.Info("Shutting down server...")
 
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		logger.Error(err, "Server forced to shutdown")
+		os.Exit(1)
 	}
 
-	log.Println("Server exited")
+	logger.Info("Server exited")
 }

@@ -2,9 +2,11 @@ package transport
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorbit/orbitalrush/internal/session"
 )
 
@@ -12,12 +14,18 @@ import (
 // It upgrades the HTTP connection to WebSocket, creates a session handler,
 // and manages the connection lifecycle.
 func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
+	logger := observability.NewLogger().WithValues("component", "transport", "handler", "websocket")
+	
+	// Generate a simple connection ID from remote address and timestamp
+	connectionID := fmt.Sprintf("%s-%d", r.RemoteAddr, time.Now().UnixNano())
+	connLogger := logger.WithValues("connection_id", connectionID)
+
 	// Upgrade HTTP connection to WebSocket
 	conn, err := UpgradeConnection(w, r)
 	if err != nil {
 		// UpgradeConnection may have already written error headers
 		// Log the error but don't write additional response
-		log.Printf("WebSocket upgrade failed: %v", err)
+		connLogger.Error(err, "WebSocket upgrade failed", "message_type", "upgrade_error")
 		return
 	}
 
@@ -25,7 +33,7 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	wsConn := NewConnection(conn)
 	defer func() {
 		if err := wsConn.Close(); err != nil {
-			log.Printf("Error closing WebSocket connection: %v", err)
+			connLogger.Error(err, "Error closing WebSocket connection", "message_type", "close_error")
 		}
 	}()
 
@@ -33,6 +41,8 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	clock := session.NewRealClock()
 	initialWorld := NewInitialWorld()
 	sessionHandler := NewSessionHandler(wsConn, clock, initialWorld)
+
+	connLogger.Info("WebSocket connection established", "message_type", "connect")
 
 	// Start session handler (runs session loop and snapshot broadcasting)
 	sessionHandler.Start()
@@ -45,6 +55,7 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			// Connection closed or error reading
 			// This is normal when client disconnects
+			connLogger.Info("WebSocket connection closed", "message_type", "disconnect")
 			break
 		}
 
@@ -52,9 +63,11 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		err = RouteMessage(data, sessionHandler, sessionHandler)
 		if err != nil {
 			// Send error response to client
+			connLogger.Error(err, "Failed to route message", "message_type", "route_error")
 			errorMsg := NewErrorMessage(err)
 			if writeErr := wsConn.WriteMessage(errorMsg); writeErr != nil {
 				// Failed to write error, connection likely closed
+				connLogger.Error(writeErr, "Failed to write error message", "message_type", "write_error")
 				break
 			}
 		}
@@ -64,6 +77,8 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 // HealthzHandler handles health check requests at the /healthz endpoint.
 // Returns a JSON response with status "ok".
 func HealthzHandler(w http.ResponseWriter, r *http.Request) {
+	logger := observability.NewLogger().WithValues("component", "transport", "handler", "healthz")
+	
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
@@ -72,7 +87,7 @@ func HealthzHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Error encoding healthz response: %v", err)
+		logger.Error(err, "Error encoding healthz response", "message_type", "encode_error")
 	}
 }
 
