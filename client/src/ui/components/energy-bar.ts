@@ -93,7 +93,13 @@ export class EnergyBar {
     // Update foreground bar width
     const newWidth = this.config.width * ratio
     
-    // Clear and redraw foreground bar
+    // Clear and redraw foreground bar (check if it exists)
+    if (!this.foregroundBar || this.foregroundBar.destroyed) {
+      // Recreate if destroyed
+      this.foregroundBar = new Graphics()
+      this.foregroundBar.label = 'energy-foreground'
+      this.container.addChild(this.foregroundBar)
+    }
     this.foregroundBar.clear()
     this.foregroundBar.rect(0, 0, newWidth, this.config.height)
     

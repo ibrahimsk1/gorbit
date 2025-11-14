@@ -43,18 +43,13 @@ export class App {
       throw new Error('Container element not found. Provide container or ensure #app exists in DOM.')
     }
 
-    const canvas = document.createElement('canvas')
-    canvas.width = this.config.width
-    canvas.height = this.config.height
-
     const options: Partial<ApplicationOptions> = {
       width: this.config.width,
       height: this.config.height,
       backgroundColor: this.config.backgroundColor,
       resolution: this.config.resolution,
       autoDensity: this.config.autoResize,
-      canvas: canvas, // Provide canvas for headless testing
-      preference: 'webgl', // Prefer WebGL renderer (works better in headless)
+      preference: 'webgl', // Prefer WebGL renderer
     }
 
     await this.pixiApp.init(options)
