@@ -37,7 +37,7 @@ async function init() {
   const predictionSystem = new PredictionSystem(stateManager, localSimulator, commandHistory)
   const reconciliationSystem = new ReconciliationSystem(stateManager, localSimulator, commandHistory, predictionSystem)
   const interpolationSystem = new InterpolationSystem(stateManager)
-  const renderer = new Renderer(stateManager, scene)
+  const renderer = new Renderer(stateManager, scene, app)
   const networkClient = new NetworkClient()
   const keyboardInput = new KeyboardInputHandler()
   const hud = new HUD(scene, stateManager)

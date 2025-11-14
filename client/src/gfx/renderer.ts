@@ -7,6 +7,7 @@
 import { Graphics } from 'pixi.js'
 import { StateManager, type GameState } from '../sim/state-manager'
 import { Scene } from './scene'
+import { App } from '../core/app'
 import { ShipSpriteFactory } from './sprites/ship-sprite'
 import { PlanetSpriteFactory } from './sprites/planet-sprite'
 import { PalletSpriteFactory } from './sprites/pallet-sprite'
@@ -18,13 +19,31 @@ import { PalletSpriteFactory } from './sprites/pallet-sprite'
 export class Renderer {
   private stateManager: StateManager
   private scene: Scene
+  private app: App
   private shipSprite: Graphics | null = null
   private planetSprites: Map<number, Graphics> = new Map()
   private palletSprites: Map<number, Graphics> = new Map()
 
-  constructor(stateManager: StateManager, scene: Scene) {
+  constructor(stateManager: StateManager, scene: Scene, app: App) {
     this.stateManager = stateManager
     this.scene = scene
+    this.app = app
+  }
+
+  /**
+   * Transforms world coordinates to screen coordinates.
+   * World (0,0) maps to screen center.
+   * Y-axis is flipped because screen Y increases downward, while world Y increases upward.
+   */
+  private worldToScreen(worldX: number, worldY: number): { x: number, y: number } {
+    const pixiApp = this.app.getApplication()
+    const screenWidth = pixiApp.screen.width
+    const screenHeight = pixiApp.screen.height
+    
+    return {
+      x: worldX + screenWidth / 2,
+      y: -worldY + screenHeight / 2  // Flip Y-axis
+    }
   }
 
   /**
@@ -48,11 +67,17 @@ export class Renderer {
    * Updates ship sprite from ship state.
    */
   private updateShipSprite(ship: GameState['ship'], gameLayer: typeof gameLayer): void {
+    const screenPos = this.worldToScreen(ship.pos.x, ship.pos.y)
+    const transformedShip = {
+      ...ship,
+      pos: { x: screenPos.x, y: screenPos.y }
+    }
+    
     if (!this.shipSprite) {
-      this.shipSprite = ShipSpriteFactory.create(ship)
+      this.shipSprite = ShipSpriteFactory.create(transformedShip)
       gameLayer.addChild(this.shipSprite)
     } else {
-      ShipSpriteFactory.update(this.shipSprite, ship)
+      ShipSpriteFactory.update(this.shipSprite, transformedShip)
     }
   }
 
@@ -62,13 +87,19 @@ export class Renderer {
   private updatePlanetSprites(planets: GameState['planets'], gameLayer: typeof gameLayer): void {
     // Create/update sprites for planets in array
     planets.forEach((planet, index) => {
+      const screenPos = this.worldToScreen(planet.pos.x, planet.pos.y)
+      const transformedPlanet = {
+        ...planet,
+        pos: { x: screenPos.x, y: screenPos.y }
+      }
+      
       let sprite = this.planetSprites.get(index)
       if (!sprite) {
-        sprite = PlanetSpriteFactory.create(planet)
+        sprite = PlanetSpriteFactory.create(transformedPlanet)
         this.planetSprites.set(index, sprite)
         gameLayer.addChild(sprite)
       } else {
-        PlanetSpriteFactory.update(sprite, planet)
+        PlanetSpriteFactory.update(sprite, transformedPlanet)
       }
     })
 
@@ -88,13 +119,19 @@ export class Renderer {
   private updatePalletSprites(pallets: GameState['pallets'], gameLayer: typeof gameLayer): void {
     // Create/update sprites for pallets in array
     pallets.forEach((pallet) => {
+      const screenPos = this.worldToScreen(pallet.pos.x, pallet.pos.y)
+      const transformedPallet = {
+        ...pallet,
+        pos: { x: screenPos.x, y: screenPos.y }
+      }
+      
       let sprite = this.palletSprites.get(pallet.id)
       if (!sprite) {
-        sprite = PalletSpriteFactory.create(pallet)
+        sprite = PalletSpriteFactory.create(transformedPallet)
         this.palletSprites.set(pallet.id, sprite)
         gameLayer.addChild(sprite)
       } else {
-        PalletSpriteFactory.update(sprite, pallet)
+        PalletSpriteFactory.update(sprite, transformedPallet)
       }
     })
 
