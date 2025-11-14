@@ -34,7 +34,7 @@ func NewSession(clock Clock, world entities.World, maxQueueSize int) *Session {
 		dt:           1.0 / 30.0, // 30Hz tick rate
 		G:            1.0,        // Gravitational constant
 		aMax:         100.0,      // Maximum acceleration
-		pickupRadius: 1.2,        // Pallet pickup radius
+		pickupRadius: 15.0,       // Pallet pickup radius (about ship length for better gameplay)
 		running:      false,
 		maxQueueSize: maxQueueSize,
 	}

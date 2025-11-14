@@ -11,7 +11,7 @@ import type { Vec2Snapshot, ShipSnapshot, PlanetSnapshot, PalletSnapshot } from 
 const DT = 1.0 / 30.0 // 30Hz tick rate
 const G_CONST = 1.0 // Gravitational constant
 const A_MAX = 100.0 // Maximum acceleration
-const PICKUP_RADIUS = 1.2 // Pallet pickup radius
+const PICKUP_RADIUS = 15.0 // Pallet pickup radius (about ship length for better gameplay)
 
 // Input constants (matching server values)
 const THRUST_ACCELERATION = 20.0 // Acceleration per unit thrust
