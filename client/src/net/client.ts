@@ -5,7 +5,7 @@
  */
 
 import { WebSocketClient } from './ws'
-import type { InputMessage, RestartMessage, SnapshotMessage } from './protocol'
+import type { InputMessage, RestartMessage, SnapshotMessage, PlanetSnapshot } from './protocol'
 
 export class NetworkClient {
   private wsClient: WebSocketClient
@@ -34,8 +34,23 @@ export class NetworkClient {
     this.wsClient.onMessage((data) => {
       // Only process snapshot messages
       if (data && typeof data === 'object' && data.t === 'snapshot') {
-        const snapshot = data as SnapshotMessage
-        this.snapshotHandlers.forEach(handler => handler(snapshot))
+        // Convert server's 'sun' field to client's 'planets' array for extensibility
+        const serverSnapshot = data as Record<string, unknown>
+        const clientSnapshot: SnapshotMessage = {
+          t: 'snapshot',
+          tick: serverSnapshot.tick as number,
+          ship: serverSnapshot.ship as SnapshotMessage['ship'],
+          planets: serverSnapshot.planets
+            ? (serverSnapshot.planets as PlanetSnapshot[])
+            : serverSnapshot.sun
+              ? [serverSnapshot.sun as PlanetSnapshot] // Convert single sun to planets array
+              : [],
+          pallets: (serverSnapshot.pallets || []) as SnapshotMessage['pallets'],
+          done: serverSnapshot.done as boolean,
+          win: serverSnapshot.win as boolean,
+          version: serverSnapshot.version as number | undefined
+        }
+        this.snapshotHandlers.forEach(handler => handler(clientSnapshot))
       }
       // Ignore other message types for now
     })

@@ -190,7 +190,8 @@ describe('NetworkClient', () => {
       const onSnapshotSpy = vi.fn()
       client.onSnapshot(onSnapshotSpy)
       
-      const snapshot: SnapshotMessage = {
+      // Server sends 'sun' field, client converts to 'planets' array
+      const serverSnapshot = {
         t: 'snapshot',
         tick: 1,
         ship: {
@@ -208,13 +209,32 @@ describe('NetworkClient', () => {
         win: false
       }
       
+      // Client should receive 'planets' array (converted from 'sun')
+      const expectedClientSnapshot: SnapshotMessage = {
+        t: 'snapshot',
+        tick: 1,
+        ship: {
+          pos: { x: 0, y: 0 },
+          vel: { x: 0, y: 0 },
+          rot: 0,
+          energy: 100
+        },
+        planets: [{
+          pos: { x: 0, y: 0 },
+          radius: 10
+        }],
+        pallets: [],
+        done: false,
+        win: false
+      }
+      
       const wsClient = (client as any).wsClient
       const mockWs = (wsClient as any).ws as MockWebSocket
-      mockWs.simulateMessage(JSON.stringify(snapshot))
+      mockWs.simulateMessage(JSON.stringify(serverSnapshot))
       
       await new Promise(resolve => setTimeout(resolve, 50))
       
-      expect(onSnapshotSpy).toHaveBeenCalledWith(snapshot)
+      expect(onSnapshotSpy).toHaveBeenCalledWith(expectedClientSnapshot)
     })
 
     it('deserializes SnapshotMessage correctly', async () => {
@@ -223,7 +243,8 @@ describe('NetworkClient', () => {
       const onSnapshotSpy = vi.fn()
       client.onSnapshot(onSnapshotSpy)
       
-      const snapshot = {
+      // Server sends 'sun' field, client converts to 'planets' array
+      const serverSnapshot = {
         t: 'snapshot',
         tick: 42,
         ship: {
@@ -244,16 +265,39 @@ describe('NetworkClient', () => {
         win: false
       }
       
+      // Client should receive 'planets' array (converted from 'sun')
+      const expectedClientSnapshot = {
+        t: 'snapshot',
+        tick: 42,
+        ship: {
+          pos: { x: 100, y: 200 },
+          vel: { x: 10, y: -5 },
+          rot: 1.57,
+          energy: 75.5
+        },
+        planets: [{
+          pos: { x: 0, y: 0 },
+          radius: 15.0
+        }],
+        pallets: [
+          { id: 1, pos: { x: 50, y: 50 }, active: true },
+          { id: 2, pos: { x: -50, y: -50 }, active: false }
+        ],
+        done: false,
+        win: false
+      }
+      
       const wsClient = (client as any).wsClient
       const mockWs = (wsClient as any).ws as MockWebSocket
-      mockWs.simulateMessage(JSON.stringify(snapshot))
+      mockWs.simulateMessage(JSON.stringify(serverSnapshot))
       
       await new Promise(resolve => setTimeout(resolve, 50))
       
       expect(onSnapshotSpy).toHaveBeenCalled()
       const receivedSnapshot = onSnapshotSpy.mock.calls[0][0]
-      expect(receivedSnapshot).toEqual(snapshot)
+      expect(receivedSnapshot).toEqual(expectedClientSnapshot)
       expect(receivedSnapshot.tick).toBe(42)
+      expect(receivedSnapshot.planets).toHaveLength(1)
       expect(receivedSnapshot.pallets).toHaveLength(2)
     })
 
