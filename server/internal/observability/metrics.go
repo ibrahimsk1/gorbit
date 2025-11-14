@@ -2,9 +2,11 @@ package observability
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	dto "github.com/prometheus/client_model/go"
 )
 
 var (
@@ -34,6 +36,9 @@ var (
 
 	// metricsInitialized tracks whether metrics have been initialized
 	metricsInitialized bool
+
+	// serverStartTime tracks when the server started (when InitMetrics was called)
+	serverStartTime time.Time
 )
 
 // InitMetrics initializes and registers all Prometheus metrics.
@@ -150,6 +155,9 @@ func InitMetrics() {
 	prometheus.MustRegister(connectionDurationHistogram)
 	prometheus.MustRegister(connectionBytesCounter)
 
+	// Record server start time
+	serverStartTime = time.Now()
+
 	metricsInitialized = true
 }
 
@@ -204,5 +212,82 @@ func UpdateQueueDepth(size int) {
 // It returns Prometheus-formatted metrics.
 func MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	promhttp.Handler().ServeHTTP(w, r)
+}
+
+// HealthMetrics contains summary statistics for health endpoint
+type HealthMetrics struct {
+	ActiveConnections float64
+	QueueDepth        float64
+	TickTime          TickTimeStats
+	GCPause           GCPauseStats
+	UptimeSeconds     float64
+}
+
+// TickTimeStats contains tick time statistics
+type TickTimeStats struct {
+	AverageMs float64
+	Count     uint64
+}
+
+// GCPauseStats contains GC pause statistics
+type GCPauseStats struct {
+	AverageMs float64
+	Count     uint64
+}
+
+// GetHealthMetrics extracts summary statistics from Prometheus metrics.
+// Returns a HealthMetrics struct with current metric values.
+// If metrics are not initialized, returns zero values.
+func GetHealthMetrics() HealthMetrics {
+	metrics := HealthMetrics{}
+
+	// Calculate uptime
+	if !serverStartTime.IsZero() {
+		metrics.UptimeSeconds = time.Since(serverStartTime).Seconds()
+	}
+
+	// Extract active connections gauge
+	if activeConnectionsGauge != nil {
+		var metric dto.Metric
+		if err := activeConnectionsGauge.Write(&metric); err == nil && metric.Gauge != nil {
+			metrics.ActiveConnections = metric.Gauge.GetValue()
+		}
+	}
+
+	// Extract queue depth gauge
+	if queueDepthGauge != nil {
+		var metric dto.Metric
+		if err := queueDepthGauge.Write(&metric); err == nil && metric.Gauge != nil {
+			metrics.QueueDepth = metric.Gauge.GetValue()
+		}
+	}
+
+	// Extract tick time histogram statistics
+	if tickDurationHistogram != nil {
+		var metric dto.Metric
+		if err := tickDurationHistogram.Write(&metric); err == nil && metric.Histogram != nil {
+			count := metric.Histogram.GetSampleCount()
+			sum := metric.Histogram.GetSampleSum()
+			metrics.TickTime.Count = count
+			if count > 0 {
+				metrics.TickTime.AverageMs = (sum / float64(count)) * 1000.0 // Convert to milliseconds
+			}
+		}
+	}
+
+	// Extract GC pause histogram statistics
+	if gcPauseHistogram != nil {
+		var metric dto.Metric
+		if err := gcPauseHistogram.Write(&metric); err == nil && metric.Histogram != nil {
+			count := metric.Histogram.GetSampleCount()
+			sum := metric.Histogram.GetSampleSum()
+			metrics.GCPause.Count = count
+			if count > 0 {
+				metrics.GCPause.AverageMs = (sum / float64(count)) * 1000.0 // Convert to milliseconds
+			}
+		}
+	}
+
+	return metrics
 }
 

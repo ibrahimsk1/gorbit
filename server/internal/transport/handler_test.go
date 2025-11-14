@@ -137,6 +137,11 @@ var _ = Describe("HTTP Route Handlers", Label("scope:integration", "loop:g5-adap
 	})
 
 	Describe("HealthzHandler", func() {
+		BeforeEach(func() {
+			// Initialize metrics before each test
+			observability.InitMetrics()
+		})
+
 		It("returns JSON response with status ok", func() {
 			resp, err := http.Get(testServer.URL + "/healthz")
 			Expect(err).NotTo(HaveOccurred())
@@ -144,7 +149,7 @@ var _ = Describe("HTTP Route Handlers", Label("scope:integration", "loop:g5-adap
 
 			Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-			var result map[string]string
+			var result map[string]interface{}
 			err = json.NewDecoder(resp.Body).Decode(&result)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result["status"]).To(Equal("ok"))
@@ -177,6 +182,174 @@ var _ = Describe("HTTP Route Handlers", Label("scope:integration", "loop:g5-adap
 
 			// Should succeed normally
 			Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		})
+	})
+
+	Describe("Enhanced HealthzHandler with observability metrics", Label("scope:integration", "loop:g7-ops", "layer:server", "b:health-endpoint", "r:medium"), func() {
+		BeforeEach(func() {
+			// Initialize metrics before each test
+			observability.InitMetrics()
+		})
+
+		It("returns JSON response with status field", func() {
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result["status"]).To(Equal("ok"))
+		})
+
+		It("returns JSON response with uptime_seconds field", func() {
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveKey("uptime_seconds"))
+			Expect(result["uptime_seconds"]).To(BeNumerically(">=", 0))
+		})
+
+		It("returns JSON response with metrics object", func() {
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveKey("metrics"))
+			Expect(result["metrics"]).To(BeAssignableToTypeOf(map[string]interface{}{}))
+		})
+
+		It("returns JSON response with metrics.active_connections field", func() {
+			// Set some test metrics
+			activeGauge := observability.GetActiveConnectionsGauge()
+			activeGauge.Set(5.0)
+
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+
+			metrics, ok := result["metrics"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(metrics).To(HaveKey("active_connections"))
+			Expect(metrics["active_connections"]).To(BeNumerically("==", 5.0))
+		})
+
+		It("returns JSON response with metrics.queue_depth field", func() {
+			// Set some test metrics
+			queueGauge := observability.GetQueueDepthGauge()
+			queueGauge.Set(3.0)
+
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+
+			metrics, ok := result["metrics"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(metrics).To(HaveKey("queue_depth"))
+			Expect(metrics["queue_depth"]).To(BeNumerically("==", 3.0))
+		})
+
+		It("returns JSON response with metrics.tick_time field", func() {
+			// Record some tick durations
+			tickHistogram := observability.GetTickDurationHistogram()
+			tickHistogram.Observe(0.002) // 2ms
+			tickHistogram.Observe(0.003) // 3ms
+			tickHistogram.Observe(0.005) // 5ms
+
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+
+			metrics, ok := result["metrics"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(metrics).To(HaveKey("tick_time"))
+
+			tickTime, ok := metrics["tick_time"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(tickTime).To(HaveKey("average_ms"))
+			Expect(tickTime).To(HaveKey("count"))
+			Expect(tickTime["count"]).To(BeNumerically(">=", 3))
+			// Average should be around 3.33ms (10ms / 3)
+			Expect(tickTime["average_ms"]).To(BeNumerically(">=", 2.0))
+			Expect(tickTime["average_ms"]).To(BeNumerically("<=", 5.0))
+		})
+
+		It("returns JSON response with metrics.gc_pause field", func() {
+			// Record some GC pause durations
+			gcHistogram := observability.GetGCPauseHistogram()
+			gcHistogram.Observe(0.001) // 1ms
+			gcHistogram.Observe(0.002) // 2ms
+
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+
+			metrics, ok := result["metrics"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(metrics).To(HaveKey("gc_pause"))
+
+			gcPause, ok := metrics["gc_pause"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(gcPause).To(HaveKey("average_ms"))
+			Expect(gcPause).To(HaveKey("count"))
+			Expect(gcPause["count"]).To(BeNumerically(">=", 2))
+			// Average should be around 1.5ms (3ms / 2)
+			Expect(gcPause["average_ms"]).To(BeNumerically(">=", 1.0))
+			Expect(gcPause["average_ms"]).To(BeNumerically("<=", 2.0))
+		})
+
+		It("responds quickly without blocking", func() {
+			start := time.Now()
+			resp, err := http.Get(testServer.URL + "/healthz")
+			duration := time.Since(start)
+
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			// Health endpoint should respond quickly (< 10ms)
+			Expect(duration).To(BeNumerically("<", 10*time.Millisecond))
+			Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		})
+
+		It("handles missing metrics gracefully", func() {
+			// Test with metrics initialized but no data recorded
+			resp, err := http.Get(testServer.URL + "/healthz")
+			Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should still return valid JSON with status
+			Expect(result["status"]).To(Equal("ok"))
+			Expect(result).To(HaveKey("uptime_seconds"))
+			Expect(result).To(HaveKey("metrics"))
 		})
 	})
 

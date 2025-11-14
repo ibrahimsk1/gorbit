@@ -114,15 +114,32 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // HealthzHandler handles health check requests at the /healthz endpoint.
-// Returns a JSON response with status "ok".
+// Returns a JSON response with status and observability metrics summary.
 func HealthzHandler(w http.ResponseWriter, r *http.Request) {
 	logger := observability.NewLogger().WithValues("component", "transport", "handler", "healthz")
 	
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	response := map[string]string{
-		"status": "ok",
+	// Get health metrics summary
+	healthMetrics := observability.GetHealthMetrics()
+
+	// Build response with metrics
+	response := map[string]interface{}{
+		"status":        "ok",
+		"uptime_seconds": healthMetrics.UptimeSeconds,
+		"metrics": map[string]interface{}{
+			"active_connections": healthMetrics.ActiveConnections,
+			"queue_depth":        healthMetrics.QueueDepth,
+			"tick_time": map[string]interface{}{
+				"average_ms": healthMetrics.TickTime.AverageMs,
+				"count":      healthMetrics.TickTime.Count,
+			},
+			"gc_pause": map[string]interface{}{
+				"average_ms": healthMetrics.GCPause.AverageMs,
+				"count":      healthMetrics.GCPause.Count,
+			},
+		},
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
