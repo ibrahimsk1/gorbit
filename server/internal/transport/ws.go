@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorbit/orbitalrush/internal/proto"
 	"github.com/gorbit/orbitalrush/internal/session"
 	"github.com/gorbit/orbitalrush/internal/sim/entities"
@@ -41,9 +42,10 @@ var (
 // Connection manages a WebSocket connection lifecycle.
 // It provides methods for reading and writing messages, and graceful closure.
 type Connection struct {
-	conn     *websocket.Conn
-	done     chan struct{}
+	conn      *websocket.Conn
+	done      chan struct{}
 	writeChan chan []byte
+	startTime time.Time
 }
 
 // NewConnection creates a new Connection wrapper around a WebSocket connection.
@@ -52,6 +54,7 @@ func NewConnection(conn *websocket.Conn) *Connection {
 		conn:      conn,
 		done:      make(chan struct{}),
 		writeChan: make(chan []byte, 256),
+		startTime: time.Now(),
 	}
 
 	// Set read deadline and pong handler
@@ -65,6 +68,11 @@ func NewConnection(conn *websocket.Conn) *Connection {
 	go c.pingTicker()
 
 	return c
+}
+
+// GetStartTime returns the connection start time.
+func (c *Connection) GetStartTime() time.Time {
+	return c.startTime
 }
 
 // UpgradeConnection upgrades an HTTP connection to a WebSocket connection.
@@ -91,6 +99,16 @@ func (c *Connection) ReadMessage() ([]byte, error) {
 		return nil, websocket.ErrBadHandshake
 	}
 
+	// Record bytes in and message count
+	if len(data) > 0 {
+		if bytesCounter := observability.GetConnectionBytesCounter(); bytesCounter != nil {
+			bytesCounter.WithLabelValues("in").Add(float64(len(data)))
+		}
+		if msgCounter := observability.GetMessagesCounter(); msgCounter != nil {
+			msgCounter.WithLabelValues("in").Inc()
+		}
+	}
+
 	return data, nil
 }
 
@@ -98,7 +116,19 @@ func (c *Connection) ReadMessage() ([]byte, error) {
 // Returns an error if the write fails.
 func (c *Connection) WriteMessage(data []byte) error {
 	c.conn.SetWriteDeadline(time.Now().Add(WriteDeadline))
-	return c.conn.WriteMessage(websocket.TextMessage, data)
+	err := c.conn.WriteMessage(websocket.TextMessage, data)
+	
+	// Record bytes out and message count (even if write failed, we attempted to send)
+	if len(data) > 0 {
+		if bytesCounter := observability.GetConnectionBytesCounter(); bytesCounter != nil {
+			bytesCounter.WithLabelValues("out").Add(float64(len(data)))
+		}
+		if msgCounter := observability.GetMessagesCounter(); msgCounter != nil {
+			msgCounter.WithLabelValues("out").Inc()
+		}
+	}
+	
+	return err
 }
 
 // Close gracefully closes the WebSocket connection.

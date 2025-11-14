@@ -24,19 +24,49 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := UpgradeConnection(w, r)
 	if err != nil {
 		// UpgradeConnection may have already written error headers
-		// Log the error but don't write additional response
+		// Log the error and record error event
 		connLogger.Error(err, "WebSocket upgrade failed", "message_type", "upgrade_error")
+		if eventsCounter := observability.GetConnectionEventsCounter(); eventsCounter != nil {
+			eventsCounter.WithLabelValues("error").Inc()
+		}
 		return
 	}
 
 	// Create Connection wrapper
 	wsConn := NewConnection(conn)
+	connectionStartTime := wsConn.GetStartTime()
+	
 	defer func() {
+		// Calculate connection duration
+		duration := time.Since(connectionStartTime).Seconds()
+		
+		// Record disconnect event and duration
+		if eventsCounter := observability.GetConnectionEventsCounter(); eventsCounter != nil {
+			eventsCounter.WithLabelValues("disconnect").Inc()
+		}
+		if activeGauge := observability.GetActiveConnectionsGauge(); activeGauge != nil {
+			activeGauge.Dec()
+		}
+		if durationHist := observability.GetConnectionDurationHistogram(); durationHist != nil {
+			durationHist.Observe(duration)
+		}
+		
+		// Log disconnect with duration
+		connLogger.Info("WebSocket connection closed", "message_type", "disconnect", "duration_seconds", duration)
+		
 		if err := wsConn.Close(); err != nil {
 			connLogger.Error(err, "Error closing WebSocket connection", "message_type", "close_error")
 		}
 	}()
 
+	// Record connect event and increment active connections
+	if eventsCounter := observability.GetConnectionEventsCounter(); eventsCounter != nil {
+		eventsCounter.WithLabelValues("connect").Inc()
+	}
+	if activeGauge := observability.GetActiveConnectionsGauge(); activeGauge != nil {
+		activeGauge.Inc()
+	}
+	
 	// Create session handler with real clock and initial world
 	clock := session.NewRealClock()
 	initialWorld := NewInitialWorld()
@@ -44,7 +74,7 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	sessionLogger := connLogger.WithValues("component", "session")
 	sessionHandler := NewSessionHandler(wsConn, clock, initialWorld, sessionLogger)
 
-	connLogger.Info("WebSocket connection established", "message_type", "connect")
+	connLogger.Info("WebSocket connection established", "message_type", "connect", "remote_addr", r.RemoteAddr)
 
 	// Start session handler (runs session loop and snapshot broadcasting)
 	sessionHandler.Start()
@@ -57,18 +87,25 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			// Connection closed or error reading
 			// This is normal when client disconnects
-			connLogger.Info("WebSocket connection closed", "message_type", "disconnect")
+			// Note: defer will handle disconnect metrics and logging
 			break
 		}
 
 		// Route message to session handler
 		err = RouteMessage(data, sessionHandler, sessionHandler)
 		if err != nil {
+			// Record error event
+			if eventsCounter := observability.GetConnectionEventsCounter(); eventsCounter != nil {
+				eventsCounter.WithLabelValues("error").Inc()
+			}
 			// Send error response to client
 			connLogger.Error(err, "Failed to route message", "message_type", "route_error")
 			errorMsg := NewErrorMessage(err)
 			if writeErr := wsConn.WriteMessage(errorMsg); writeErr != nil {
 				// Failed to write error, connection likely closed
+				if eventsCounter := observability.GetConnectionEventsCounter(); eventsCounter != nil {
+					eventsCounter.WithLabelValues("error").Inc()
+				}
 				connLogger.Error(writeErr, "Failed to write error message", "message_type", "write_error")
 				break
 			}

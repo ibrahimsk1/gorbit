@@ -26,6 +26,12 @@ var (
 	// gcPauseHistogram tracks GC pause durations
 	gcPauseHistogram prometheus.Histogram
 
+	// connectionDurationHistogram tracks connection duration
+	connectionDurationHistogram prometheus.Histogram
+
+	// connectionBytesCounter tracks bytes in/out
+	connectionBytesCounter *prometheus.CounterVec
+
 	// metricsInitialized tracks whether metrics have been initialized
 	metricsInitialized bool
 )
@@ -53,6 +59,12 @@ func InitMetrics() {
 		}
 		if gcPauseHistogram != nil {
 			prometheus.Unregister(gcPauseHistogram)
+		}
+		if connectionDurationHistogram != nil {
+			prometheus.Unregister(connectionDurationHistogram)
+		}
+		if connectionBytesCounter != nil {
+			prometheus.Unregister(connectionBytesCounter)
 		}
 	}
 
@@ -109,6 +121,25 @@ func InitMetrics() {
 		},
 	)
 
+	// Connection duration histogram with buckets for connection lifetimes
+	// Buckets: 1s, 10s, 1m, 5m, 15m, 1h
+	connectionDurationHistogram = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "connection_duration_seconds",
+			Help:    "Connection duration in seconds",
+			Buckets: []float64{1, 10, 60, 300, 900, 3600}, // 1s, 10s, 1m, 5m, 15m, 1h
+		},
+	)
+
+	// Connection bytes counter
+	connectionBytesCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "connection_bytes_total",
+			Help: "Total bytes transferred over connections",
+		},
+		[]string{"direction"}, // direction: in, out
+	)
+
 	// Register all metrics
 	prometheus.MustRegister(connectionEventsCounter)
 	prometheus.MustRegister(messagesCounter)
@@ -116,6 +147,8 @@ func InitMetrics() {
 	prometheus.MustRegister(queueDepthGauge)
 	prometheus.MustRegister(tickDurationHistogram)
 	prometheus.MustRegister(gcPauseHistogram)
+	prometheus.MustRegister(connectionDurationHistogram)
+	prometheus.MustRegister(connectionBytesCounter)
 
 	metricsInitialized = true
 }
@@ -148,6 +181,16 @@ func GetTickDurationHistogram() prometheus.Histogram {
 // GetGCPauseHistogram returns the GC pause histogram metric.
 func GetGCPauseHistogram() prometheus.Histogram {
 	return gcPauseHistogram
+}
+
+// GetConnectionDurationHistogram returns the connection duration histogram metric.
+func GetConnectionDurationHistogram() prometheus.Histogram {
+	return connectionDurationHistogram
+}
+
+// GetConnectionBytesCounter returns the connection bytes counter metric.
+func GetConnectionBytesCounter() *prometheus.CounterVec {
+	return connectionBytesCounter
 }
 
 // UpdateQueueDepth updates the queue depth gauge metric with the current queue size.
