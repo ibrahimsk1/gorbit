@@ -150,6 +150,13 @@ func GetGCPauseHistogram() prometheus.Histogram {
 	return gcPauseHistogram
 }
 
+// UpdateQueueDepth updates the queue depth gauge metric with the current queue size.
+func UpdateQueueDepth(size int) {
+	if queueDepthGauge != nil {
+		queueDepthGauge.Set(float64(size))
+	}
+}
+
 // MetricsHandler handles HTTP requests to the /metrics endpoint.
 // It returns Prometheus-formatted metrics.
 func MetricsHandler(w http.ResponseWriter, r *http.Request) {

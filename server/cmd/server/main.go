@@ -20,6 +20,13 @@ func main() {
 	observability.InitMetrics()
 	logger.Info("Metrics initialized", "metrics_endpoint", "/metrics")
 	
+	// Start GC monitor with 5 second interval
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	gcMonitorInterval := 5 * time.Second
+	stopGCMonitor := observability.StartGCMonitor(ctx, gcMonitorInterval, logger)
+	logger.Info("GC monitor started", "interval_seconds", gcMonitorInterval.Seconds())
+	
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -55,11 +62,16 @@ func main() {
 
 	logger.Info("Shutting down server...")
 
-	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Stop GC monitor
+	close(stopGCMonitor)
+	cancel() // Cancel context to stop GC monitor goroutine
+	logger.Info("GC monitor stopped")
 
-	if err := server.Shutdown(ctx); err != nil {
+	// Graceful shutdown with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error(err, "Server forced to shutdown")
 		os.Exit(1)
 	}
