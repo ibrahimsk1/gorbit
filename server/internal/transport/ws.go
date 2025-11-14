@@ -339,7 +339,7 @@ func NewErrorMessage(err error) []byte {
 // NewInitialWorld creates a default initial world state for new sessions.
 // Ship at position (10, 0) with zero velocity, 100 energy.
 // Sun at origin (0, 0) with radius 50, mass 1000.
-// Empty pallets array.
+// Initial pallets positioned around the world in a circular pattern.
 func NewInitialWorld() entities.World {
 	ship := entities.NewShip(
 		entities.NewVec2(10.0, 0.0),
@@ -352,7 +352,28 @@ func NewInitialWorld() entities.World {
 		50.0,
 		1000.0,
 	)
-	return entities.NewWorld(ship, sun, nil)
+
+	// Create initial pallets positioned in a circle around the sun
+	// Position them at various distances and angles for gameplay variety
+	pallets := []entities.Pallet{
+		// First ring - closer to sun
+		entities.NewPallet(1, entities.NewVec2(80.0, 0.0), true),  // Right
+		entities.NewPallet(2, entities.NewVec2(-80.0, 0.0), true), // Left
+		entities.NewPallet(3, entities.NewVec2(0.0, 80.0), true),  // Up
+		entities.NewPallet(4, entities.NewVec2(0.0, -80.0), true), // Down
+
+		// Second ring - further from sun
+		entities.NewPallet(5, entities.NewVec2(120.0, 60.0), true),   // Right-up
+		entities.NewPallet(6, entities.NewVec2(-120.0, 60.0), true),  // Left-up
+		entities.NewPallet(7, entities.NewVec2(120.0, -60.0), true),  // Right-down
+		entities.NewPallet(8, entities.NewVec2(-120.0, -60.0), true), // Left-down
+
+		// Additional pallets at various positions
+		entities.NewPallet(9, entities.NewVec2(150.0, 0.0), true),   // Far right
+		entities.NewPallet(10, entities.NewVec2(-150.0, 0.0), true), // Far left
+	}
+
+	return entities.NewWorld(ship, sun, pallets)
 }
 
 // SessionHandler manages a session for a WebSocket connection.
