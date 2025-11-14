@@ -1,9 +1,12 @@
 package transport
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/gorbit/orbitalrush/internal/proto"
 	"github.com/gorilla/websocket"
 )
 
@@ -123,5 +126,109 @@ func (c *Connection) pingTicker() {
 			return
 		}
 	}
+}
+
+// InputMessageHandler handles InputMessage messages.
+type InputMessageHandler interface {
+	HandleInput(msg *proto.InputMessage) error
+}
+
+// RestartMessageHandler handles RestartMessage messages.
+type RestartMessageHandler interface {
+	HandleRestart(msg *proto.RestartMessage) error
+}
+
+// ParseMessage parses a JSON message and returns a typed message (InputMessage or RestartMessage).
+// Returns an error if the message is malformed, invalid, or of unknown type.
+func ParseMessage(data []byte) (interface{}, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty message")
+	}
+
+	// First, parse into a generic map to determine message type
+	var msgType map[string]interface{}
+	if err := json.Unmarshal(data, &msgType); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	// Check if "t" field exists
+	typeField, ok := msgType["t"]
+	if !ok {
+		return nil, fmt.Errorf("missing message type field 't'")
+	}
+
+	typeStr, ok := typeField.(string)
+	if !ok {
+		return nil, fmt.Errorf("message type field 't' must be a string")
+	}
+
+	// Route to appropriate message type
+	switch typeStr {
+	case "input":
+		var msg proto.InputMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return nil, fmt.Errorf("failed to parse InputMessage: %w", err)
+		}
+		if err := proto.ValidateInputMessage(&msg); err != nil {
+			return nil, fmt.Errorf("invalid InputMessage: %w", err)
+		}
+		return &msg, nil
+
+	case "restart":
+		var msg proto.RestartMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return nil, fmt.Errorf("failed to parse RestartMessage: %w", err)
+		}
+		if err := proto.ValidateRestartMessage(&msg); err != nil {
+			return nil, fmt.Errorf("invalid RestartMessage: %w", err)
+		}
+		return &msg, nil
+
+	default:
+		return nil, fmt.Errorf("unknown message type: %s", typeStr)
+	}
+}
+
+// RouteMessage parses a JSON message, validates it, and routes it to the appropriate handler.
+// Returns an error if parsing, validation, or handler execution fails.
+func RouteMessage(data []byte, inputHandler InputMessageHandler, restartHandler RestartMessageHandler) error {
+	msg, err := ParseMessage(data)
+	if err != nil {
+		return err
+	}
+
+	// Route to appropriate handler
+	switch m := msg.(type) {
+	case *proto.InputMessage:
+		if inputHandler == nil {
+			return fmt.Errorf("InputMessageHandler is nil")
+		}
+		return inputHandler.HandleInput(m)
+
+	case *proto.RestartMessage:
+		if restartHandler == nil {
+			return fmt.Errorf("RestartMessageHandler is nil")
+		}
+		return restartHandler.HandleRestart(m)
+
+	default:
+		return fmt.Errorf("unexpected message type: %T", msg)
+	}
+}
+
+// ErrorMessage represents an error response message.
+type ErrorMessage struct {
+	Type    string `json:"t"`
+	Message string `json:"message"`
+}
+
+// NewErrorMessage creates a JSON error response message.
+func NewErrorMessage(err error) []byte {
+	errorMsg := ErrorMessage{
+		Type:    "error",
+		Message: err.Error(),
+	}
+	data, _ := json.Marshal(errorMsg)
+	return data
 }
 
