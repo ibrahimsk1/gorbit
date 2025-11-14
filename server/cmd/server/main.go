@@ -16,6 +16,10 @@ import (
 func main() {
 	logger := observability.NewLogger().WithValues("component", "server")
 	
+	// Initialize Prometheus metrics
+	observability.InitMetrics()
+	logger.Info("Metrics initialized", "metrics_endpoint", "/metrics")
+	
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -25,6 +29,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", transport.WebSocketHandler)
 	mux.HandleFunc("/healthz", transport.HealthzHandler)
+	mux.HandleFunc("/metrics", observability.MetricsHandler)
 
 	// Create HTTP server
 	addr := fmt.Sprintf(":%s", port)
@@ -35,7 +40,7 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		logger.Info("Server starting", "address", addr, "ws_endpoint", "/ws", "health_endpoint", "/healthz")
+		logger.Info("Server starting", "address", addr, "ws_endpoint", "/ws", "health_endpoint", "/healthz", "metrics_endpoint", "/metrics")
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error(err, "Server failed to start", "address", addr)
