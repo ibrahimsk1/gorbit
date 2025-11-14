@@ -1,6 +1,10 @@
 package session
 
 import (
+	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorbit/orbitalrush/internal/sim/entities"
 	"github.com/gorbit/orbitalrush/internal/sim/rules"
 )
@@ -16,6 +20,7 @@ type Session struct {
 	aMax         float64
 	pickupRadius float64
 	running      bool
+	logger       logr.Logger // Optional logger for observability
 }
 
 // NewSession creates a new session with the given clock, initial world state, and max queue size.
@@ -70,6 +75,9 @@ func (s *Session) Run(maxTicks int) error {
 
 	// Process all ticks that should have occurred
 	for ticksProcessed < totalTicksNeeded && !s.world.Done {
+		// Measure tick execution time
+		tickStart := time.Now()
+
 		// Advance ticker - manually update lastTick to simulate time progression
 		s.ticker.lastTick = s.ticker.lastTick.Add(s.ticker.interval)
 
@@ -86,6 +94,32 @@ func (s *Session) Run(maxTicks int) error {
 		s.world = rules.Step(s.world, input, s.dt, s.G, s.aMax, s.pickupRadius)
 
 		ticksProcessed++
+
+		// Measure tick duration and record to metrics
+		tickDuration := time.Since(tickStart)
+		tickDurationSeconds := tickDuration.Seconds()
+		
+		// Record to Prometheus histogram (if metrics are initialized)
+		if histogram := observability.GetTickDurationHistogram(); histogram != nil {
+			histogram.Observe(tickDurationSeconds)
+		}
+
+		// Log slow ticks (>10ms threshold)
+		const thresholdSeconds = 0.01 // 10ms
+		if tickDurationSeconds > thresholdSeconds {
+			// Check if logger is enabled (zero logger will return false)
+			if s.logger.Enabled() {
+				tickNumber := s.world.Tick
+				durationMs := tickDurationSeconds * 1000.0
+				thresholdMs := thresholdSeconds * 1000.0
+				s.logger.WithValues(
+					"component", "session",
+					"tick", tickNumber,
+					"duration_ms", durationMs,
+					"threshold_ms", thresholdMs,
+				).Info("Tick execution exceeded threshold")
+			}
+		}
 
 		// If world is done, stop processing
 		if s.world.Done {
@@ -109,4 +143,10 @@ func (s *Session) IsRunning() bool {
 // Stop stops the session (sets running to false).
 func (s *Session) Stop() {
 	s.running = false
+}
+
+// SetLogger sets the logger for this session. This is optional and can be nil.
+// When set, the logger will be used for structured logging of tick performance.
+func (s *Session) SetLogger(logger logr.Logger) {
+	s.logger = logger
 }

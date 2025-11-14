@@ -40,7 +40,9 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	// Create session handler with real clock and initial world
 	clock := session.NewRealClock()
 	initialWorld := NewInitialWorld()
-	sessionHandler := NewSessionHandler(wsConn, clock, initialWorld)
+	// Create session logger with connection context
+	sessionLogger := connLogger.WithValues("component", "session")
+	sessionHandler := NewSessionHandler(wsConn, clock, initialWorld, sessionLogger)
 
 	connLogger.Info("WebSocket connection established", "message_type", "connect")
 

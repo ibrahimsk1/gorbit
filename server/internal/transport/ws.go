@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/gorbit/orbitalrush/internal/proto"
 	"github.com/gorbit/orbitalrush/internal/session"
 	"github.com/gorbit/orbitalrush/internal/sim/entities"
@@ -266,8 +267,13 @@ type SessionHandler struct {
 }
 
 // NewSessionHandler creates a new SessionHandler with a new session.
-func NewSessionHandler(conn *Connection, clock session.Clock, initialWorld entities.World) *SessionHandler {
+// The logger parameter is optional. If provided and enabled, it will be injected into the session for tick time logging.
+func NewSessionHandler(conn *Connection, clock session.Clock, initialWorld entities.World, logger logr.Logger) *SessionHandler {
 	sess := session.NewSession(clock, initialWorld, 100) // maxQueueSize = 100
+	// Set logger if it's enabled (zero logger will return false)
+	if logger.Enabled() {
+		sess.SetLogger(logger)
+	}
 	snapshotInterval := 100 * time.Millisecond // 10 Hz (100ms = 10 snapshots per second)
 	
 	return &SessionHandler{

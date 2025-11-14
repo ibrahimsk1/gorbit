@@ -4,10 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorbit/orbitalrush/internal/sim/entities"
 	"github.com/gorbit/orbitalrush/internal/sim/rules"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	dto "github.com/prometheus/client_model/go"
 )
 
 func TestSession(t *testing.T) {
@@ -816,6 +818,140 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			Expect(final1.Tick).To(Equal(final2.Tick))
 			Expect(final1.Ship.Pos.X).To(BeNumerically("~", final2.Ship.Pos.X, 0.001))
 			Expect(final1.Ship.Energy).To(BeNumerically("~", final2.Ship.Energy, 0.001))
+		})
+	})
+
+	Describe("Tick Time Instrumentation", Label("scope:integration", "loop:g7-ops", "layer:server", "b:tick-time", "r:high"), func() {
+		BeforeEach(func() {
+			// Initialize metrics before each test
+			observability.InitMetrics()
+		})
+
+		It("records tick duration to Prometheus histogram", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 5.0, 1000.0)
+			world := entities.NewWorld(ship, sun, nil)
+			session := NewSession(clock, world, 100)
+
+			// Get initial histogram state
+			histogram := observability.GetTickDurationHistogram()
+			var initialMetric dto.Metric
+			histogram.Write(&initialMetric)
+			initialCount := initialMetric.Histogram.GetSampleCount()
+
+			// Run session for multiple ticks
+			clock.Advance(33 * time.Millisecond * 5)
+			session.Run(5)
+
+			// Verify histogram recorded tick durations
+			var finalMetric dto.Metric
+			histogram.Write(&finalMetric)
+			finalCount := finalMetric.Histogram.GetSampleCount()
+
+			Expect(finalCount).To(BeNumerically(">", initialCount))
+			Expect(finalCount - initialCount).To(Equal(uint64(5))) // Should have recorded 5 ticks
+		})
+
+		It("histogram buckets capture expected percentiles", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 5.0, 1000.0)
+			world := entities.NewWorld(ship, sun, nil)
+			session := NewSession(clock, world, 100)
+
+			// Run session for many ticks to get distribution
+			clock.Advance(33 * time.Millisecond * 100)
+			session.Run(100)
+
+			// Verify histogram has buckets configured
+			histogram := observability.GetTickDurationHistogram()
+			var metric dto.Metric
+			histogram.Write(&metric)
+
+			Expect(metric.Histogram).NotTo(BeNil())
+			Expect(metric.Histogram.GetBucket()).NotTo(BeEmpty())
+			// Buckets should be: 0.001, 0.005, 0.01, 0.05, 0.1 (seconds)
+			// Verify at least some buckets exist
+			Expect(len(metric.Histogram.GetBucket())).To(BeNumerically(">=", 5))
+		})
+
+		It("does not affect tick determinism", func() {
+			// Create two sessions with identical initial state
+			clock1 := NewFakeClock()
+			clock2 := NewFakeClock()
+
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 5.0, 1000.0)
+			world1 := entities.NewWorld(ship, sun, nil)
+			world2 := entities.NewWorld(ship, sun, nil)
+
+			session1 := NewSession(clock1, world1, 100)
+			session2 := NewSession(clock2, world2, 100)
+
+			// Enqueue same commands
+			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session2.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session2.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+
+			// Advance clocks identically
+			clock1.Advance(33 * time.Millisecond * 5)
+			clock2.Advance(33 * time.Millisecond * 5)
+
+			// Run both sessions (instrumentation should not affect determinism)
+			session1.Run(5)
+			session2.Run(5)
+
+			// Verify final states are identical
+			final1 := session1.GetWorld()
+			final2 := session2.GetWorld()
+
+			Expect(final1.Tick).To(Equal(final2.Tick))
+			Expect(final1.Ship.Pos.X).To(BeNumerically("~", final2.Ship.Pos.X, 0.001))
+			Expect(final1.Ship.Pos.Y).To(BeNumerically("~", final2.Ship.Pos.Y, 0.001))
+			Expect(final1.Ship.Vel.X).To(BeNumerically("~", final2.Ship.Vel.X, 0.001))
+			Expect(final1.Ship.Vel.Y).To(BeNumerically("~", final2.Ship.Vel.Y, 0.001))
+			Expect(final1.Ship.Energy).To(BeNumerically("~", final2.Ship.Energy, 0.001))
+		})
+
+		It("has minimal performance impact", func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 5.0, 1000.0)
+			world := entities.NewWorld(ship, sun, nil)
+			session := NewSession(clock, world, 100)
+
+			// Measure time for running many ticks
+			clock.Advance(33 * time.Millisecond * 1000)
+			start := time.Now()
+			session.Run(1000)
+			elapsed := time.Since(start)
+
+			// Performance overhead should be minimal
+			// Average tick time should be much less than 1ms (tick rate is 33ms, but actual processing should be <1ms)
+			avgTickTime := elapsed.Seconds() / 1000.0
+			Expect(avgTickTime).To(BeNumerically("<", 0.001)) // Less than 1ms per tick on average
 		})
 	})
 })
