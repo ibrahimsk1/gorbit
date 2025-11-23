@@ -26,7 +26,7 @@
 | cu/wraparound-physics | Add wraparound function to physics package | g2-physics | 3 | `server/internal/sim/physics/wraparound.go`, `server/internal/sim/physics/wraparound_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:wraparound r:medium` | DONE | Evidence: [implementation_plan.md](cu_wraparound-physics/wraparound-physics-implementation_plan.md) |
 | cu/physics-integration-multiplayer | Update physics integration tests for multiplayer | g2-physics | 4 | `server/internal/sim/physics/physics_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:physics-integration r:high double:fake` | DONE | Evidence: [implementation_plan.md](cu_physics-integration-multiplayer/physics-integration-multiplayer-implementation_plan.md) |
 | cu/gravity-tests-multiplanet | Update gravity tests for multiple planets | g2-physics | 5 | `server/internal/sim/physics/gravity_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:gravity-field r:high double:fake` | DONE | Evidence: [implementation_plan.md](cu_gravity-tests-multiplanet/gravity-tests-multiplanet-implementation_plan.md) |
-| cu/collision-tests-multiplanet | Update collision tests for multiple planets | g2-physics | 6 | `server/internal/sim/physics/collision_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:collision-detection r:medium double:fake` | BACKLOG |
+| cu/collision-tests-multiplanet | Update collision tests for multiple planets | g2-physics | 6 | `server/internal/sim/physics/collision_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:collision-detection r:medium double:fake` | DONE | Evidence: [implementation_plan.md](cu_collision-tests-multiplanet/collision-tests-multiplanet-implementation_plan.md) |
 | cu/physics-determinism | Verify physics determinism with multiplayer model | g2-physics | 7 | `server/internal/sim/physics/*_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:determinism r:high double:fake` | BACKLOG |
 
 ## Acceptance
@@ -37,7 +37,7 @@
 - [x] ApplyWraparound function wraps positions deterministically using modulo-based formula
 - [x] Physics integration tests use World with Ships[] and Planets[] arrays
 - [x] All gravity tests updated to test multiple planets scenarios
-- [ ] All collision tests updated to test multiple planets scenarios
+- [x] All collision tests updated to test multiple planets scenarios
 - [ ] Property tests verify determinism across multiple runs with identical inputs
 - [ ] All tests labeled `scope:unit loop:g2-physics layer:physics dep:none` pass in <1s per package
 - [ ] No IO dependencies in `server/internal/sim/physics/` package

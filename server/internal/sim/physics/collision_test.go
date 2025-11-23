@@ -14,7 +14,7 @@ func TestCollision(t *testing.T) {
 	RunSpecs(t, "Collision Suite")
 }
 
-var _ = Describe("Collision", Label("scope:unit", "loop:g1-physics", "layer:sim", "dep:none", "b:collision-detection", "r:medium", "double:fake"), func() {
+var _ = Describe("Collision", Label("scope:unit", "loop:g2-physics", "layer:physics", "dep:none", "b:collision-detection", "r:medium", "double:fake"), func() {
 	const epsilon = 1e-9
 	const pickupRadius = 1.2 // Pickup radius for pallets
 
