@@ -5,56 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Sun", Label("scope:unit", "loop:g1-physics", "layer:sim", "dep:none", "b:entity-types", "r:low"), func() {
-	Describe("Constructor", func() {
-		It("creates a new Sun with given values", func() {
-			pos := NewVec2(0.0, 0.0)
-			radius := float32(50.0)
-			mass := 1000.0
-
-			sun := NewSun(pos, radius, mass)
-
-			Expect(sun.Pos).To(Equal(pos))
-			Expect(sun.Radius).To(Equal(radius))
-			Expect(sun.Mass).To(Equal(mass))
-		})
-
-		It("creates a zero sun", func() {
-			sun := Sun{}
-
-			Expect(sun.Pos).To(Equal(Zero()))
-			Expect(sun.Radius).To(Equal(float32(0.0)))
-			Expect(sun.Mass).To(Equal(0.0))
-		})
-	})
-
-	Describe("Properties", func() {
-		It("maintains field values after creation", func() {
-			pos := NewVec2(100.0, 200.0)
-			radius := float32(25.5)
-			mass := 5000.0
-
-			sun := NewSun(pos, radius, mass)
-
-			Expect(sun.Pos.X).To(Equal(100.0))
-			Expect(sun.Pos.Y).To(Equal(200.0))
-			Expect(sun.Radius).To(Equal(float32(25.5)))
-			Expect(sun.Mass).To(Equal(5000.0))
-		})
-
-		It("allows positive radius", func() {
-			sun := NewSun(NewVec2(0, 0), 10.0, 100)
-			Expect(sun.Radius).To(Equal(float32(10.0)))
-		})
-
-		It("allows positive mass", func() {
-			sun := NewSun(NewVec2(0, 0), 10.0, 1000.0)
-			Expect(sun.Mass).To(Equal(1000.0))
-		})
-	})
-})
-
-var _ = Describe("Pallet", Label("scope:unit", "loop:g1-physics", "layer:sim", "dep:none", "b:entity-types", "r:low"), func() {
+var _ = Describe("Pallet", Label("scope:unit", "loop:g1-entities", "layer:entities", "dep:none", "b:entity-types", "r:low"), func() {
 	Describe("Constructor", func() {
 		It("creates a new Pallet with given values", func() {
 			id := uint32(1)
