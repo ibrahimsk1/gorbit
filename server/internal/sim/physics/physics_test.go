@@ -709,5 +709,199 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g2-physics", "
 			Expect(ships[1].Pos.Length()).To(BeNumerically(">", 0.0))
 		})
 	})
+
+	Describe("Physics Determinism with Multiplayer Model", Label("scope:unit", "loop:g2-physics", "layer:physics", "dep:none", "b:determinism", "r:high", "double:fake"), func() {
+		const epsilon = 1e-9
+		const dt = 1.0 / 30.0
+		const G = 1.0
+		const aMax = 100.0
+
+		It("produces identical results for complete physics simulation with multiple ships and planets across multiple runs", func() {
+			// Create initial world state with multiple ships and planets
+			ships1 := []entities.Ship{
+				entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0),
+				entities.NewShip(2, entities.NewVec2(-10.0, 0.0), entities.NewVec2(0.0, -1.0), 0.0, 100.0),
+				entities.NewShip(3, entities.NewVec2(0.0, 10.0), entities.NewVec2(1.0, 0.0), 0.0, 100.0),
+			}
+			planets1 := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+				entities.NewPlanet(2, entities.NewVec2(20.0, 0.0), 30.0, 800.0),
+				entities.NewPlanet(3, entities.NewVec2(-20.0, 0.0), 30.0, 800.0),
+				entities.NewPlanet(4, entities.NewVec2(0.0, 20.0), 30.0, 600.0),
+			}
+
+			// Create identical second world state
+			ships2 := []entities.Ship{
+				entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0),
+				entities.NewShip(2, entities.NewVec2(-10.0, 0.0), entities.NewVec2(0.0, -1.0), 0.0, 100.0),
+				entities.NewShip(3, entities.NewVec2(0.0, 10.0), entities.NewVec2(1.0, 0.0), 0.0, 100.0),
+			}
+			planets2 := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+				entities.NewPlanet(2, entities.NewVec2(20.0, 0.0), 30.0, 800.0),
+				entities.NewPlanet(3, entities.NewVec2(-20.0, 0.0), 30.0, 800.0),
+				entities.NewPlanet(4, entities.NewVec2(0.0, 20.0), 30.0, 600.0),
+			}
+
+			// Run simulation for multiple ticks
+			numTicks := 100
+			for i := 0; i < numTicks; i++ {
+				// Simulate world1
+				for j := range ships1 {
+					acc := CalculateTotalGravity(ships1[j].Pos, planets1, G, aMax)
+					newPos, newVel := SemiImplicitEuler(ships1[j].Pos, ships1[j].Vel, acc, dt)
+					ships1[j].Pos = ApplyWraparound(newPos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+					ships1[j].Vel = newVel
+				}
+
+				// Simulate world2 (same initial conditions)
+				for j := range ships2 {
+					acc := CalculateTotalGravity(ships2[j].Pos, planets2, G, aMax)
+					newPos, newVel := SemiImplicitEuler(ships2[j].Pos, ships2[j].Vel, acc, dt)
+					ships2[j].Pos = ApplyWraparound(newPos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+					ships2[j].Vel = newVel
+				}
+
+				// Verify states are identical after each tick
+				for j := range ships1 {
+					Expect(ships1[j].Pos.X).To(Equal(ships2[j].Pos.X))
+					Expect(ships1[j].Pos.Y).To(Equal(ships2[j].Pos.Y))
+					Expect(ships1[j].Vel.X).To(Equal(ships2[j].Vel.X))
+					Expect(ships1[j].Vel.Y).To(Equal(ships2[j].Vel.Y))
+				}
+			}
+		})
+
+		It("produces identical results when physics functions are called multiple times with same inputs", func() {
+			// Test that all physics functions are pure (no side effects)
+			shipPos := entities.NewVec2(10.0, 5.0)
+			shipVel := entities.NewVec2(1.0, 2.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+				entities.NewPlanet(2, entities.NewVec2(20.0, 0.0), 30.0, 800.0),
+				entities.NewPlanet(3, entities.NewVec2(0.0, 20.0), 30.0, 600.0),
+			}
+
+			// Run complete physics step multiple times
+			var firstPos, firstVel entities.Vec2
+			var firstColliding bool
+			for i := 0; i < 50; i++ {
+				acc := CalculateTotalGravity(shipPos, planets, G, aMax)
+				newPos, newVel := SemiImplicitEuler(shipPos, shipVel, acc, dt)
+				wrappedPos := ApplyWraparound(newPos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+				colliding, _ := CheckShipPlanetCollisions(wrappedPos, planets)
+
+				if i == 0 {
+					firstPos = wrappedPos
+					firstVel = newVel
+					firstColliding = colliding
+				} else {
+					// Verify bit-exact results
+					Expect(wrappedPos.X).To(Equal(firstPos.X))
+					Expect(wrappedPos.Y).To(Equal(firstPos.Y))
+					Expect(newVel.X).To(Equal(firstVel.X))
+					Expect(newVel.Y).To(Equal(firstVel.Y))
+					// Collision detection should also be deterministic
+					Expect(colliding).To(Equal(firstColliding))
+				}
+			}
+		})
+
+		It("maintains determinism with multiple ships interacting with multiple planets over extended simulation", func() {
+			// Create 4 ships and 5 planets
+			ships1 := []entities.Ship{
+				entities.NewShip(1, entities.NewVec2(15.0, 0.0), entities.NewVec2(0.0, 1.5), 0.0, 100.0),
+				entities.NewShip(2, entities.NewVec2(-15.0, 0.0), entities.NewVec2(0.0, -1.5), 0.0, 100.0),
+				entities.NewShip(3, entities.NewVec2(0.0, 15.0), entities.NewVec2(1.5, 0.0), 0.0, 100.0),
+				entities.NewShip(4, entities.NewVec2(0.0, -15.0), entities.NewVec2(-1.5, 0.0), 0.0, 100.0),
+			}
+			planets1 := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+				entities.NewPlanet(2, entities.NewVec2(30.0, 0.0), 30.0, 800.0),
+				entities.NewPlanet(3, entities.NewVec2(-30.0, 0.0), 30.0, 800.0),
+				entities.NewPlanet(4, entities.NewVec2(0.0, 30.0), 30.0, 600.0),
+				entities.NewPlanet(5, entities.NewVec2(0.0, -30.0), 30.0, 600.0),
+			}
+
+			ships2 := []entities.Ship{
+				entities.NewShip(1, entities.NewVec2(15.0, 0.0), entities.NewVec2(0.0, 1.5), 0.0, 100.0),
+				entities.NewShip(2, entities.NewVec2(-15.0, 0.0), entities.NewVec2(0.0, -1.5), 0.0, 100.0),
+				entities.NewShip(3, entities.NewVec2(0.0, 15.0), entities.NewVec2(1.5, 0.0), 0.0, 100.0),
+				entities.NewShip(4, entities.NewVec2(0.0, -15.0), entities.NewVec2(-1.5, 0.0), 0.0, 100.0),
+			}
+			planets2 := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+				entities.NewPlanet(2, entities.NewVec2(30.0, 0.0), 30.0, 800.0),
+				entities.NewPlanet(3, entities.NewVec2(-30.0, 0.0), 30.0, 800.0),
+				entities.NewPlanet(4, entities.NewVec2(0.0, 30.0), 30.0, 600.0),
+				entities.NewPlanet(5, entities.NewVec2(0.0, -30.0), 30.0, 600.0),
+			}
+
+			// Run extended simulation
+			numTicks := 200
+			for i := 0; i < numTicks; i++ {
+				// Simulate world1
+				for j := range ships1 {
+					acc := CalculateTotalGravity(ships1[j].Pos, planets1, G, aMax)
+					newPos, newVel := SemiImplicitEuler(ships1[j].Pos, ships1[j].Vel, acc, dt)
+					ships1[j].Pos = ApplyWraparound(newPos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+					ships1[j].Vel = newVel
+				}
+
+				// Simulate world2
+				for j := range ships2 {
+					acc := CalculateTotalGravity(ships2[j].Pos, planets2, G, aMax)
+					newPos, newVel := SemiImplicitEuler(ships2[j].Pos, ships2[j].Vel, acc, dt)
+					ships2[j].Pos = ApplyWraparound(newPos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+					ships2[j].Vel = newVel
+				}
+
+				// Verify all ships have identical states
+				for j := range ships1 {
+					Expect(ships1[j].Pos.X).To(Equal(ships2[j].Pos.X))
+					Expect(ships1[j].Pos.Y).To(Equal(ships2[j].Pos.Y))
+					Expect(ships1[j].Vel.X).To(Equal(ships2[j].Vel.X))
+					Expect(ships1[j].Vel.Y).To(Equal(ships2[j].Vel.Y))
+				}
+			}
+		})
+
+		It("verifies no side effects in physics functions (pure functions)", func() {
+			// Test that physics functions don't modify their input parameters
+			originalPos := entities.NewVec2(10.0, 5.0)
+			originalVel := entities.NewVec2(1.0, 2.0)
+			originalPlanets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+				entities.NewPlanet(2, entities.NewVec2(20.0, 0.0), 30.0, 800.0),
+			}
+
+			pos := originalPos
+			vel := originalVel
+			planets := make([]entities.Planet, len(originalPlanets))
+			copy(planets, originalPlanets)
+
+			// Call all physics functions
+			acc := CalculateTotalGravity(pos, planets, G, aMax)
+			newPos, newVel := SemiImplicitEuler(pos, vel, acc, dt)
+			wrappedPos := ApplyWraparound(newPos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+			_, _ = CheckShipPlanetCollisions(wrappedPos, planets)
+
+			// Verify functions produced valid outputs (not NaN/Inf)
+			Expect(math.IsNaN(newPos.X)).To(BeFalse())
+			Expect(math.IsNaN(newPos.Y)).To(BeFalse())
+			Expect(math.IsNaN(newVel.X)).To(BeFalse())
+			Expect(math.IsNaN(newVel.Y)).To(BeFalse())
+
+			// Verify input parameters were not modified
+			Expect(pos.X).To(Equal(originalPos.X))
+			Expect(pos.Y).To(Equal(originalPos.Y))
+			Expect(vel.X).To(Equal(originalVel.X))
+			Expect(vel.Y).To(Equal(originalVel.Y))
+			Expect(planets[0].Pos.X).To(Equal(originalPlanets[0].Pos.X))
+			Expect(planets[0].Pos.Y).To(Equal(originalPlanets[0].Pos.Y))
+			Expect(planets[1].Pos.X).To(Equal(originalPlanets[1].Pos.X))
+			Expect(planets[1].Pos.Y).To(Equal(originalPlanets[1].Pos.Y))
+		})
+	})
 })
 

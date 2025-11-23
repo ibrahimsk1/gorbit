@@ -14,7 +14,7 @@ func TestIntegrator(t *testing.T) {
 	RunSpecs(t, "Integrator Suite")
 }
 
-var _ = Describe("Integrator", Label("scope:unit", "loop:g1-physics", "layer:sim", "dep:none", "b:integration", "r:high", "double:fake"), func() {
+var _ = Describe("Integrator", Label("scope:unit", "loop:g2-physics", "layer:physics", "dep:none", "b:integration", "r:high", "double:fake"), func() {
 	const epsilon = 1e-9
 	const dt = 1.0 / 30.0 // 30Hz tick rate
 

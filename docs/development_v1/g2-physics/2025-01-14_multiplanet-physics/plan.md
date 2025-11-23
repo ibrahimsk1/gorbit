@@ -27,7 +27,7 @@
 | cu/physics-integration-multiplayer | Update physics integration tests for multiplayer | g2-physics | 4 | `server/internal/sim/physics/physics_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:physics-integration r:high double:fake` | DONE | Evidence: [implementation_plan.md](cu_physics-integration-multiplayer/physics-integration-multiplayer-implementation_plan.md) |
 | cu/gravity-tests-multiplanet | Update gravity tests for multiple planets | g2-physics | 5 | `server/internal/sim/physics/gravity_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:gravity-field r:high double:fake` | DONE | Evidence: [implementation_plan.md](cu_gravity-tests-multiplanet/gravity-tests-multiplanet-implementation_plan.md) |
 | cu/collision-tests-multiplanet | Update collision tests for multiple planets | g2-physics | 6 | `server/internal/sim/physics/collision_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:collision-detection r:medium double:fake` | DONE | Evidence: [implementation_plan.md](cu_collision-tests-multiplanet/collision-tests-multiplanet-implementation_plan.md) |
-| cu/physics-determinism | Verify physics determinism with multiplayer model | g2-physics | 7 | `server/internal/sim/physics/*_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:determinism r:high double:fake` | BACKLOG |
+| cu/physics-determinism | Verify physics determinism with multiplayer model | g2-physics | 7 | `server/internal/sim/physics/*_test.go` | `scope:unit loop:g2-physics layer:physics dep:none b:determinism r:high double:fake` | DONE | Evidence: [implementation_plan.md](cu_physics-determinism/physics-determinism-implementation_plan.md) |
 
 ## Acceptance
 - [x] CalculateTotalGravity function sums gravity from all planets using superposition principle
@@ -38,9 +38,9 @@
 - [x] Physics integration tests use World with Ships[] and Planets[] arrays
 - [x] All gravity tests updated to test multiple planets scenarios
 - [x] All collision tests updated to test multiple planets scenarios
-- [ ] Property tests verify determinism across multiple runs with identical inputs
+- [x] Property tests verify determinism across multiple runs with identical inputs
 - [ ] All tests labeled `scope:unit loop:g2-physics layer:physics dep:none` pass in <1s per package
 - [ ] No IO dependencies in `server/internal/sim/physics/` package
-- [ ] Physics calculations are pure functions with no side effects or non-deterministic behavior
+- [x] Physics calculations are pure functions with no side effects or non-deterministic behavior
 - [ ] All CU proofs are green before advancing to G3-rules loop
 
