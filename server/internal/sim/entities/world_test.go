@@ -315,5 +315,80 @@ var _ = Describe("World", Label("scope:unit", "loop:g1-entities", "layer:entitie
 			Expect(planets2).To(HaveLen(4))
 		})
 	})
+
+	Describe("Wraparound", Label("scope:unit", "loop:g1-entities", "layer:entities", "dep:none", "b:world-bounds", "r:medium"), func() {
+		It("wraps position from right edge to left edge", func() {
+			// Position beyond right edge (X > WORLD_WIDTH/2)
+			pos := NewVec2(1100.0, 0.0)
+			wrapped := WrapPosition(pos, WORLD_WIDTH, WORLD_HEIGHT)
+			Expect(wrapped.X).To(BeNumerically("~", -900.0, 0.01))
+			Expect(wrapped.Y).To(Equal(0.0))
+		})
+
+		It("wraps position from left edge to right edge", func() {
+			// Position beyond left edge (X < -WORLD_WIDTH/2)
+			pos := NewVec2(-1100.0, 0.0)
+			wrapped := WrapPosition(pos, WORLD_WIDTH, WORLD_HEIGHT)
+			Expect(wrapped.X).To(BeNumerically("~", 900.0, 0.01))
+			Expect(wrapped.Y).To(Equal(0.0))
+		})
+
+		It("wraps position from top edge to bottom edge", func() {
+			// Position beyond top edge (Y > WORLD_HEIGHT/2)
+			pos := NewVec2(0.0, 1100.0)
+			wrapped := WrapPosition(pos, WORLD_WIDTH, WORLD_HEIGHT)
+			Expect(wrapped.X).To(Equal(0.0))
+			Expect(wrapped.Y).To(BeNumerically("~", -900.0, 0.01))
+		})
+
+		It("wraps position from bottom edge to top edge", func() {
+			// Position beyond bottom edge (Y < -WORLD_HEIGHT/2)
+			pos := NewVec2(0.0, -1100.0)
+			wrapped := WrapPosition(pos, WORLD_WIDTH, WORLD_HEIGHT)
+			Expect(wrapped.X).To(Equal(0.0))
+			Expect(wrapped.Y).To(BeNumerically("~", 900.0, 0.01))
+		})
+
+		It("wraps position from corner (both X and Y)", func() {
+			// Position beyond top-right corner
+			pos := NewVec2(1100.0, 1100.0)
+			wrapped := WrapPosition(pos, WORLD_WIDTH, WORLD_HEIGHT)
+			Expect(wrapped.X).To(BeNumerically("~", -900.0, 0.01))
+			Expect(wrapped.Y).To(BeNumerically("~", -900.0, 0.01))
+		})
+
+		It("does not wrap positions within bounds", func() {
+			// Position within bounds
+			pos := NewVec2(500.0, -300.0)
+			wrapped := WrapPosition(pos, WORLD_WIDTH, WORLD_HEIGHT)
+			Expect(wrapped.X).To(Equal(500.0))
+			Expect(wrapped.Y).To(Equal(-300.0))
+		})
+
+		It("handles positions exactly at boundaries", func() {
+			// Position exactly at right boundary
+			pos := NewVec2(1000.0, 0.0)
+			wrapped := WrapPosition(pos, WORLD_WIDTH, WORLD_HEIGHT)
+			// At boundary, should wrap to -1000.0
+			Expect(wrapped.X).To(BeNumerically("~", -1000.0, 0.01))
+			Expect(wrapped.Y).To(Equal(0.0))
+
+			// Position exactly at left boundary
+			pos = NewVec2(-1000.0, 0.0)
+			wrapped = WrapPosition(pos, WORLD_WIDTH, WORLD_HEIGHT)
+			// At boundary, should wrap to 1000.0
+			Expect(wrapped.X).To(BeNumerically("~", 1000.0, 0.01))
+			Expect(wrapped.Y).To(Equal(0.0))
+		})
+
+		It("handles multiple wraps for positions far outside bounds", func() {
+			// Position far beyond right edge (multiple world widths)
+			pos := NewVec2(3500.0, 0.0)
+			wrapped := WrapPosition(pos, WORLD_WIDTH, WORLD_HEIGHT)
+			// Should wrap: 3500 - 2000 = 1500, then 1500 - 2000 = -500
+			Expect(wrapped.X).To(BeNumerically("~", -500.0, 0.01))
+			Expect(wrapped.Y).To(Equal(0.0))
+		})
+	})
 })
 

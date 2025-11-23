@@ -159,3 +159,54 @@ func GeneratePlanets(count int, worldWidth, worldHeight float64) []Planet {
 
 	return planets
 }
+
+// WrapPosition wraps a position to stay within world bounds.
+// When a position exits one side of the world, it re-enters from the opposite side.
+// World bounds: [-worldWidth/2, worldWidth/2] × [-worldHeight/2, worldHeight/2]
+// Parameters:
+//   - pos: Position to wrap
+//   - worldWidth: World width in meters (typically WORLD_WIDTH)
+//   - worldHeight: World height in meters (typically WORLD_HEIGHT)
+//
+// Returns a wrapped position within world bounds.
+func WrapPosition(pos Vec2, worldWidth, worldHeight float64) Vec2 {
+	halfWidth := worldWidth / 2.0
+	halfHeight := worldHeight / 2.0
+
+	wrappedX := pos.X
+	wrappedY := pos.Y
+
+	// Wrap X coordinate
+	// Handle boundary case first (exactly at boundary wraps once)
+	if wrappedX == halfWidth {
+		wrappedX = -halfWidth
+	} else if wrappedX == -halfWidth {
+		wrappedX = halfWidth
+	} else {
+		// For values beyond boundaries, wrap multiple times if needed
+		for wrappedX > halfWidth {
+			wrappedX -= worldWidth
+		}
+		for wrappedX < -halfWidth {
+			wrappedX += worldWidth
+		}
+	}
+
+	// Wrap Y coordinate
+	// Handle boundary case first (exactly at boundary wraps once)
+	if wrappedY == halfHeight {
+		wrappedY = -halfHeight
+	} else if wrappedY == -halfHeight {
+		wrappedY = halfHeight
+	} else {
+		// For values beyond boundaries, wrap multiple times if needed
+		for wrappedY > halfHeight {
+			wrappedY -= worldHeight
+		}
+		for wrappedY < -halfHeight {
+			wrappedY += worldHeight
+		}
+	}
+
+	return NewVec2(wrappedX, wrappedY)
+}
