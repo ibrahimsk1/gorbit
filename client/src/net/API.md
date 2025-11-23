@@ -28,12 +28,35 @@ This document provides detailed API reference for the network package.
 ### Interface
 
 ```typescript
+export interface PlayerInfo {
+  id: number
+  name: string
+}
+
+export interface RoomState {
+  roomCode: string
+  players: PlayerInfo[]
+  state: 'lobby' | 'playing' | 'ended'
+  hostId: number
+}
+
 export class NetworkClient {
   constructor()
   async connect(url: string): Promise<void>
   disconnect(): void
+  // Room management
+  createRoom(): Promise<string>
+  joinRoom(roomCode: string): Promise<void>
+  leaveRoom(): void
+  startMatch(): void
+  // Game input
   sendInput(seq: number, thrust: number, turn: number): void
-  sendRestart(): void
+  // Event handlers
+  onRoomState(callback: (state: RoomState) => void): void
+  onPlayerJoined(callback: (player: PlayerInfo) => void): void
+  onPlayerLeft(callback: (playerId: number) => void): void
+  onMatchStarted(callback: () => void): void
+  onMatchEnded(callback: (winnerId?: number) => void): void
   onSnapshot(callback: (snapshot: SnapshotMessage) => void): void
   onConnect(callback: () => void): void
   onDisconnect(callback: () => void): void
@@ -99,22 +122,120 @@ client.sendInput(1, 0.5, 0.0)
 
 ---
 
-#### `sendRestart(): void`
+#### `createRoom(): Promise<string>`
 
-Sends a restart command to the server.
+Creates a new room and returns the room code.
+
+**Returns:** Promise that resolves with room code (6-character alphanumeric)
+
+**Throws:** Error if not connected or creation fails
+
+**Example:**
+```typescript
+const roomCode = await client.createRoom()
+```
+
+---
+
+#### `joinRoom(roomCode: string): Promise<void>`
+
+Joins an existing room by room code.
+
+**Parameters:**
+- `roomCode: string` - 6-character alphanumeric room code
+
+**Returns:** Promise that resolves when joined
+
+**Throws:** Error if not connected, room not found, or room full
+
+**Example:**
+```typescript
+await client.joinRoom('ABC123')
+```
+
+---
+
+#### `leaveRoom(): void`
+
+Leaves the current room.
 
 **Throws:** Error if not connected
 
 **Example:**
 ```typescript
-client.sendRestart()
+client.leaveRoom()
 ```
+
+---
+
+#### `startMatch(): void`
+
+Starts the match (host only, requires min 2 players).
+
+**Throws:** Error if not connected, not host, or insufficient players
+
+**Example:**
+```typescript
+client.startMatch()
+```
+
+---
+
+#### `onRoomState(callback: (state: RoomState) => void): void`
+
+Registers callback for room state updates.
+
+**Parameters:**
+- `callback: (state: RoomState) => void` - Function to call when room state received
+
+**Example:**
+```typescript
+client.onRoomState((state) => {
+  console.log('Room state:', state.roomCode, state.players.length)
+})
+```
+
+---
+
+#### `onPlayerJoined(callback: (player: PlayerInfo) => void): void`
+
+Registers callback for player joined events.
+
+**Parameters:**
+- `callback: (player: PlayerInfo) => void` - Function to call when player joins
+
+---
+
+#### `onPlayerLeft(callback: (playerId: number) => void): void`
+
+Registers callback for player left events.
+
+**Parameters:**
+- `callback: (playerId: number) => void` - Function to call when player leaves
+
+---
+
+#### `onMatchStarted(callback: () => void): void`
+
+Registers callback for match started events.
+
+**Parameters:**
+- `callback: () => void` - Function to call when match starts
+
+---
+
+#### `onMatchEnded(callback: (winnerId?: number) => void): void`
+
+Registers callback for match ended events.
+
+**Parameters:**
+- `callback: (winnerId?: number) => void` - Function to call when match ends
 
 ---
 
 #### `onSnapshot(callback: (snapshot: SnapshotMessage) => void): void`
 
-Registers callback for snapshot messages from server.
+Registers callback for snapshot messages from server (in-game).
 
 **Parameters:**
 - `callback: (snapshot: SnapshotMessage) => void` - Function to call when snapshot received
@@ -164,8 +285,10 @@ Returns true if connected to server.
 ### Semantics
 
 - NetworkClient wraps WebSocketClient for higher-level API
-- Handles message routing (only processes snapshot messages)
-- Converts server 'sun' field to client 'planets' array for extensibility
+- Handles message routing (room management, game snapshots)
+- Room management messages: createRoom, joinRoom, leaveRoom, startMatch
+- Room state updates: roomState, playerJoined, playerLeft, matchStarted, matchEnded
+- Game snapshots: snapshot messages (in-game only)
 - Event handlers are arrays (multiple handlers supported)
 - Connection state managed internally
 
@@ -606,12 +729,20 @@ export type Message = InputMessage | RestartMessage | SnapshotMessage
 
 ## Version Notes
 
-This API describes v0 network layer. Key features:
+This API describes v1 network layer. Key features:
 - WebSocket client wrapper
-- Protocol types matching server v0
+- Room management (createRoom, joinRoom, leaveRoom, startMatch)
+- Room state event handlers (roomState, playerJoined, playerLeft, matchStarted, matchEnded)
+- Protocol types matching server v1 (ships array, planets array, worldBounds, myShipId)
 - Command history for prediction/reconciliation
 - Type guards and validation
 - Event-based message handling
+
+**Changes from v0**:
+- Added room management methods (createRoom, joinRoom, leaveRoom, startMatch)
+- Added room state event handlers
+- Removed sendRestart() method (not in v1 scope)
+- Snapshot format updated to match server v1 (ships[], planets[], worldBounds, myShipId)
 
 Future extensions may include:
 - Binary message encoding

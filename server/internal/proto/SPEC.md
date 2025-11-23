@@ -36,9 +36,115 @@ This document describes the network protocol contract for Orbital Rush. It defin
 
 ### Client → Server Messages
 
+#### Room Management Messages
+
+##### CreateRoomMessage
+
+**Purpose**: Client request to create a new room.
+
+**JSON Schema**:
+```json
+{
+  "t": "createRoom"
+}
+```
+
+**Fields**:
+- `t` (string, required): Message type, must be `"createRoom"`
+
+**Semantics**:
+- Server creates new room, generates unique room code
+- Returns `RoomCreatedMessage` with room code
+
+**Validation Rules**:
+- `Type` must equal `"createRoom"`
+
+**Validation Function**: `ValidateCreateRoomMessage(msg *CreateRoomMessage) error`
+
+---
+
+##### JoinRoomMessage
+
+**Purpose**: Client request to join an existing room by code.
+
+**JSON Schema**:
+```json
+{
+  "t": "joinRoom",
+  "roomCode": <string>
+}
+```
+
+**Fields**:
+- `t` (string, required): Message type, must be `"joinRoom"`
+- `roomCode` (string, required): 6-character alphanumeric room code
+
+**Semantics**:
+- Server adds player to room if code is valid and room has capacity
+- Returns `RoomStateMessage` or error message
+
+**Validation Rules**:
+- `Type` must equal `"joinRoom"`
+- `RoomCode` must be exactly 6 characters, alphanumeric (A-Z, 0-9)
+
+**Validation Function**: `ValidateJoinRoomMessage(msg *JoinRoomMessage) error`
+
+---
+
+##### LeaveRoomMessage
+
+**Purpose**: Client request to leave current room.
+
+**JSON Schema**:
+```json
+{
+  "t": "leaveRoom"
+}
+```
+
+**Fields**:
+- `t` (string, required): Message type, must be `"leaveRoom"`
+
+**Semantics**:
+- Server removes player from room
+- Room is cleaned up if empty
+
+**Validation Rules**:
+- `Type` must equal `"leaveRoom"`
+
+**Validation Function**: `ValidateLeaveRoomMessage(msg *LeaveRoomMessage) error`
+
+---
+
+##### StartMatchMessage
+
+**Purpose**: Host request to start the match (host only).
+
+**JSON Schema**:
+```json
+{
+  "t": "startMatch"
+}
+```
+
+**Fields**:
+- `t` (string, required): Message type, must be `"startMatch"`
+
+**Semantics**:
+- Only room host can start match
+- Requires minimum 2 players in room
+- Server creates session and starts match
+
+**Validation Rules**:
+- `Type` must equal `"startMatch"`
+
+**Validation Function**: `ValidateStartMatchMessage(msg *StartMatchMessage) error`
+
+---
+
 #### InputMessage
 
-**Purpose**: Client input command for controlling the ship.
+**Purpose**: Client input command for controlling the ship (in-game).
 
 **JSON Schema**:
 ```json
@@ -59,7 +165,7 @@ This document describes the network protocol contract for Orbital Rush. It defin
 **Semantics**:
 - Sequence numbers are used for deduplication and ordering
 - Thrust and turn values are clamped to valid ranges by validation
-- Input is processed by rules layer to update ship state
+- Input is processed by rules layer to update ship state (ship identified by player ID from connection)
 
 **Validation Rules**:
 - `Type` must equal `"input"`
@@ -71,45 +177,144 @@ This document describes the network protocol contract for Orbital Rush. It defin
 
 ---
 
-#### RestartMessage
+### Server → Client Messages
 
-**Purpose**: Client request to restart the game.
+#### Room Management Messages
+
+##### RoomCreatedMessage
+
+**Purpose**: Server response to createRoom request.
 
 **JSON Schema**:
 ```json
 {
-  "t": "restart"
+  "t": "roomCreated",
+  "roomCode": <string>
 }
 ```
 
 **Fields**:
-- `t` (string, required): Message type, must be `"restart"`
+- `t` (string, required): Message type, must be `"roomCreated"`
+- `roomCode` (string, required): 6-character alphanumeric room code
 
-**Semantics**:
-- Resets the game world to initial state
-- Typically handled by session/orchestration layer
-
-**Validation Rules**:
-- `Type` must equal `"restart"`
-
-**Validation Function**: `ValidateRestartMessage(msg *RestartMessage) error`
+**Validation Function**: `ValidateRoomCreatedMessage(msg *RoomCreatedMessage) error`
 
 ---
 
-### Server → Client Messages
+##### RoomStateMessage
+
+**Purpose**: Server room state update (sent when room state changes or player joins/leaves).
+
+**JSON Schema**:
+```json
+{
+  "t": "roomState",
+  "roomCode": <string>,
+  "players": [<PlayerInfo>],
+  "state": <string>,
+  "hostId": <uint32>
+}
+```
+
+**Fields**:
+- `t` (string, required): Message type, must be `"roomState"`
+- `roomCode` (string, required): Room code
+- `players` (array of PlayerInfo, required): List of players in room
+- `state` (string, required): Room state ("lobby", "playing", "ended")
+- `hostId` (uint32, required): Host player ID
+
+**PlayerInfo Schema**:
+```json
+{
+  "id": <uint32>,
+  "name": <string>
+}
+```
+
+**Validation Function**: `ValidateRoomStateMessage(msg *RoomStateMessage) error`
+
+---
+
+##### PlayerJoinedMessage
+
+**Purpose**: Server notification when a player joins the room.
+
+**JSON Schema**:
+```json
+{
+  "t": "playerJoined",
+  "player": <PlayerInfo>
+}
+```
+
+**Validation Function**: `ValidatePlayerJoinedMessage(msg *PlayerJoinedMessage) error`
+
+---
+
+##### PlayerLeftMessage
+
+**Purpose**: Server notification when a player leaves the room.
+
+**JSON Schema**:
+```json
+{
+  "t": "playerLeft",
+  "playerId": <uint32>
+}
+```
+
+**Validation Function**: `ValidatePlayerLeftMessage(msg *PlayerLeftMessage) error`
+
+---
+
+##### MatchStartedMessage
+
+**Purpose**: Server notification when match starts.
+
+**JSON Schema**:
+```json
+{
+  "t": "matchStarted"
+}
+```
+
+**Validation Function**: `ValidateMatchStartedMessage(msg *MatchStartedMessage) error`
+
+---
+
+##### MatchEndedMessage
+
+**Purpose**: Server notification when match ends (optional).
+
+**JSON Schema**:
+```json
+{
+  "t": "matchEnded",
+  "winnerId": <uint32>
+}
+```
+
+**Fields**:
+- `winnerId` (uint32, optional): Winner player ID (if applicable)
+
+**Validation Function**: `ValidateMatchEndedMessage(msg *MatchEndedMessage) error`
+
+---
 
 #### SnapshotMessage
 
-**Purpose**: Server state snapshot containing the complete game state.
+**Purpose**: Server state snapshot containing the complete game state (in-game).
 
 **JSON Schema**:
 ```json
 {
   "t": "snapshot",
   "tick": <uint32>,
-  "ship": <ShipSnapshot>,
-  "sun": <SunSnapshot>,
+  "ships": [<ShipSnapshot>],
+  "planets": [<PlanetSnapshot>],
   "pallets": [<PalletSnapshot>],
+  "worldBounds": <WorldBounds>,
+  "myShipId": <uint32>,
   "done": <bool>,
   "win": <bool>
 }
@@ -118,23 +323,28 @@ This document describes the network protocol contract for Orbital Rush. It defin
 **Fields**:
 - `t` (string, required): Message type, must be `"snapshot"`
 - `tick` (uint32, required): Current simulation tick
-- `ship` (ShipSnapshot, required): Ship state
-- `sun` (SunSnapshot, required): Sun state
+- `ships` (array of ShipSnapshot, required): All ships in match (2–8 ships)
+- `planets` (array of PlanetSnapshot, required): All planets in match (3–5 planets)
 - `pallets` (array of PalletSnapshot, required): List of energy pallets
+- `worldBounds` (WorldBounds, required): World bounds (width, height)
+- `myShipId` (uint32, required): Player's ship ID (identifies which ship belongs to this player)
 - `done` (bool, required): Whether the game is finished
 - `win` (bool, required): Whether the player won (only valid if Done is true)
 
 **Semantics**:
 - Snapshot contains complete authoritative game state
-- Broadcast to all players at regular intervals (typically 10-15 Hz)
+- Broadcast to all players in room at regular intervals (typically 10-15 Hz)
 - Clients use snapshots for rendering and state synchronization
 - Tick number increments monotonically
+- `myShipId` tells client which ship in `ships` array belongs to them
 
 **Validation Rules**:
 - `Type` must equal `"snapshot"`
-- All `Ship` fields must be valid (see ShipSnapshot validation)
-- All `Sun` fields must be valid (see SunSnapshot validation)
+- All `Ships` must be valid (see ShipSnapshot validation)
+- All `Planets` must be valid (see PlanetSnapshot validation)
 - All `Pallets` must be valid (see PalletSnapshot validation)
+- `WorldBounds` must be valid (see WorldBounds validation)
+- `MyShipId` must be > 0
 
 **Validation Function**: `ValidateSnapshotMessage(msg *SnapshotMessage) error`
 
@@ -147,6 +357,7 @@ This document describes the network protocol contract for Orbital Rush. It defin
 **JSON Schema**:
 ```json
 {
+  "id": <uint32>,
   "pos": <Vec2Snapshot>,
   "vel": <Vec2Snapshot>,
   "rot": <float64>,
@@ -155,12 +366,14 @@ This document describes the network protocol contract for Orbital Rush. It defin
 ```
 
 **Fields**:
+- `id` (uint32, required): Ship identifier (player ID)
 - `pos` (Vec2Snapshot, required): Position
 - `vel` (Vec2Snapshot, required): Velocity
 - `rot` (float64, required): Rotation angle in radians
 - `energy` (float32, required): Current energy level
 
 **Validation Rules**:
+- `ID` must be > 0
 - `Pos` must be valid (see Vec2Snapshot validation)
 - `Vel` must be valid (see Vec2Snapshot validation)
 - `Energy` must be >= 0.0
@@ -169,27 +382,52 @@ This document describes the network protocol contract for Orbital Rush. It defin
 
 ---
 
-#### SunSnapshot
+#### PlanetSnapshot
 
 **JSON Schema**:
 ```json
 {
+  "id": <uint32>,
   "pos": <Vec2Snapshot>,
   "radius": <float32>
 }
 ```
 
 **Fields**:
+- `id` (uint32, required): Planet identifier
 - `pos` (Vec2Snapshot, required): Position
 - `radius` (float32, required): Radius
 
 **Validation Rules**:
+- `ID` must be > 0
 - `Pos` must be valid (see Vec2Snapshot validation)
 - `Radius` must be > 0.0
 
 **Note**: Mass is not included in snapshot as it is only used for simulation calculations.
 
-**Validation Function**: `ValidateSunSnapshot(sun *SunSnapshot) error`
+**Validation Function**: `ValidatePlanetSnapshot(planet *PlanetSnapshot) error`
+
+---
+
+#### WorldBounds
+
+**JSON Schema**:
+```json
+{
+  "width": <float64>,
+  "height": <float64>
+}
+```
+
+**Fields**:
+- `width` (float64, required): World width in meters (2000.0 m)
+- `height` (float64, required): World height in meters (2000.0 m)
+
+**Validation Rules**:
+- `Width` must be > 0.0
+- `Height` must be > 0.0
+
+**Validation Function**: `ValidateWorldBounds(bounds *WorldBounds) error`
 
 ---
 
@@ -250,13 +488,26 @@ This document describes the network protocol contract for Orbital Rush. It defin
 
 ### Validation Functions
 
+**Room Management Messages**:
+- `ValidateCreateRoomMessage(msg *CreateRoomMessage) error`
+- `ValidateJoinRoomMessage(msg *JoinRoomMessage) error`
+- `ValidateLeaveRoomMessage(msg *LeaveRoomMessage) error`
+- `ValidateStartMatchMessage(msg *StartMatchMessage) error`
+- `ValidateRoomCreatedMessage(msg *RoomCreatedMessage) error`
+- `ValidateRoomStateMessage(msg *RoomStateMessage) error`
+- `ValidatePlayerJoinedMessage(msg *PlayerJoinedMessage) error`
+- `ValidatePlayerLeftMessage(msg *PlayerLeftMessage) error`
+- `ValidateMatchStartedMessage(msg *MatchStartedMessage) error`
+- `ValidateMatchEndedMessage(msg *MatchEndedMessage) error`
+
+**Game Messages**:
 - `ValidateInputMessage(msg *InputMessage) error`
-- `ValidateRestartMessage(msg *RestartMessage) error`
 - `ValidateSnapshotMessage(msg *SnapshotMessage) error`
 - `ValidateShipSnapshot(ship *ShipSnapshot) error`
-- `ValidateSunSnapshot(sun *SunSnapshot) error`
+- `ValidatePlanetSnapshot(planet *PlanetSnapshot) error`
 - `ValidatePalletSnapshot(pallet *PalletSnapshot) error`
 - `ValidateVec2Snapshot(vec *Vec2Snapshot) error`
+- `ValidateWorldBounds(bounds *WorldBounds) error`
 
 ### Common Validation Rules
 
@@ -408,11 +659,21 @@ if err != nil {
 
 ## Notes
 
-This spec describes the current protocol. Key features:
+This spec describes the v1 protocol. Key features:
 - JSON messages over WebSocket
-- Input messages with sequence numbers
-- Snapshot messages with complete game state (ship, sun, pallets)
+- Room management messages (createRoom, joinRoom, leaveRoom, startMatch)
+- Room state updates (roomState, playerJoined, playerLeft, matchStarted, matchEnded)
+- Input messages with sequence numbers (in-game)
+- Snapshot messages with complete game state (ships array, planets array, pallets array, worldBounds, myShipId)
 - Protocol versioning with compatibility checking
+
+**Changes from v0**:
+- Added room management messages (createRoom, joinRoom, leaveRoom, startMatch)
+- Added room state messages (roomState, playerJoined, playerLeft, matchStarted, matchEnded)
+- Snapshot format changed: single `ship` → `ships[]` array, `sun` → `planets[]` array
+- Added `worldBounds` and `myShipId` fields to snapshot
+- Removed `restart` message (not in v1 scope)
+- ShipSnapshot and PlanetSnapshot now include `id` field
 
 Future extensions may include:
 - Delta snapshots (only changed entities)

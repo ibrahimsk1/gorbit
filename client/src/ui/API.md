@@ -6,15 +6,148 @@ This document provides detailed API reference for the UI package.
 
 ## Scope & Location
 
-**Scope**: User interface system (HUD, UI components).
+**Scope**: User interface system (main menu, room lobby, HUD, UI components).
 
 **Code location**: `client/src/ui`
 
 **Design Goals**:
+- Provide main menu UI (create room, join room)
+- Provide room lobby UI (room code, player list, start match)
 - Provide HUD (Heads-Up Display) coordination
-- Manage UI components (energy bar, pallet counter, game banner)
+- Manage UI components (energy bar, pallet counter, game banner, player indicator)
 - Update UI from game state
 - Abstract UI component details
+
+---
+
+## MainMenu
+
+**File**: `main-menu.ts`
+
+**Concept**: Main menu UI with "Create Room" and "Join Room" options.
+
+### Interface
+
+```typescript
+export class MainMenu {
+  constructor(container: Container, onCreateRoom: () => void, onJoinRoom: (code: string) => void)
+  show(): void
+  hide(): void
+  destroy(): void
+}
+```
+
+### Methods
+
+#### `constructor(container, onCreateRoom, onJoinRoom)`
+
+Creates a new MainMenu instance.
+
+**Parameters:**
+- `container: Container` - PixiJS container for menu UI
+- `onCreateRoom: () => void` - Callback when "Create Room" clicked
+- `onJoinRoom: (code: string) => void` - Callback when "Join Room" clicked (with room code)
+
+#### `show(): void`
+
+Shows the main menu.
+
+#### `hide(): void`
+
+Hides the main menu.
+
+#### `destroy(): void`
+
+Destroys the main menu and cleans up.
+
+### Semantics
+
+- Main menu is entry point (shown on app start)
+- "Create Room" button triggers onCreateRoom callback
+- "Join Room" button shows input field for room code, triggers onJoinRoom callback
+- Menu is hidden when transitioning to lobby or game
+
+---
+
+## RoomLobby
+
+**File**: `room-lobby.ts`
+
+**Concept**: Room lobby UI showing room code, player list, and start match button.
+
+### Interface
+
+```typescript
+export interface PlayerInfo {
+  id: number
+  name: string
+}
+
+export class RoomLobby {
+  constructor(
+    container: Container,
+    roomCode: string,
+    players: PlayerInfo[],
+    isHost: boolean,
+    onStartMatch: () => void,
+    onLeaveRoom: () => void
+  )
+  updatePlayers(players: PlayerInfo[]): void
+  updateRoomCode(roomCode: string): void
+  show(): void
+  hide(): void
+  destroy(): void
+}
+```
+
+### Methods
+
+#### `constructor(container, roomCode, players, isHost, onStartMatch, onLeaveRoom)`
+
+Creates a new RoomLobby instance.
+
+**Parameters:**
+- `container: Container` - PixiJS container for lobby UI
+- `roomCode: string` - Room code (6-character alphanumeric)
+- `players: PlayerInfo[]` - List of players in room
+- `isHost: boolean` - Whether current player is host
+- `onStartMatch: () => void` - Callback when "Start Match" clicked (host only)
+- `onLeaveRoom: () => void` - Callback when "Leave Room" clicked
+
+#### `updatePlayers(players: PlayerInfo[]): void`
+
+Updates player list.
+
+**Parameters:**
+- `players: PlayerInfo[]` - Updated player list
+
+#### `updateRoomCode(roomCode: string): void`
+
+Updates room code display.
+
+**Parameters:**
+- `roomCode: string` - Room code
+
+#### `show(): void`
+
+Shows the lobby.
+
+#### `hide(): void`
+
+Hides the lobby.
+
+#### `destroy(): void`
+
+Destroys the lobby and cleans up.
+
+### Semantics
+
+- Lobby shows room code prominently (copyable)
+- Player list shows all connected players
+- "Start Match" button only visible to host, disabled if < 2 players
+- "Leave Room" button always visible
+- Waiting message shown if not host
+- Lobby is hidden when match starts
 
 ---
 
@@ -22,13 +155,13 @@ This document provides detailed API reference for the UI package.
 
 **File**: `hud.ts`
 
-**Concept**: Coordinator that manages all UI components and updates them from game state.
+**Concept**: Coordinator that manages all in-game UI components and updates them from game state.
 
 ### Interface
 
 ```typescript
 export class HUD {
-  constructor(scene: Scene, stateManager: StateManager)
+  constructor(scene: Scene, stateManager: StateManager, myShipId: number)
   update(): void
   destroy(): void
 }
@@ -70,11 +203,12 @@ hud.destroy()
 
 ### Semantics
 
-- HUD manages three UI components: EnergyBar, PalletCounter, GameBanner
+- HUD manages four UI components: EnergyBar, PalletCounter, GameBanner, PlayerIndicator
 - Components are created in UI layer during construction
 - Update reads game state and updates all components
 - Components are positioned at fixed screen coordinates
 - Game banner shows win/lose messages based on game state
+- Player indicator shows player name/ID (from myShipId)
 
 ### Lifecycle
 
@@ -131,6 +265,17 @@ Displays win/lose messages.
 - `showLose(): void`
 - `hide(): void`
 - `updateSize(width: number, height: number): void`
+- `destroy(): void`
+
+### PlayerIndicator
+
+**File**: `components/player-indicator.ts`
+
+Displays player name/ID indicator.
+
+**Methods:**
+- `constructor(container: Container, config: PlayerIndicatorConfig)`
+- `update(playerId: number, playerName?: string): void`
 - `destroy(): void`
 
 ### Semantics
@@ -193,11 +338,19 @@ Displays win/lose messages.
 
 ## Version Notes
 
-This API describes v0 UI layer. Key features:
-- HUD coordinator for UI management
-- Energy bar, pallet counter, game banner components
+This API describes v1 UI layer. Key features:
+- Main menu UI (create room, join room)
+- Room lobby UI (room code, player list, start match)
+- HUD coordinator for in-game UI management
+- Energy bar, pallet counter, game banner, player indicator components
 - State-driven UI updates
 - PixiJS-based rendering
+
+**Changes from v0**:
+- Added MainMenu class for entry point UI
+- Added RoomLobby class for room management UI
+- Added PlayerIndicator component to HUD
+- HUD now takes myShipId parameter for player identification
 
 Future extensions may include:
 - More UI components

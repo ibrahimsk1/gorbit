@@ -24,29 +24,43 @@ This document describes the physics calculations and mechanics for Orbital Rush.
 
 **File**: `server/internal/sim/physics/gravity.go`
 
-**Concept**: Inverse-square law gravity from a single sun with maximum acceleration clamping.
+**Concept**: Inverse-square law gravity from multiple planets with maximum acceleration clamping. Gravity from all planets is summed (superposition principle).
 
-**Formula**:
-- Direction: `direction = sunPos - shipPos`
+**Single Planet Gravity Formula**:
+- Direction: `direction = planetPos - shipPos`
 - Distance squared: `distanceSq = |direction|²`
 - Acceleration magnitude: `|a| = G * M / distanceSq` (inverse-square law)
 - Clamped magnitude: `|a|_clamped = min(|a|, aMax)`
 - Final acceleration: `acc = normalize(direction) * |a|_clamped`
 
+**Multiple Planets Gravity (Summation)**:
+- Initialize: `totalAcc = Vec2{0, 0}`
+- For each planet in planets array:
+  - Calculate planet acceleration: `planetAcc = GravityAcceleration(shipPos, planet.Pos, planet.Mass, G, aMax)`
+  - Sum: `totalAcc = totalAcc.Add(planetAcc)`
+- Return: `totalAcc` (sum of all planet gravities)
+
+**Function Signature**: `CalculateTotalGravity(shipPos Vec2, planets []Planet, G, aMax float64) Vec2`
+
 **Semantics**:
-- Single gravity source (the Sun)
-- Gravity computed from sun position to ship position
+- Multiple gravity sources (3–5 planets per match)
+- Gravity from each planet calculated independently using inverse-square law
+- Total gravity is vector sum of all planet gravities (superposition principle)
+- Each planet's gravity is clamped individually at `aMax` before summation
 - Zero mass or zero distance returns zero acceleration (no division by zero)
 
 **Parameters**:
-- `G` (float64): Gravitational constant (game-scale, typically 1.0)
-- `aMax` (float64): Maximum acceleration magnitude (m/s², typically 100.0)
+- `G` (float64): Gravitational constant (game-scale, 1.0 in v1)
+- `aMax` (float64): Maximum acceleration magnitude (m/s², 100.0 in v1)
 
 **Invariants**:
-- Acceleration magnitude never exceeds `aMax`
-- Acceleration vector points toward the sun (attractive force)
+- Each planet's acceleration magnitude never exceeds `aMax` (clamped before summation)
+- Acceleration vector from each planet points toward that planet (attractive force)
+- Total acceleration is vector sum of all planet accelerations
 - Zero mass or zero distance produces zero acceleration
 - All calculations use finite float64 values
+
+**Note**: Gravity summation applies to each ship independently. In multiplayer, each ship's gravity is calculated from all planets.
 
 ---
 
@@ -83,26 +97,31 @@ This document describes the physics calculations and mechanics for Orbital Rush.
 
 **File**: `server/internal/sim/physics/collision.go`
 
-**Concept**: Distance-based collision detection for ship-sun and ship-pallet interactions.
+**Concept**: Distance-based collision detection for ship-planet and ship-pallet interactions.
 
-#### Ship-Sun Collision
+#### Ship-Planet Collision
 
 **Semantics**:
-- Collision occurs when distance from ship center to sun center ≤ sun radius
+- Collision occurs when distance from ship center to planet center ≤ planet radius
 - Uses squared distance comparison to avoid square root
 - Formula: `distanceSq ≤ radius²`
+- In multiplayer, check each ship against all planets
 
 **Parameters**:
 - `shipPos` (Vec2): Ship position
-- `sunPos` (Vec2): Sun center position
-- `sunRadius` (float32): Sun radius
+- `planetPos` (Vec2): Planet center position
+- `planetRadius` (float32): Planet radius
 
 **Returns**: `true` if colliding, `false` otherwise
 
+**Function Signature**: `ShipPlanetCollision(shipPos Vec2, planetPos Vec2, planetRadius float32) bool`
+
 **Invariants**:
-- Collision is symmetric (ship collides with sun = sun collides with ship)
-- Zero-radius sun never collides (unless ship exactly at sun center)
+- Collision is symmetric (ship collides with planet = planet collides with ship)
+- Zero-radius planet never collides (unless ship exactly at planet center)
 - All positions are finite Vec2 values
+
+**Note**: In multiplayer, collision detection loops over all ships and all planets.
 
 #### Ship-Pallet Collision
 
@@ -124,18 +143,47 @@ This document describes the physics calculations and mechanics for Orbital Rush.
 - Zero pickup radius never collides (unless ship exactly at pallet center)
 - All positions are finite Vec2 values
 
+### World Wraparound
+
+**File**: `server/internal/sim/physics/wraparound.go` (or in integrator.go)
+
+**Concept**: Wraparound logic that teleports ships exiting world bounds to opposite side.
+
+**Formula**:
+- For X coordinate: `pos.x = mod(pos.x + WORLD_WIDTH/2, WORLD_WIDTH) - WORLD_WIDTH/2`
+- For Y coordinate: `pos.y = mod(pos.y + WORLD_HEIGHT/2, WORLD_HEIGHT) - WORLD_HEIGHT/2`
+- Uses `math.Mod` for modulo operation
+
+**Semantics**:
+- Applied after SemiImplicitEuler integration (after position update)
+- Applied before collision detection
+- In multiplayer, applied to all ships in World.Ships array
+- Wraparound is deterministic and applied consistently every tick
+- World bounds: [-WORLD_WIDTH/2, WORLD_WIDTH/2] × [-WORLD_HEIGHT/2, WORLD_HEIGHT/2]
+- World constants: `WORLD_WIDTH = 2000.0 m`, `WORLD_HEIGHT = 2000.0 m`
+
+**Function Signature**: `ApplyWraparound(pos Vec2, worldWidth, worldHeight float64) Vec2`
+
+**Invariants**:
+- Wraparound is deterministic (same input → same output)
+- Output position is always within world bounds
+- Applied to all ships every tick (after integration, before collision)
+- Velocity is not modified by wraparound (only position)
+
+**Note**: Wraparound applies to ship positions only. Camera and rendering may handle wraparound differently (camera stays within bounds, no wraparound).
+
 ---
 
 ## Constants
 
-**Standardized Physics Constants** (from TDD):
+**Standardized Physics Constants** (from TDD v1):
 - `G = 1.0` – Gravitational constant (game-scale)
 - `A_MAX = 100.0` – Maximum acceleration (m/s²)
-- `DRAG_K = 0.12` – Linear drag coefficient (s⁻¹) – *Note: may not be implemented*
+- `DRAG_K = 0.12` – Linear drag coefficient (s⁻¹)
 - `SHIP_RADIUS = 1.0` – Ship collision radius (m)
 - `PICKUP_RADIUS = 15.0` – Pallet pickup radius (m)
-- `WORLD_WIDTH = <value>` – World width (m) – *May be defined as constant, not a type*
-- `WORLD_HEIGHT = <value>` – World height (m) – *May be defined as constant, not a type*
+- `WORLD_WIDTH = 2000.0` – World width (m)
+- `WORLD_HEIGHT = 2000.0` – World height (m)
 - `TICK_RATE = 30.0` – Simulation tick rate (Hz)
 - `DT = 1.0 / TICK_RATE` – Time step (seconds, ~0.0333)
 
@@ -166,9 +214,10 @@ This document describes the physics calculations and mechanics for Orbital Rush.
 
 ## Notes
 
-This spec describes the current physics implementation. Key characteristics:
-- Single Sun gravity (not multiple planets)
-- No wraparound logic (ships may exit world bounds or be handled differently)
+This spec describes the v1 physics implementation. Key characteristics:
+- Multiple Planets gravity (3–5 planets, gravity summation via superposition)
+- World wraparound (ships exiting bounds re-enter from opposite side)
 - Semi-implicit Euler integration
-- Ship-sun and ship-pallet collision detection
+- Ship-planet and ship-pallet collision detection
+- Gravity and wraparound applied to all ships in multiplayer
 

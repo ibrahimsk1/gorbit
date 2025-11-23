@@ -309,12 +309,17 @@ interface AppConfig {
 
 ## Version Notes
 
-This API describes v0 core infrastructure. Key features:
+This API describes v1 core infrastructure. Key features:
 - PixiJS v8 application wrapper
 - Render loop with FPS tracking
 - Auto-resize support
 - Resource cleanup
 - Async initialization
+- Coordinates UI state transitions (main menu, lobby, in-game)
+
+**Changes from v0**:
+- App orchestrator now coordinates UI state management (menu, lobby, game views)
+- Render loop integrates camera and radar updates
 
 Future extensions may include:
 - Multiple render targets

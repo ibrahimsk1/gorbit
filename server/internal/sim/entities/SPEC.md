@@ -6,12 +6,12 @@ This document describes the canonical simulation model (entities) for Orbital Ru
 
 ## Scope & Location
 
-**Scope**: Canonical simulation state for Orbital Rush (single ship, single sun, pallets).
+**Scope**: Canonical simulation state for Orbital Rush (multiple ships, multiple planets, pallets).
 
 **Code location**: `server/internal/sim/entities`
 
 **Design Goals**:
-- Single-player world model
+- Multiplayer world model (2–8 players per room)
 - All simulation state lives under `entities`; no ad-hoc world/state structs in other packages
 - Entities are mostly data; behavior lives in physics/rules
 
@@ -35,27 +35,30 @@ This document describes the canonical simulation model (entities) for Orbital Ru
 
 ---
 
-### Sun
+### Planet
 
-**Concept**: Single central gravity source and collision obstacle.
+**Concept**: Gravity source and collision obstacle (replaces Sun in v1).
 
 **Key Fields**:
-- `Pos Vec2` – Position in world coordinates (meters), typically at origin (0, 0)
-- `Radius float32` – Collision radius (meters)
-- `Mass float64` – Mass for gravity calculations (game units)
+- `ID uint32` – Unique planet identifier
+- `Pos Vec2` – Position in world coordinates (meters)
+- `Radius float32` – Collision radius (meters, typically 30–80 m)
+- `Mass float64` – Mass for gravity calculations (game units, typically 500–2000)
 
 **Semantics**:
-- Single sun per match (static, position does not change)
-- Used by gravity system (single gravity source)
-- Used by collision detection (ship-sun collisions)
-- Typically centered at world origin
+- Multiple planets per match (3–5 planets, static positions)
+- Each planet provides gravity (inverse-square law, summed for all planets)
+- Used by collision detection (ship-planet collisions)
+- Planets distributed across world with minimum spacing (200 m apart)
 
 **Invariants**:
-- Radius > 0
-- Mass > 0
+- Radius > 0 (typically 30–80 m)
+- Mass > 0 (typically 500–2000 game units)
 - Pos is finite Vec2
+- ID uniqueness within a World
+- Minimum distance between planets: 200 m (enforced during generation)
 
-**Ownership**: Only `server/internal/sim/entities` defines Sun. No parallel sun/gravity-source types elsewhere.
+**Ownership**: Only `server/internal/sim/entities` defines Planet. No parallel planet/gravity-source types elsewhere.
 
 ---
 
@@ -63,19 +66,22 @@ This document describes the canonical simulation model (entities) for Orbital Ru
 
 **File**: `server/internal/sim/entities/ship.go`
 
-**Concept**: Single player-controlled ship in the simulation.
+**Concept**: Player-controlled ship in the simulation (multiple ships per match in multiplayer).
 
 **Key Fields**:
+- `ID uint32` – Unique ship identifier (player ID)
 - `Pos Vec2` – Position in world coordinates (meters)
 - `Vel Vec2` – Velocity vector (m/s)
 - `Rot float64` – Rotation angle in radians
 - `Energy float32` – Current energy level (0-100)
 
 **Semantics**:
-- Single ship per match (single-player)
-- No player ID or ship ID needed (only one ship exists)
+- Multiple ships per match (2–8 ships, one per player)
+- Ship ID corresponds to player ID (unique per room)
+- Each ship has independent state (position, velocity, rotation, energy)
 
 **Invariants**:
+- ID uniqueness within a World
 - Energy >= 0 (typically clamped to [0, MAX_ENERGY])
 - Pos and Vel are finite Vec2 values
 - Rot is in radians (typically normalized to [0, 2π) or [-π, π])
@@ -113,28 +119,71 @@ This document describes the canonical simulation model (entities) for Orbital Ru
 
 **File**: `server/internal/sim/entities/world.go`
 
-**Concept**: Complete simulation state for a match.
+**Concept**: Complete simulation state for a match (multiplayer).
 
 **Key Fields**:
-- `Ship Ship` – Single ship in the match (not an array)
-- `Sun Sun` – Single sun/gravity source (not an array)
-- `Pallets []Pallet` – All pallets in the match
+- `Ships []Ship` – All ships in the match (2–8 ships, one per player)
+- `Planets []Planet` – All planets in the match (3–5 planets)
+- `Pallets []Pallet` – All pallets in the match (8–12 pallets)
 - `Tick uint32` – Current simulation tick
-- `Done bool` – Whether match has ended
-- `Win bool` – Whether match ended in victory (only valid if Done is true)
+- `Done bool` – Whether match has ended (per-player or global)
+- `Win bool` – Whether match ended in victory (per-player or global, only valid if Done is true)
 
 **Semantics**:
 - All sim state for a match is inside World
 - World is the root container passed to physics and rules systems
-- Single ship and single sun (single-player, single gravity source)
-- World bounds may be defined as constants (not a WorldBounds type)
+- Multiple ships (one per player) and multiple planets (3–5 per match)
+- World bounds defined as constants: `WORLD_WIDTH = 2000.0 m`, `WORLD_HEIGHT = 2000.0 m`
+- World center at origin (0, 0), bounds from [-1000, 1000] × [-1000, 1000]
 
 **Invariants**:
+- Ship IDs are unique within Ships array
+- Planet IDs are unique within Planets array
 - Pallet IDs are unique within Pallets array
 - All entity positions are finite Vec2 values
 - Tick increments monotonically during simulation
+- Minimum distance between planets: 200 m (enforced during generation)
 
 **Ownership**: Only `server/internal/sim/entities` defines World. No parallel world/state structs in session, proto, or client packages.
+
+### Planet Generation
+
+**File**: `server/internal/sim/entities/world.go` (or `planet.go`)
+
+**Concept**: Generate multiple planets with varied sizes, masses, and positions for a match.
+
+**Algorithm**:
+1. **Function**: `GeneratePlanets(count int, worldWidth, worldHeight float64) []Planet`
+2. **For each planet** (count = 3–5):
+   - Random radius: `radius = 30.0 + rand.Float64() * 50.0` (range [30, 80] m)
+   - Random mass: `mass = 500.0 + rand.Float64() * 1500.0` (range [500, 2000] game units)
+   - Random position: 
+     - `posX = (rand.Float64() - 0.5) * worldWidth` (bounds [-WORLD_WIDTH/2, WORLD_WIDTH/2])
+     - `posY = (rand.Float64() - 0.5) * worldHeight` (bounds [-WORLD_HEIGHT/2, WORLD_HEIGHT/2])
+   - Check minimum distance: for each existing planet, if `distance(newPos, existingPos) < 200.0`, retry position (max 50 retries per planet)
+   - Check overlap: ensure `distance >= newRadius + existingRadius` (no overlap)
+3. **Assign IDs**: Assign unique ID to each planet (incrementing counter or UUID)
+
+**Semantics**:
+- Planets are generated once per match (during room match start)
+- Planet positions are distributed across world with minimum spacing
+- Planet sizes and masses are varied for gameplay interest
+- Generation uses crypto/rand for secure randomness (or math/rand for deterministic testing)
+
+**Parameters**:
+- `count` (int): Number of planets to generate (3–5 per match)
+- `worldWidth` (float64): World width (2000.0 m)
+- `worldHeight` (float64): World height (2000.0 m)
+
+**Invariants**:
+- Planet count is between 3 and 5
+- All planets have radius in [30, 80] m range
+- All planets have mass in [500, 2000] game units range
+- Minimum distance between planets: 200 m
+- No overlapping planets (distance >= sum of radii)
+- All planet positions are within world bounds
+
+**Note**: Planet generation is called when room match starts, before creating initial World state.
 
 ---
 
@@ -164,9 +213,10 @@ This document describes the canonical simulation model (entities) for Orbital Ru
 
 ## Notes
 
-This spec describes the current entity model. Key characteristics:
-- Single Ship (not an array)
-- Single Sun (not Planet, not an array)
-- World bounds may be defined as constants (not a WorldBounds type)
-- World contains single instances, not arrays (except Pallets)
+This spec describes the v1 entity model. Key characteristics:
+- Multiple Ships (array, 2–8 ships per match)
+- Multiple Planets (array, 3–5 planets per match, replaces single Sun)
+- World bounds defined as constants: `WORLD_WIDTH = 2000.0 m`, `WORLD_HEIGHT = 2000.0 m`
+- World contains arrays for Ships, Planets, and Pallets
+- Ship.ID and Planet.ID added for multiplayer support
 
