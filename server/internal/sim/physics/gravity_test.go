@@ -14,7 +14,7 @@ func TestGravity(t *testing.T) {
 	RunSpecs(t, "Gravity Suite")
 }
 
-var _ = Describe("Gravity", Label("scope:unit", "loop:g1-physics", "layer:sim", "dep:none", "b:gravity-field", "r:high", "double:fake"), func() {
+var _ = Describe("Gravity", Label("scope:unit", "loop:g2-physics", "layer:physics", "dep:none", "b:gravity-field", "r:high", "double:fake"), func() {
 	const epsilon = 1e-9
 	const G = 1.0 // Gravitational constant (game-scale)
 	const aMax = 100.0 // Maximum acceleration
