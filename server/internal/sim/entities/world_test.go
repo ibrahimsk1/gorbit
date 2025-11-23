@@ -390,5 +390,183 @@ var _ = Describe("World", Label("scope:unit", "loop:g1-entities", "layer:entitie
 			Expect(wrapped.Y).To(Equal(0.0))
 		})
 	})
-})
 
+	Describe("World Validation", Label("scope:unit", "loop:g1-entities", "layer:entities", "dep:none", "b:entity-validation", "r:low"), func() {
+		Describe("ValidateUniqueIDs", func() {
+			It("detects duplicate ship IDs", func() {
+				ships := []Ship{
+					NewShip(1, NewVec2(0, 0), NewVec2(0, 0), 0, 100),
+					NewShip(1, NewVec2(10, 10), NewVec2(0, 0), 0, 100), // Duplicate ID
+				}
+				world := NewWorld(ships, nil, nil)
+				err := ValidateUniqueIDs(world)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("duplicate ship ID"))
+			})
+
+			It("detects duplicate planet IDs", func() {
+				planets := []Planet{
+					NewPlanet(1, NewVec2(0, 0), 50.0, 1000.0),
+					NewPlanet(1, NewVec2(100, 100), 50.0, 1000.0), // Duplicate ID
+				}
+				world := NewWorld(nil, planets, nil)
+				err := ValidateUniqueIDs(world)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("duplicate planet ID"))
+			})
+
+			It("detects duplicate pallet IDs", func() {
+				pallets := []Pallet{
+					NewPallet(1, NewVec2(0, 0), true),
+					NewPallet(1, NewVec2(10, 10), true), // Duplicate ID
+				}
+				world := NewWorld(nil, nil, pallets)
+				err := ValidateUniqueIDs(world)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("duplicate pallet ID"))
+			})
+
+			It("passes with all unique IDs", func() {
+				ships := []Ship{
+					NewShip(1, NewVec2(0, 0), NewVec2(0, 0), 0, 100),
+					NewShip(2, NewVec2(10, 10), NewVec2(0, 0), 0, 100),
+				}
+				planets := []Planet{
+					NewPlanet(1, NewVec2(0, 0), 50.0, 1000.0),
+					NewPlanet(2, NewVec2(100, 100), 50.0, 1000.0),
+				}
+				pallets := []Pallet{
+					NewPallet(1, NewVec2(0, 0), true),
+					NewPallet(2, NewVec2(10, 10), true),
+				}
+				world := NewWorld(ships, planets, pallets)
+				err := ValidateUniqueIDs(world)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Describe("ValidatePlanetSpacing", func() {
+			It("detects planets too close", func() {
+				planets := []Planet{
+					NewPlanet(1, NewVec2(0, 0), 50.0, 1000.0),
+					NewPlanet(2, NewVec2(150, 0), 50.0, 1000.0), // Only 150m apart (less than 200m minimum)
+				}
+				err := ValidatePlanetSpacing(planets)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("too close"))
+			})
+
+			It("passes with proper spacing", func() {
+				planets := []Planet{
+					NewPlanet(1, NewVec2(0, 0), 50.0, 1000.0),
+					NewPlanet(2, NewVec2(250, 0), 50.0, 1000.0), // 250m apart (more than 200m minimum)
+				}
+				err := ValidatePlanetSpacing(planets)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("passes with single planet", func() {
+				planets := []Planet{
+					NewPlanet(1, NewVec2(0, 0), 50.0, 1000.0),
+				}
+				err := ValidatePlanetSpacing(planets)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("passes with empty planets", func() {
+				planets := []Planet{}
+				err := ValidatePlanetSpacing(planets)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Describe("ValidateWorldBounds", func() {
+			It("detects positions outside bounds", func() {
+				ships := []Ship{
+					NewShip(1, NewVec2(1100, 0), NewVec2(0, 0), 0, 100), // X > 1000
+				}
+				planets := []Planet{
+					NewPlanet(1, NewVec2(0, 1100), 50.0, 1000.0), // Y > 1000
+				}
+				pallets := []Pallet{
+					NewPallet(1, NewVec2(-1100, 0), true), // X < -1000
+				}
+				world := NewWorld(ships, planets, pallets)
+				err := ValidateWorldBounds(world)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("passes with positions within bounds", func() {
+				ships := []Ship{
+					NewShip(1, NewVec2(500, -300), NewVec2(0, 0), 0, 100),
+				}
+				planets := []Planet{
+					NewPlanet(1, NewVec2(-500, 500), 50.0, 1000.0),
+				}
+				pallets := []Pallet{
+					NewPallet(1, NewVec2(0, 0), true),
+				}
+				world := NewWorld(ships, planets, pallets)
+				err := ValidateWorldBounds(world)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("passes with positions at boundaries", func() {
+				ships := []Ship{
+					NewShip(1, NewVec2(1000, 1000), NewVec2(0, 0), 0, 100), // At boundary
+				}
+				world := NewWorld(ships, nil, nil)
+				err := ValidateWorldBounds(world)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Describe("ValidateWorld", func() {
+			It("passes with valid world", func() {
+				ships := []Ship{
+					NewShip(1, NewVec2(0, 0), NewVec2(0, 0), 0, 100),
+					NewShip(2, NewVec2(10, 10), NewVec2(0, 0), 0, 100),
+				}
+				planets := []Planet{
+					NewPlanet(1, NewVec2(0, 0), 50.0, 1000.0),
+					NewPlanet(2, NewVec2(250, 0), 50.0, 1000.0), // Properly spaced
+				}
+				pallets := []Pallet{
+					NewPallet(1, NewVec2(0, 0), true),
+				}
+				world := NewWorld(ships, planets, pallets)
+				err := ValidateWorld(world)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("fails with invalid world (duplicate IDs)", func() {
+				ships := []Ship{
+					NewShip(1, NewVec2(0, 0), NewVec2(0, 0), 0, 100),
+					NewShip(1, NewVec2(10, 10), NewVec2(0, 0), 0, 100), // Duplicate
+				}
+				world := NewWorld(ships, nil, nil)
+				err := ValidateWorld(world)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("fails with invalid world (planets too close)", func() {
+				planets := []Planet{
+					NewPlanet(1, NewVec2(0, 0), 50.0, 1000.0),
+					NewPlanet(2, NewVec2(150, 0), 50.0, 1000.0), // Too close
+				}
+				world := NewWorld(nil, planets, nil)
+				err := ValidateWorld(world)
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("fails with invalid world (positions outside bounds)", func() {
+				ships := []Ship{
+					NewShip(1, NewVec2(1100, 0), NewVec2(0, 0), 0, 100), // Outside bounds
+				}
+				world := NewWorld(ships, nil, nil)
+				err := ValidateWorld(world)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+	})
+})

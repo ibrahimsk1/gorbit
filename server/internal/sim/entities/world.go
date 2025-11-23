@@ -1,6 +1,9 @@
 package entities
 
-import "math/rand"
+import (
+	"fmt"
+	"math/rand"
+)
 
 // World bounds constants
 const (
@@ -209,4 +212,110 @@ func WrapPosition(pos Vec2, worldWidth, worldHeight float64) Vec2 {
 	}
 
 	return NewVec2(wrappedX, wrappedY)
+}
+
+// ValidateUniqueIDs validates that all entity IDs are unique within their respective arrays.
+// Returns an error if any duplicate IDs are found.
+func ValidateUniqueIDs(world World) error {
+	// Check Ship IDs
+	shipIDs := make(map[uint32]bool)
+	for _, ship := range world.Ships {
+		if shipIDs[ship.ID] {
+			return fmt.Errorf("duplicate ship ID: %d", ship.ID)
+		}
+		shipIDs[ship.ID] = true
+	}
+
+	// Check Planet IDs
+	planetIDs := make(map[uint32]bool)
+	for _, planet := range world.Planets {
+		if planetIDs[planet.ID] {
+			return fmt.Errorf("duplicate planet ID: %d", planet.ID)
+		}
+		planetIDs[planet.ID] = true
+	}
+
+	// Check Pallet IDs
+	palletIDs := make(map[uint32]bool)
+	for _, pallet := range world.Pallets {
+		if palletIDs[pallet.ID] {
+			return fmt.Errorf("duplicate pallet ID: %d", pallet.ID)
+		}
+		palletIDs[pallet.ID] = true
+	}
+
+	return nil
+}
+
+// ValidatePlanetSpacing validates that all planets have minimum spacing of 200m.
+// Returns an error if any planets are too close.
+func ValidatePlanetSpacing(planets []Planet) error {
+	const minSpacing = 200.0
+
+	for i := 0; i < len(planets); i++ {
+		for j := i + 1; j < len(planets); j++ {
+			distance := planets[i].Pos.Sub(planets[j].Pos).Length()
+			if distance < minSpacing {
+				return fmt.Errorf("planets %d and %d are too close: %.2f m (minimum: %.2f m)", planets[i].ID, planets[j].ID, distance, minSpacing)
+			}
+		}
+	}
+
+	return nil
+}
+
+// ValidateWorldBounds validates that all entity positions are within world bounds.
+// World bounds: [-WORLD_WIDTH/2, WORLD_WIDTH/2] × [-WORLD_HEIGHT/2, WORLD_HEIGHT/2]
+// Returns an error if any position is outside bounds.
+func ValidateWorldBounds(world World) error {
+	halfWidth := WORLD_WIDTH / 2.0
+	halfHeight := WORLD_HEIGHT / 2.0
+
+	// Check Ship positions
+	for _, ship := range world.Ships {
+		if ship.Pos.X > halfWidth || ship.Pos.X < -halfWidth {
+			return fmt.Errorf("ship %d position X (%.2f) is outside world bounds [-%.2f, %.2f]", ship.ID, ship.Pos.X, halfWidth, halfWidth)
+		}
+		if ship.Pos.Y > halfHeight || ship.Pos.Y < -halfHeight {
+			return fmt.Errorf("ship %d position Y (%.2f) is outside world bounds [-%.2f, %.2f]", ship.ID, ship.Pos.Y, halfHeight, halfHeight)
+		}
+	}
+
+	// Check Planet positions
+	for _, planet := range world.Planets {
+		if planet.Pos.X > halfWidth || planet.Pos.X < -halfWidth {
+			return fmt.Errorf("planet %d position X (%.2f) is outside world bounds [-%.2f, %.2f]", planet.ID, planet.Pos.X, halfWidth, halfWidth)
+		}
+		if planet.Pos.Y > halfHeight || planet.Pos.Y < -halfHeight {
+			return fmt.Errorf("planet %d position Y (%.2f) is outside world bounds [-%.2f, %.2f]", planet.ID, planet.Pos.Y, halfHeight, halfHeight)
+		}
+	}
+
+	// Check Pallet positions
+	for _, pallet := range world.Pallets {
+		if pallet.Pos.X > halfWidth || pallet.Pos.X < -halfWidth {
+			return fmt.Errorf("pallet %d position X (%.2f) is outside world bounds [-%.2f, %.2f]", pallet.ID, pallet.Pos.X, halfWidth, halfWidth)
+		}
+		if pallet.Pos.Y > halfHeight || pallet.Pos.Y < -halfHeight {
+			return fmt.Errorf("pallet %d position Y (%.2f) is outside world bounds [-%.2f, %.2f]", pallet.ID, pallet.Pos.Y, halfHeight, halfHeight)
+		}
+	}
+
+	return nil
+}
+
+// ValidateWorld validates all World invariants.
+// Checks unique IDs, planet spacing, and world bounds.
+// Returns the first error encountered, or nil if all valid.
+func ValidateWorld(world World) error {
+	if err := ValidateUniqueIDs(world); err != nil {
+		return err
+	}
+	if err := ValidatePlanetSpacing(world.Planets); err != nil {
+		return err
+	}
+	if err := ValidateWorldBounds(world); err != nil {
+		return err
+	}
+	return nil
 }
