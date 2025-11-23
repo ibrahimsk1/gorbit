@@ -14,7 +14,7 @@ func TestPhysics(t *testing.T) {
 	RunSpecs(t, "Physics Integration Suite")
 }
 
-var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "layer:sim", "dep:none", "b:physics-integration", "r:high", "double:fake"), func() {
+var _ = Describe("Physics Integration", Label("scope:unit", "loop:g2-physics", "layer:physics", "dep:none", "b:physics-integration", "r:high", "double:fake"), func() {
 	const epsilon = 1e-9
 	const dt = 1.0 / 30.0 // 30Hz tick rate
 	const G = 1.0         // Gravitational constant
@@ -23,77 +23,66 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 
 	Describe("Determinism", func() {
 		It("produces identical world states for identical initial conditions", func() {
-			// Create initial world state
-			ship := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(0.0, 1.0),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(
-				entities.NewVec2(0.0, 0.0),
-				50.0,
-				1000.0,
-			)
+			// Create initial world state with multiplayer model
+			ships := []entities.Ship{
+				entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0),
+			}
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 			pallets := []entities.Pallet{
 				entities.NewPallet(1, entities.NewVec2(20.0, 0.0), true),
 			}
-			world1 := entities.NewWorld(ship, sun, pallets)
-			world2 := entities.NewWorld(ship, sun, pallets)
+			world1 := entities.NewWorld(ships, planets, pallets)
+			world2 := entities.NewWorld(ships, planets, pallets)
 
 			// Run simulation for multiple ticks
 			numTicks := 50
 			for i := 0; i < numTicks; i++ {
 				// Simulate world1
-				acc := GravityAcceleration(world1.Ship.Pos, world1.Sun.Pos, world1.Sun.Mass, G, aMax)
-				newPos, newVel := SemiImplicitEuler(world1.Ship.Pos, world1.Ship.Vel, acc, dt)
-				world1.Ship.Pos = newPos
-				world1.Ship.Vel = newVel
+				acc := CalculateTotalGravity(world1.Ships[0].Pos, world1.Planets, G, aMax)
+				newPos, newVel := SemiImplicitEuler(world1.Ships[0].Pos, world1.Ships[0].Vel, acc, dt)
+				world1.Ships[0].Pos = newPos
+				world1.Ships[0].Vel = newVel
 				world1.Tick++
 
 				// Simulate world2 (same initial conditions)
-				acc2 := GravityAcceleration(world2.Ship.Pos, world2.Sun.Pos, world2.Sun.Mass, G, aMax)
-				newPos2, newVel2 := SemiImplicitEuler(world2.Ship.Pos, world2.Ship.Vel, acc2, dt)
-				world2.Ship.Pos = newPos2
-				world2.Ship.Vel = newVel2
+				acc2 := CalculateTotalGravity(world2.Ships[0].Pos, world2.Planets, G, aMax)
+				newPos2, newVel2 := SemiImplicitEuler(world2.Ships[0].Pos, world2.Ships[0].Vel, acc2, dt)
+				world2.Ships[0].Pos = newPos2
+				world2.Ships[0].Vel = newVel2
 				world2.Tick++
 
 				// Verify states are identical
-				Expect(world1.Ship.Pos.X).To(Equal(world2.Ship.Pos.X))
-				Expect(world1.Ship.Pos.Y).To(Equal(world2.Ship.Pos.Y))
-				Expect(world1.Ship.Vel.X).To(Equal(world2.Ship.Vel.X))
-				Expect(world1.Ship.Vel.Y).To(Equal(world2.Ship.Vel.Y))
+				Expect(world1.Ships[0].Pos.X).To(Equal(world2.Ships[0].Pos.X))
+				Expect(world1.Ships[0].Pos.Y).To(Equal(world2.Ships[0].Pos.Y))
+				Expect(world1.Ships[0].Vel.X).To(Equal(world2.Ships[0].Vel.X))
+				Expect(world1.Ships[0].Vel.Y).To(Equal(world2.Ships[0].Vel.Y))
 				Expect(world1.Tick).To(Equal(world2.Tick))
 			}
 		})
 
 		It("produces identical results when called with same inputs in different order", func() {
-			ship1 := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(0.0, 1.0),
-				0.0,
-				100.0,
-			)
-			sun1 := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship1 := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0)
+			planets1 := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
-			ship2 := entities.NewShip(
-				entities.NewVec2(5.0, 5.0),
-				entities.NewVec2(1.0, 0.0),
-				0.0,
-				100.0,
-			)
-			sun2 := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship2 := entities.NewShip(2, entities.NewVec2(5.0, 5.0), entities.NewVec2(1.0, 0.0), 0.0, 100.0)
+			planets2 := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
 			// Run simulation for ship1
-			acc1 := GravityAcceleration(ship1.Pos, sun1.Pos, sun1.Mass, G, aMax)
+			acc1 := CalculateTotalGravity(ship1.Pos, planets1, G, aMax)
 			pos1, vel1 := SemiImplicitEuler(ship1.Pos, ship1.Vel, acc1, dt)
 
 			// Run simulation for ship2
-			acc2 := GravityAcceleration(ship2.Pos, sun2.Pos, sun2.Mass, G, aMax)
+			acc2 := CalculateTotalGravity(ship2.Pos, planets2, G, aMax)
 			_, _ = SemiImplicitEuler(ship2.Pos, ship2.Vel, acc2, dt)
 
 			// Run simulation for ship1 again
-			acc1Again := GravityAcceleration(ship1.Pos, sun1.Pos, sun1.Mass, G, aMax)
+			acc1Again := CalculateTotalGravity(ship1.Pos, planets1, G, aMax)
 			pos1Again, vel1Again := SemiImplicitEuler(ship1.Pos, ship1.Vel, acc1Again, dt)
 
 			// First and third calls should be identical
@@ -105,63 +94,57 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 	})
 
 	Describe("Gravity and Integration", func() {
-		It("ship falls toward sun under gravity", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(0.0, 0.0), // Zero initial velocity
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+		It("ship falls toward planets under gravity", func() {
+			ship := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
-			initialDistance := ship.Pos.Sub(sun.Pos).Length()
+			initialDistance := ship.Pos.Sub(planets[0].Pos).Length()
 
 			// Run simulation for multiple ticks
 			numTicks := 30
 			for i := 0; i < numTicks; i++ {
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
 			}
 
-			finalDistance := ship.Pos.Sub(sun.Pos).Length()
+			finalDistance := ship.Pos.Sub(planets[0].Pos).Length()
 
-			// Ship should move closer to sun
+			// Ship should move closer to planet
 			Expect(finalDistance).To(BeNumerically("<", initialDistance))
 
-			// Velocity should point toward sun (negative direction from ship to sun)
-			directionToSun := sun.Pos.Sub(ship.Pos).Normalize()
+			// Velocity should point toward planet
+			directionToPlanet := planets[0].Pos.Sub(ship.Pos).Normalize()
 			velDirection := ship.Vel.Normalize()
-			// Velocity should be in the same direction as direction to sun
-			Expect(velDirection.Dot(directionToSun)).To(BeNumerically(">", 0.0))
+			// Velocity should be in the same direction as direction to planet
+			Expect(velDirection.Dot(directionToPlanet)).To(BeNumerically(">", 0.0))
 		})
 
-		It("ship follows orbital path", func() {
+		It("ship follows orbital path around planet", func() {
 			// Set up circular orbit: ship at distance r with tangential velocity
 			r := 10.0
 			// For circular orbit: v = sqrt(G*M/r)
 			orbitalVel := math.Sqrt(G * 1000.0 / r)
-			ship := entities.NewShip(
-				entities.NewVec2(r, 0.0),
-				entities.NewVec2(0.0, orbitalVel), // Tangential velocity
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship := entities.NewShip(1, entities.NewVec2(r, 0.0), entities.NewVec2(0.0, orbitalVel), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
-			initialDistance := ship.Pos.Sub(sun.Pos).Length()
+			initialDistance := ship.Pos.Sub(planets[0].Pos).Length()
 
 			// Run simulation for multiple ticks
 			numTicks := 100
 			for i := 0; i < numTicks; i++ {
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
 			}
 
-			finalDistance := ship.Pos.Sub(sun.Pos).Length()
+			finalDistance := ship.Pos.Sub(planets[0].Pos).Length()
 
 			// Distance should remain approximately constant (within 20% for this simple test)
 			distanceRatio := finalDistance / initialDistance
@@ -169,18 +152,15 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 		})
 
 		It("gravity acceleration affects velocity through integrator", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(0.0, 0.0), // Zero initial velocity
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
 			initialVel := ship.Vel.Length()
 
 			// Run one step
-			acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+			acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 			newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 			ship.Pos = newPos
 			ship.Vel = newVel
@@ -190,24 +170,21 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 			// Velocity should increase due to gravity
 			Expect(finalVel).To(BeNumerically(">", initialVel))
 
-			// Acceleration should be non-zero (unless at sun center)
+			// Acceleration should be non-zero (unless at planet center)
 			accMag := acc.Length()
 			Expect(accMag).To(BeNumerically(">", 0.0))
 		})
 
 		It("simulation runs correctly for multiple steps", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(0.0, 1.0),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
 			// Run simulation for many ticks
 			numTicks := 200
 			for i := 0; i < numTicks; i++ {
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
@@ -226,43 +203,41 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 	})
 
 	Describe("Collision Detection", func() {
-		It("detects ship-sun collision when ship reaches sun", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(-1.0, 0.0), // Moving toward sun
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+		It("detects ship-planet collision when ship reaches planet", func() {
+			ship := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(-1.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
 			// Run simulation until collision or max ticks
 			maxTicks := 100
 			collided := false
+			var collidedPlanetID uint32
 			for i := 0; i < maxTicks; i++ {
 				// Check collision
-				if ShipSunCollision(ship.Pos, sun.Pos, sun.Radius) {
+				var hasCollision bool
+				hasCollision, collidedPlanetID = CheckShipPlanetCollisions(ship.Pos, planets)
+				if hasCollision {
 					collided = true
 					break
 				}
 
 				// Update physics
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
 			}
 
 			Expect(collided).To(BeTrue())
+			Expect(collidedPlanetID).To(Equal(uint32(1)))
 		})
 
 		It("detects ship-pallet pickup when ship reaches pallet", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(-1.0, 0.0), // Moving toward pallet
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(-1.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 			pallet := entities.NewPallet(1, entities.NewVec2(5.0, 0.0), true)
 
 			// Run simulation until pickup or max ticks
@@ -276,7 +251,7 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 				}
 
 				// Update physics
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
@@ -286,33 +261,27 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 		})
 
 		It("detects collision at boundary", func() {
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
-			// Place ship exactly at sun radius
-			ship := entities.NewShip(
-				entities.NewVec2(float64(sun.Radius), 0.0),
-				entities.NewVec2(0.0, 0.0),
-				0.0,
-				100.0,
-			)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			planets := []entities.Planet{planet}
+			// Place ship exactly at planet radius
+			ship := entities.NewShip(1, entities.NewVec2(float64(planet.Radius), 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0)
 
-			collided := ShipSunCollision(ship.Pos, sun.Pos, sun.Radius)
+			collided, planetID := CheckShipPlanetCollisions(ship.Pos, planets)
 			Expect(collided).To(BeTrue())
+			Expect(planetID).To(Equal(uint32(1)))
 		})
 
 		It("does not detect false collisions when ship is far from objects", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(1000.0, 1000.0),
-				entities.NewVec2(0.0, 0.0),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship := entities.NewShip(1, entities.NewVec2(1000.0, 1000.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 			pallet := entities.NewPallet(1, entities.NewVec2(0.0, 0.0), true)
 
-			sunCollision := ShipSunCollision(ship.Pos, sun.Pos, sun.Radius)
+			planetCollision, _ := CheckShipPlanetCollisions(ship.Pos, planets)
 			palletCollision := ShipPalletCollision(ship.Pos, pallet.Pos, pickupRadius)
 
-			Expect(sunCollision).To(BeFalse())
+			Expect(planetCollision).To(BeFalse())
 			Expect(palletCollision).To(BeFalse())
 		})
 	})
@@ -322,20 +291,17 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 			// Set up circular orbit
 			r := 10.0
 			orbitalVel := math.Sqrt(G * 1000.0 / r)
-			ship := entities.NewShip(
-				entities.NewVec2(r, 0.0),
-				entities.NewVec2(0.0, orbitalVel),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship := entities.NewShip(1, entities.NewVec2(r, 0.0), entities.NewVec2(0.0, orbitalVel), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
-			initialDistance := ship.Pos.Sub(sun.Pos).Length()
+			initialDistance := ship.Pos.Sub(planets[0].Pos).Length()
 
 			// Run for 100 ticks
 			numTicks := 100
 			for i := 0; i < numTicks; i++ {
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
@@ -345,20 +311,17 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 				Expect(math.IsNaN(ship.Pos.Y)).To(BeFalse())
 			}
 
-			finalDistance := ship.Pos.Sub(sun.Pos).Length()
+			finalDistance := ship.Pos.Sub(planets[0].Pos).Length()
 			// Distance should remain approximately constant
 			distanceRatio := finalDistance / initialDistance
 			Expect(distanceRatio).To(BeNumerically("~", 1.0, 0.3)) // Allow 30% variation for numerical integration
 		})
 
 		It("ship can approach and pick up pallet while under gravity", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(15.0, 0.0),
-				entities.NewVec2(-0.5, 0.0), // Moving toward pallet
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship := entities.NewShip(1, entities.NewVec2(15.0, 0.0), entities.NewVec2(-0.5, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 			pallet := entities.NewPallet(1, entities.NewVec2(5.0, 0.0), true)
 
 			// Run simulation
@@ -372,7 +335,7 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 				}
 
 				// Update physics (gravity affects ship)
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
@@ -385,46 +348,44 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 			Expect(finalDistanceToPallet).To(BeNumerically("<=", pickupRadius))
 		})
 
-		It("ship collides with sun when trajectory intersects", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(20.0, 0.0),
-				entities.NewVec2(-2.0, 0.0), // Moving directly toward sun
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+		It("ship collides with planet when trajectory intersects", func() {
+			ship := entities.NewShip(1, entities.NewVec2(20.0, 0.0), entities.NewVec2(-2.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
 			// Run simulation
 			maxTicks := 200
 			collided := false
+			var collidedPlanetID uint32
 			for i := 0; i < maxTicks; i++ {
-				if ShipSunCollision(ship.Pos, sun.Pos, sun.Radius) {
+				var hasCollision bool
+				hasCollision, collidedPlanetID = CheckShipPlanetCollisions(ship.Pos, planets)
+				if hasCollision {
 					collided = true
 					break
 				}
 
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
 			}
 
 			Expect(collided).To(BeTrue())
+			Expect(collidedPlanetID).To(Equal(uint32(1)))
 		})
 
 		It("runs extended simulation without numerical instability", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(0.0, 1.0),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
 			// Run for extended period
 			numTicks := 1000
 			for i := 0; i < numTicks; i++ {
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
@@ -443,32 +404,25 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 	})
 
 	Describe("Edge Cases", func() {
-		It("handles ship at sun center", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(0.0, 0.0),
-				entities.NewVec2(0.0, 0.0),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+		It("handles ship at planet center", func() {
+			ship := entities.NewShip(1, entities.NewVec2(0.0, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
 			// Should detect collision
-			collided := ShipSunCollision(ship.Pos, sun.Pos, sun.Radius)
+			collided, planetID := CheckShipPlanetCollisions(ship.Pos, planets)
 			Expect(collided).To(BeTrue())
+			Expect(planetID).To(Equal(uint32(1)))
 
-			// Gravity should return zero (handled by GravityAcceleration)
-			acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+			// Gravity should return zero (handled by CalculateTotalGravity)
+			acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 			Expect(acc.X).To(BeNumerically("~", 0.0, epsilon))
 			Expect(acc.Y).To(BeNumerically("~", 0.0, epsilon))
 		})
 
 		It("handles ship at pallet position", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(5.0, 5.0),
-				entities.NewVec2(0.0, 0.0),
-				0.0,
-				100.0,
-			)
+			ship := entities.NewShip(1, entities.NewVec2(5.0, 5.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0)
 			pallet := entities.NewPallet(1, entities.NewVec2(5.0, 5.0), true)
 
 			// Should detect pickup
@@ -476,14 +430,11 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 			Expect(pickedUp).To(BeTrue())
 		})
 
-		It("handles zero gravity (zero sun mass)", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(1.0, 1.0), // Initial velocity
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 0.0) // Zero mass
+		It("handles zero gravity (zero planet mass)", func() {
+			ship := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(1.0, 1.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 0.0), // Zero mass
+			}
 
 			initialPos := ship.Pos
 			initialVel := ship.Vel
@@ -491,7 +442,7 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 			// Run simulation
 			numTicks := 10
 			for i := 0; i < numTicks; i++ {
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
@@ -507,32 +458,26 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 			Expect(ship.Pos.Y).To(BeNumerically("~", expectedPos.Y, epsilon*10))
 		})
 
-		It("handles very close to sun (clamped acceleration)", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(0.1, 0.0),
-				entities.NewVec2(0.0, 0.0),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 10000.0) // Large mass
+		It("handles very close to planet (clamped acceleration)", func() {
+			ship := entities.NewShip(1, entities.NewVec2(0.1, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 10000.0), // Large mass
+			}
 
-			acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+			acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 			accMag := acc.Length()
 
 			// Acceleration should be clamped
 			Expect(accMag).To(BeNumerically("<=", aMax+epsilon))
 		})
 
-		It("handles very far from sun (minimal gravity)", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10000.0, 0.0),
-				entities.NewVec2(0.0, 0.0),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+		It("handles very far from planet (minimal gravity)", func() {
+			ship := entities.NewShip(1, entities.NewVec2(10000.0, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
-			acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+			acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 			accMag := acc.Length()
 
 			// Acceleration should be very small
@@ -542,26 +487,23 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 
 	Describe("Conservation and Stability", func() {
 		It("maintains energy within reasonable bounds", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(0.0, 1.0),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
 			// Calculate initial energy (kinetic + potential)
 			// Kinetic: 0.5 * m * v² (assuming m=1)
 			initialKinetic := 0.5 * ship.Vel.LengthSq()
 			// Potential: -G*M/r (simplified, assuming m=1)
-			initialDistance := ship.Pos.Sub(sun.Pos).Length()
-			initialPotential := -G * sun.Mass / initialDistance
+			initialDistance := ship.Pos.Sub(planets[0].Pos).Length()
+			initialPotential := -G * planets[0].Mass / initialDistance
 			initialEnergy := initialKinetic + initialPotential
 
 			// Run simulation
 			numTicks := 100
 			for i := 0; i < numTicks; i++ {
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
@@ -569,8 +511,8 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 
 			// Calculate final energy
 			finalKinetic := 0.5 * ship.Vel.LengthSq()
-			finalDistance := ship.Pos.Sub(sun.Pos).Length()
-			finalPotential := -G * sun.Mass / finalDistance
+			finalDistance := ship.Pos.Sub(planets[0].Pos).Length()
+			finalPotential := -G * planets[0].Mass / finalDistance
 			finalEnergy := finalKinetic + finalPotential
 
 			// Energy should remain within reasonable bounds (within 50% for this simple test)
@@ -579,31 +521,25 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 		})
 
 		It("produces deterministic replay for same initial conditions", func() {
-			ship1 := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(0.0, 1.0),
-				0.0,
-				100.0,
-			)
-			sun1 := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship1 := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0)
+			planets1 := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
-			ship2 := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(0.0, 1.0),
-				0.0,
-				100.0,
-			)
-			sun2 := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship2 := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0)
+			planets2 := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
 			// Run both simulations
 			numTicks := 50
 			for i := 0; i < numTicks; i++ {
-				acc1 := GravityAcceleration(ship1.Pos, sun1.Pos, sun1.Mass, G, aMax)
+				acc1 := CalculateTotalGravity(ship1.Pos, planets1, G, aMax)
 				pos1, vel1 := SemiImplicitEuler(ship1.Pos, ship1.Vel, acc1, dt)
 				ship1.Pos = pos1
 				ship1.Vel = vel1
 
-				acc2 := GravityAcceleration(ship2.Pos, sun2.Pos, sun2.Mass, G, aMax)
+				acc2 := CalculateTotalGravity(ship2.Pos, planets2, G, aMax)
 				pos2, vel2 := SemiImplicitEuler(ship2.Pos, ship2.Vel, acc2, dt)
 				ship2.Pos = pos2
 				ship2.Vel = vel2
@@ -617,18 +553,15 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 		})
 
 		It("maintains numerical stability over long simulation", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10.0, 0.0),
-				entities.NewVec2(0.0, 1.0),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+			ship := entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 
 			// Run for very long simulation
 			numTicks := 5000
 			for i := 0; i < numTicks; i++ {
-				acc := GravityAcceleration(ship.Pos, sun.Pos, sun.Mass, G, aMax)
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
 				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
 				ship.Pos = newPos
 				ship.Vel = newVel
@@ -643,6 +576,137 @@ var _ = Describe("Physics Integration", Label("scope:unit", "loop:g1-physics", "
 				Expect(math.IsInf(ship.Vel.X, 0)).To(BeFalse())
 				Expect(math.IsInf(ship.Vel.Y, 0)).To(BeFalse())
 			}
+		})
+	})
+
+	Describe("Wraparound", func() {
+		It("wraps ship position when exiting right boundary", func() {
+			ship := entities.NewShip(1, entities.NewVec2(entities.WORLD_WIDTH/2+10.0, 0.0), entities.NewVec2(1.0, 0.0), 0.0, 100.0)
+			wrappedPos := ApplyWraparound(ship.Pos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+
+			// Should wrap to left side
+			Expect(wrappedPos.X).To(BeNumerically("<", entities.WORLD_WIDTH/2))
+			Expect(wrappedPos.X).To(BeNumerically(">", -entities.WORLD_WIDTH/2))
+		})
+
+		It("wraps ship position when exiting left boundary", func() {
+			ship := entities.NewShip(1, entities.NewVec2(-entities.WORLD_WIDTH/2-10.0, 0.0), entities.NewVec2(-1.0, 0.0), 0.0, 100.0)
+			wrappedPos := ApplyWraparound(ship.Pos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+
+			// Should wrap to right side
+			Expect(wrappedPos.X).To(BeNumerically(">", -entities.WORLD_WIDTH/2))
+			Expect(wrappedPos.X).To(BeNumerically("<", entities.WORLD_WIDTH/2))
+		})
+
+		It("wraps ship position when exiting top boundary", func() {
+			ship := entities.NewShip(1, entities.NewVec2(0.0, entities.WORLD_HEIGHT/2+10.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0)
+			wrappedPos := ApplyWraparound(ship.Pos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+
+			// Should wrap to bottom side
+			Expect(wrappedPos.Y).To(BeNumerically("<", entities.WORLD_HEIGHT/2))
+			Expect(wrappedPos.Y).To(BeNumerically(">", -entities.WORLD_HEIGHT/2))
+		})
+
+		It("wraps ship position when exiting bottom boundary", func() {
+			ship := entities.NewShip(1, entities.NewVec2(0.0, -entities.WORLD_HEIGHT/2-10.0), entities.NewVec2(0.0, -1.0), 0.0, 100.0)
+			wrappedPos := ApplyWraparound(ship.Pos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+
+			// Should wrap to top side
+			Expect(wrappedPos.Y).To(BeNumerically(">", -entities.WORLD_HEIGHT/2))
+			Expect(wrappedPos.Y).To(BeNumerically("<", entities.WORLD_HEIGHT/2))
+		})
+
+		It("applies wraparound during simulation", func() {
+			ship := entities.NewShip(1, entities.NewVec2(entities.WORLD_WIDTH/2-5.0, 0.0), entities.NewVec2(10.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
+
+			// Run simulation for a few ticks
+			numTicks := 10
+			for i := 0; i < numTicks; i++ {
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
+				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
+				ship.Pos = ApplyWraparound(newPos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+				ship.Vel = newVel
+			}
+
+			// Position should be within bounds
+			Expect(ship.Pos.X).To(BeNumerically(">=", -entities.WORLD_WIDTH/2))
+			Expect(ship.Pos.X).To(BeNumerically("<=", entities.WORLD_WIDTH/2))
+			Expect(ship.Pos.Y).To(BeNumerically(">=", -entities.WORLD_HEIGHT/2))
+			Expect(ship.Pos.Y).To(BeNumerically("<=", entities.WORLD_HEIGHT/2))
+		})
+	})
+
+	Describe("Multiple Planets", func() {
+		It("ship is affected by gravity from multiple planets", func() {
+			ship := entities.NewShip(1, entities.NewVec2(0.0, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(10.0, 0.0), 30.0, 1000.0),
+				entities.NewPlanet(2, entities.NewVec2(-10.0, 0.0), 30.0, 1000.0),
+				entities.NewPlanet(3, entities.NewVec2(0.0, 10.0), 30.0, 1000.0),
+			}
+
+			// Calculate gravity from all planets
+			acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
+
+			// Acceleration should be non-zero (sum of all planet gravities)
+			accMag := acc.Length()
+			Expect(accMag).To(BeNumerically(">", 0.0))
+
+			// Run simulation
+			numTicks := 30
+			for i := 0; i < numTicks; i++ {
+				acc := CalculateTotalGravity(ship.Pos, planets, G, aMax)
+				newPos, newVel := SemiImplicitEuler(ship.Pos, ship.Vel, acc, dt)
+				ship.Pos = newPos
+				ship.Vel = newVel
+			}
+
+			// Ship should have moved due to combined gravity
+			Expect(ship.Pos.Length()).To(BeNumerically(">", 0.0))
+			Expect(ship.Vel.Length()).To(BeNumerically(">", 0.0))
+		})
+
+		It("detects collision with correct planet when multiple planets present", func() {
+			ship := entities.NewShip(1, entities.NewVec2(5.0, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0)
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(10.0, 0.0), 30.0, 1000.0),
+				entities.NewPlanet(2, entities.NewVec2(0.0, 0.0), 50.0, 1000.0), // Ship is inside this planet
+				entities.NewPlanet(3, entities.NewVec2(-10.0, 0.0), 30.0, 1000.0),
+			}
+
+			collided, planetID := CheckShipPlanetCollisions(ship.Pos, planets)
+			Expect(collided).To(BeTrue())
+			Expect(planetID).To(Equal(uint32(2))) // Should detect planet 2
+		})
+
+		It("handles multiple ships with multiple planets", func() {
+			ships := []entities.Ship{
+				entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 1.0), 0.0, 100.0),
+				entities.NewShip(2, entities.NewVec2(-10.0, 0.0), entities.NewVec2(0.0, -1.0), 0.0, 100.0),
+			}
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+				entities.NewPlanet(2, entities.NewVec2(20.0, 0.0), 30.0, 500.0),
+				entities.NewPlanet(3, entities.NewVec2(-20.0, 0.0), 30.0, 500.0),
+			}
+
+			// Run simulation for multiple ticks
+			numTicks := 50
+			for i := 0; i < numTicks; i++ {
+				for j := range ships {
+					acc := CalculateTotalGravity(ships[j].Pos, planets, G, aMax)
+					newPos, newVel := SemiImplicitEuler(ships[j].Pos, ships[j].Vel, acc, dt)
+					ships[j].Pos = ApplyWraparound(newPos, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+					ships[j].Vel = newVel
+				}
+			}
+
+			// Both ships should have moved
+			Expect(ships[0].Pos.Length()).To(BeNumerically(">", 0.0))
+			Expect(ships[1].Pos.Length()).To(BeNumerically(">", 0.0))
 		})
 	})
 })
