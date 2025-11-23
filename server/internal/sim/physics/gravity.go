@@ -50,3 +50,28 @@ func GravityAcceleration(shipPos, sunPos entities.Vec2, sunMass, G, aMax float64
 	directionNormalized := direction.Normalize()
 	return directionNormalized.Scale(accMagnitude)
 }
+
+// CalculateTotalGravity calculates the total gravitational acceleration on a ship
+// from all planets using the superposition principle.
+//
+// Each planet's gravity is calculated independently using GravityAcceleration,
+// then all acceleration vectors are summed to produce the total acceleration.
+//
+// Parameters:
+//   - shipPos: Position of the ship
+//   - planets: Array of planets (gravity sources)
+//   - G: Gravitational constant (game-scale, typically 1.0)
+//   - aMax: Maximum acceleration magnitude per planet
+//
+// Returns:
+//   - totalAcc: Total acceleration vector (sum of all planet gravities)
+func CalculateTotalGravity(shipPos entities.Vec2, planets []entities.Planet, G, aMax float64) entities.Vec2 {
+	totalAcc := entities.Zero()
+
+	for _, planet := range planets {
+		planetAcc := GravityAcceleration(shipPos, planet.Pos, planet.Mass, G, aMax)
+		totalAcc = totalAcc.Add(planetAcc)
+	}
+
+	return totalAcc
+}

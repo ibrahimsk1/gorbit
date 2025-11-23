@@ -328,5 +328,191 @@ var _ = Describe("Gravity", Label("scope:unit", "loop:g1-physics", "layer:sim", 
 			})
 		})
 	})
+
+	var _ = Describe("CalculateTotalGravity", Label("scope:unit", "loop:g2-physics", "layer:physics", "dep:none", "b:gravity-summation", "r:high", "double:fake"), func() {
+		const epsilon = 1e-9
+		const G = 1.0 // Gravitational constant (game-scale)
+		const aMax = 100.0 // Maximum acceleration
+
+		Describe("Superposition principle", func() {
+			It("sums gravity from 2 planets correctly", func() {
+				shipPos := entities.NewVec2(10.0, 0.0)
+				planet1 := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+				planet2 := entities.NewPlanet(2, entities.NewVec2(20.0, 0.0), 50.0, 1000.0)
+				planets := []entities.Planet{planet1, planet2}
+
+				// Calculate individual gravities
+				acc1 := GravityAcceleration(shipPos, planet1.Pos, planet1.Mass, G, aMax)
+				acc2 := GravityAcceleration(shipPos, planet2.Pos, planet2.Mass, G, aMax)
+				expectedTotal := acc1.Add(acc2)
+
+				// Calculate total gravity
+				actualTotal := CalculateTotalGravity(shipPos, planets, G, aMax)
+
+				// Verify superposition principle
+				Expect(actualTotal.X).To(BeNumerically("~", expectedTotal.X, epsilon*10))
+				Expect(actualTotal.Y).To(BeNumerically("~", expectedTotal.Y, epsilon*10))
+			})
+
+			It("sums gravity from 3 planets correctly", func() {
+				shipPos := entities.NewVec2(5.0, 5.0)
+				planet1 := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+				planet2 := entities.NewPlanet(2, entities.NewVec2(10.0, 0.0), 50.0, 1500.0)
+				planet3 := entities.NewPlanet(3, entities.NewVec2(0.0, 10.0), 50.0, 800.0)
+				planets := []entities.Planet{planet1, planet2, planet3}
+
+				// Calculate individual gravities
+				acc1 := GravityAcceleration(shipPos, planet1.Pos, planet1.Mass, G, aMax)
+				acc2 := GravityAcceleration(shipPos, planet2.Pos, planet2.Mass, G, aMax)
+				acc3 := GravityAcceleration(shipPos, planet3.Pos, planet3.Mass, G, aMax)
+				expectedTotal := acc1.Add(acc2).Add(acc3)
+
+				// Calculate total gravity
+				actualTotal := CalculateTotalGravity(shipPos, planets, G, aMax)
+
+				// Verify superposition principle
+				Expect(actualTotal.X).To(BeNumerically("~", expectedTotal.X, epsilon*10))
+				Expect(actualTotal.Y).To(BeNumerically("~", expectedTotal.Y, epsilon*10))
+			})
+
+			It("sums gravity from 5 planets correctly", func() {
+				shipPos := entities.NewVec2(0.0, 0.0)
+				planet1 := entities.NewPlanet(1, entities.NewVec2(10.0, 0.0), 50.0, 1000.0)
+				planet2 := entities.NewPlanet(2, entities.NewVec2(-10.0, 0.0), 50.0, 1200.0)
+				planet3 := entities.NewPlanet(3, entities.NewVec2(0.0, 10.0), 50.0, 900.0)
+				planet4 := entities.NewPlanet(4, entities.NewVec2(0.0, -10.0), 50.0, 1100.0)
+				planet5 := entities.NewPlanet(5, entities.NewVec2(15.0, 15.0), 50.0, 800.0)
+				planets := []entities.Planet{planet1, planet2, planet3, planet4, planet5}
+
+				// Calculate individual gravities
+				acc1 := GravityAcceleration(shipPos, planet1.Pos, planet1.Mass, G, aMax)
+				acc2 := GravityAcceleration(shipPos, planet2.Pos, planet2.Mass, G, aMax)
+				acc3 := GravityAcceleration(shipPos, planet3.Pos, planet3.Mass, G, aMax)
+				acc4 := GravityAcceleration(shipPos, planet4.Pos, planet4.Mass, G, aMax)
+				acc5 := GravityAcceleration(shipPos, planet5.Pos, planet5.Mass, G, aMax)
+				expectedTotal := acc1.Add(acc2).Add(acc3).Add(acc4).Add(acc5)
+
+				// Calculate total gravity
+				actualTotal := CalculateTotalGravity(shipPos, planets, G, aMax)
+
+				// Verify superposition principle
+				Expect(actualTotal.X).To(BeNumerically("~", expectedTotal.X, epsilon*10))
+				Expect(actualTotal.Y).To(BeNumerically("~", expectedTotal.Y, epsilon*10))
+			})
+		})
+
+		Describe("Edge cases", func() {
+			It("returns zero acceleration for empty planets array", func() {
+				shipPos := entities.NewVec2(10.0, 0.0)
+				planets := []entities.Planet{}
+
+				acc := CalculateTotalGravity(shipPos, planets, G, aMax)
+
+				Expect(acc.X).To(BeNumerically("~", 0.0, epsilon))
+				Expect(acc.Y).To(BeNumerically("~", 0.0, epsilon))
+			})
+
+			It("equals single planet gravity for single planet array", func() {
+				shipPos := entities.NewVec2(10.0, 0.0)
+				planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+				planets := []entities.Planet{planet}
+
+				expectedAcc := GravityAcceleration(shipPos, planet.Pos, planet.Mass, G, aMax)
+				actualAcc := CalculateTotalGravity(shipPos, planets, G, aMax)
+
+				Expect(actualAcc.X).To(BeNumerically("~", expectedAcc.X, epsilon*10))
+				Expect(actualAcc.Y).To(BeNumerically("~", expectedAcc.Y, epsilon*10))
+			})
+
+			It("handles zero mass planets", func() {
+				shipPos := entities.NewVec2(10.0, 0.0)
+				planet1 := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+				planet2 := entities.NewPlanet(2, entities.NewVec2(20.0, 0.0), 50.0, 0.0) // Zero mass
+				planets := []entities.Planet{planet1, planet2}
+
+				// Only planet1 should contribute
+				expectedAcc := GravityAcceleration(shipPos, planet1.Pos, planet1.Mass, G, aMax)
+				actualAcc := CalculateTotalGravity(shipPos, planets, G, aMax)
+
+				Expect(actualAcc.X).To(BeNumerically("~", expectedAcc.X, epsilon*10))
+				Expect(actualAcc.Y).To(BeNumerically("~", expectedAcc.Y, epsilon*10))
+			})
+
+			It("handles overlapping planets", func() {
+				shipPos := entities.NewVec2(10.0, 0.0)
+				// Two planets at same position with different masses
+				planet1 := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+				planet2 := entities.NewPlanet(2, entities.NewVec2(0.0, 0.0), 50.0, 1500.0)
+				planets := []entities.Planet{planet1, planet2}
+
+				// Calculate individual gravities
+				acc1 := GravityAcceleration(shipPos, planet1.Pos, planet1.Mass, G, aMax)
+				acc2 := GravityAcceleration(shipPos, planet2.Pos, planet2.Mass, G, aMax)
+				expectedTotal := acc1.Add(acc2)
+
+				actualTotal := CalculateTotalGravity(shipPos, planets, G, aMax)
+
+				// Should sum correctly even when planets overlap
+				Expect(actualTotal.X).To(BeNumerically("~", expectedTotal.X, epsilon*10))
+				Expect(actualTotal.Y).To(BeNumerically("~", expectedTotal.Y, epsilon*10))
+			})
+
+			It("handles planets at world boundaries", func() {
+				shipPos := entities.NewVec2(0.0, 0.0)
+				// Planets at world boundaries (WORLD_WIDTH/2 = 1000.0)
+				planet1 := entities.NewPlanet(1, entities.NewVec2(1000.0, 0.0), 50.0, 1000.0)
+				planet2 := entities.NewPlanet(2, entities.NewVec2(-1000.0, 0.0), 50.0, 1000.0)
+				planet3 := entities.NewPlanet(3, entities.NewVec2(0.0, 1000.0), 50.0, 1000.0)
+				planets := []entities.Planet{planet1, planet2, planet3}
+
+				// Calculate individual gravities
+				acc1 := GravityAcceleration(shipPos, planet1.Pos, planet1.Mass, G, aMax)
+				acc2 := GravityAcceleration(shipPos, planet2.Pos, planet2.Mass, G, aMax)
+				acc3 := GravityAcceleration(shipPos, planet3.Pos, planet3.Mass, G, aMax)
+				expectedTotal := acc1.Add(acc2).Add(acc3)
+
+				actualTotal := CalculateTotalGravity(shipPos, planets, G, aMax)
+
+				Expect(actualTotal.X).To(BeNumerically("~", expectedTotal.X, epsilon*10))
+				Expect(actualTotal.Y).To(BeNumerically("~", expectedTotal.Y, epsilon*10))
+			})
+		})
+
+		Describe("Determinism", func() {
+			It("produces identical results for identical inputs across multiple runs", func() {
+				shipPos := entities.NewVec2(10.0, 5.0)
+				planet1 := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+				planet2 := entities.NewPlanet(2, entities.NewVec2(20.0, 0.0), 50.0, 1500.0)
+				planet3 := entities.NewPlanet(3, entities.NewVec2(0.0, 20.0), 50.0, 800.0)
+				planets := []entities.Planet{planet1, planet2, planet3}
+
+				// Run calculation multiple times
+				var firstAcc entities.Vec2
+				for i := 0; i < 100; i++ {
+					acc := CalculateTotalGravity(shipPos, planets, G, aMax)
+					if i == 0 {
+						firstAcc = acc
+					} else {
+						// Verify bit-exact results
+						Expect(acc.X).To(Equal(firstAcc.X))
+						Expect(acc.Y).To(Equal(firstAcc.Y))
+					}
+				}
+			})
+
+			It("produces identical results when called with same inputs in different order", func() {
+				shipPos := entities.NewVec2(5.0, 5.0)
+				planet1 := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0)
+				planet2 := entities.NewPlanet(2, entities.NewVec2(10.0, 0.0), 50.0, 1200.0)
+				planets := []entities.Planet{planet1, planet2}
+
+				result1 := CalculateTotalGravity(shipPos, planets, G, aMax)
+				result2 := CalculateTotalGravity(shipPos, planets, G, aMax)
+
+				Expect(result1.X).To(Equal(result2.X))
+				Expect(result1.Y).To(Equal(result2.Y))
+			})
+		})
+	})
 })
 
