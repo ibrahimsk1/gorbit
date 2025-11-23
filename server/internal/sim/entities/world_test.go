@@ -106,7 +106,7 @@ var _ = Describe("Pallet", Label("scope:unit", "loop:g1-physics", "layer:sim", "
 var _ = Describe("World", Label("scope:unit", "loop:g1-physics", "layer:sim", "dep:none", "b:entity-types", "r:low"), func() {
 	Describe("Constructor", func() {
 		It("creates a new World with given values", func() {
-			ship := NewShip(NewVec2(10, 20), NewVec2(1, 2), 0.5, 100)
+			ship := NewShip(1, NewVec2(10, 20), NewVec2(1, 2), 0.5, 100)
 			sun := NewSun(NewVec2(0, 0), 50.0, 1000)
 			pallets := []Pallet{
 				NewPallet(1, NewVec2(100, 100), true),
@@ -137,7 +137,7 @@ var _ = Describe("World", Label("scope:unit", "loop:g1-physics", "layer:sim", "d
 		})
 
 		It("creates a world with empty pallets", func() {
-			ship := NewShip(NewVec2(0, 0), NewVec2(0, 0), 0, 100)
+			ship := NewShip(1, NewVec2(0, 0), NewVec2(0, 0), 0, 100)
 			sun := NewSun(NewVec2(0, 0), 50.0, 1000)
 			world := NewWorld(ship, sun, nil)
 
@@ -147,7 +147,7 @@ var _ = Describe("World", Label("scope:unit", "loop:g1-physics", "layer:sim", "d
 
 	Describe("Properties", func() {
 		It("maintains field values after creation", func() {
-			ship := NewShip(NewVec2(5, 10), NewVec2(0.5, 1), 1.0, 75)
+			ship := NewShip(1, NewVec2(5, 10), NewVec2(0.5, 1), 1.0, 75)
 			sun := NewSun(NewVec2(0, 0), 25.0, 500)
 			pallets := []Pallet{NewPallet(1, NewVec2(50, 50), true)}
 
