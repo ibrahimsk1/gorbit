@@ -7,6 +7,8 @@
 import { App } from './app'
 import { RenderLoop } from './render-loop'
 import { Scene } from '../gfx/scene'
+import { MainMenu } from '../ui/main-menu'
+import { RoomLobby } from '../ui/room-lobby'
 import type { Container } from 'pixi.js'
 
 // UI state type
@@ -207,6 +209,40 @@ export class AppOrchestrator {
         this.setupRoomManagementHandlers()
       }
 
+      // Create MainMenu and RoomLobby instances if not provided and we have a real Scene
+      if (!this.mainMenu && this.scene && this.scene instanceof Scene) {
+        const uiLayer = this.scene.getLayer('ui')
+        this.mainMenu = new MainMenu(
+          uiLayer,
+          () => this.handleCreateRoom(),
+          (code: string) => this.handleJoinRoom(code)
+        )
+      }
+
+      if (!this.roomLobby && this.scene && this.scene instanceof Scene) {
+        const uiLayer = this.scene.getLayer('ui')
+        const initialRoomState: RoomState = {
+          roomCode: '',
+          players: [],
+          state: 'lobby',
+          hostId: 0
+        }
+        // Determine if current player is host (will be updated when room state is received)
+        const isHost = false // Will be determined from room state
+        this.roomLobby = new RoomLobby(
+          uiLayer,
+          initialRoomState,
+          isHost,
+          () => this.handleStartMatch(),
+          () => this.handleLeaveRoom()
+        )
+      }
+
+      // Show main menu on start
+      if (this.mainMenu) {
+        this.mainMenu.show()
+      }
+
       this.initialized = true
       this.initError = null
     } catch (error) {
@@ -246,6 +282,81 @@ export class AppOrchestrator {
   }
 
   /**
+   * Handles create room action.
+   * Creates a room via network client and transitions to lobby.
+   */
+  private async handleCreateRoom(): Promise<void> {
+    if (!this.networkClient) {
+      console.error('Cannot create room: network client not available')
+      return
+    }
+
+    try {
+      const roomCode = await this.networkClient.createRoom()
+      console.log('Room created:', roomCode)
+      // Room state will be received via onRoomState callback, which will trigger transition
+    } catch (error) {
+      console.error('Failed to create room:', error)
+    }
+  }
+
+  /**
+   * Handles join room action.
+   * Joins a room via network client and transitions to lobby.
+   */
+  private async handleJoinRoom(roomCode: string): Promise<void> {
+    if (!this.networkClient) {
+      console.error('Cannot join room: network client not available')
+      return
+    }
+
+    try {
+      await this.networkClient.joinRoom(roomCode)
+      console.log('Joined room:', roomCode)
+      // Room state will be received via onRoomState callback, which will trigger transition
+    } catch (error) {
+      console.error('Failed to join room:', error)
+    }
+  }
+
+  /**
+   * Handles start match action.
+   * Starts the match via network client.
+   */
+  private handleStartMatch(): void {
+    if (!this.networkClient) {
+      console.error('Cannot start match: network client not available')
+      return
+    }
+
+    try {
+      this.networkClient.startMatch()
+      console.log('Match start requested')
+    } catch (error) {
+      console.error('Failed to start match:', error)
+    }
+  }
+
+  /**
+   * Handles leave room action.
+   * Leaves the room via network client and transitions to main menu.
+   */
+  private handleLeaveRoom(): void {
+    if (!this.networkClient) {
+      console.error('Cannot leave room: network client not available')
+      return
+    }
+
+    try {
+      this.networkClient.leaveRoom()
+      console.log('Left room')
+      this.transitionToMainMenu()
+    } catch (error) {
+      console.error('Failed to leave room:', error)
+    }
+  }
+
+  /**
    * Sets up room management event handlers for NetworkClient.
    * Private helper method called during initialization.
    */
@@ -255,6 +366,15 @@ export class AppOrchestrator {
     }
 
     this.networkClient.onRoomState((roomState) => {
+      // Update room lobby with new state
+      if (this.roomLobby) {
+        // Determine if current player is host
+        // We need to know the current player's ID - for now, assume first player or check if myShipId matches hostId
+        // This will be properly set when we have player info from network
+        const isHost = roomState.hostId === roomState.players[0]?.id || false
+        this.roomLobby.update(roomState)
+      }
+
       if (roomState.state === 'lobby') {
         this.transitionToLobby(roomState)
       }
