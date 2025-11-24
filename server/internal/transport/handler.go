@@ -404,13 +404,6 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	
 	// Create connection registry (will be made global in step 8)
 	registry := NewConnectionRegistry()
-	
-	// Create session handler with real clock and initial world
-	clock := session.NewRealClock()
-	initialWorld := NewInitialWorld()
-	// Create session logger with connection context
-	sessionLogger := connLogger.WithValues("component", "session")
-	sessionHandler := NewSessionHandler(wsConn, clock, initialWorld, sessionLogger)
 
 	// Create room input handler (will be wired to RoomManager in step 8)
 	// For now, EnqueueCommandToRoomFunc is nil, so input routing will fail until step 8
@@ -421,10 +414,7 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	connLogger.Info("WebSocket connection established", "message_type", "connect", "remote_addr", r.RemoteAddr)
 
-	// Start session handler (runs session loop and snapshot broadcasting)
-	// NOTE: This will be removed in step 6 when we remove per-connection sessions
-	sessionHandler.Start()
-	defer sessionHandler.Stop()
+	// NOTE: Per-connection sessions removed. Room-based sessions will be created when match starts (step 7).
 
 	// Handle incoming messages in a loop
 	for {

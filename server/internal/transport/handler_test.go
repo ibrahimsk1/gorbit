@@ -57,28 +57,22 @@ var _ = Describe("HTTP Route Handlers", Label("scope:integration", "loop:g5-adap
 			conn.Close()
 		})
 
-		It("creates session handler and starts it", func() {
+		It("does not create per-connection session handler", func() {
 			dialer := websocket.Dialer{}
 			conn, _, err := dialer.Dial(serverURL, nil)
 			Expect(err).NotTo(HaveOccurred())
 			defer conn.Close()
 
-			// Wait a bit to ensure session handler is started
+			// Wait a bit to ensure connection is established
 			time.Sleep(50 * time.Millisecond)
 
-			// Try to read a snapshot message (should be broadcast periodically)
+			// Verify no snapshots are sent from per-connection sessions
 			// Set a short read deadline to avoid hanging
 			conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-			_, data, err := conn.ReadMessage()
-			// We might get a snapshot or timeout, both are acceptable
-			// The important thing is that the connection is working
-			if err == nil {
-				// If we got a message, it should be a valid JSON snapshot
-				var snapshot map[string]interface{}
-				err = json.Unmarshal(data, &snapshot)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(snapshot["t"]).To(Equal("snapshot"))
-			}
+			_, _, err = conn.ReadMessage()
+			// Should timeout or get connection closed error (no snapshots from per-connection sessions)
+			// The important thing is that no per-connection session is broadcasting snapshots
+			Expect(err).To(HaveOccurred()) // Should timeout or error, not receive snapshots
 		})
 
 		It("handles connection lifecycle properly", func() {
@@ -1293,6 +1287,59 @@ var _ = Describe("Room Input Handler", Label("scope:integration", "loop:g7-trans
 			Expect(err).NotTo(HaveOccurred())
 			Expect(enqueuedPlayerID).To(Equal(uint32(42)))
 		})
+	})
+})
+
+var _ = Describe("WebSocketHandler - No Per-Connection Sessions", Label("scope:integration", "loop:g7-transport", "layer:transport", "dep:none", "b:session-removal", "r:medium", "double:fake"), func() {
+	var testServer *httptest.Server
+	var serverURL string
+
+	BeforeEach(func() {
+		// Create test HTTP server with handlers
+		mux := http.NewServeMux()
+		mux.HandleFunc("/ws", WebSocketHandler)
+
+		testServer = httptest.NewServer(mux)
+		serverURL = "ws" + testServer.URL[4:] + "/ws" // Convert http:// to ws://
+	})
+
+	AfterEach(func() {
+		if testServer != nil {
+			testServer.Close()
+		}
+	})
+
+	It("does not create SessionHandler for new connections", func() {
+		dialer := websocket.Dialer{}
+		conn, _, err := dialer.Dial(serverURL, nil)
+		Expect(err).NotTo(HaveOccurred())
+		defer conn.Close()
+
+		// Wait a bit to ensure connection is established
+		time.Sleep(50 * time.Millisecond)
+
+		// Verify no snapshots are sent from per-connection sessions
+		// Per-connection sessions have been removed - snapshots will come from room sessions (step 7)
+		conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		_, _, err = conn.ReadMessage()
+		// Should timeout or error (no snapshots from per-connection sessions)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("handles connection lifecycle without per-connection sessions", func() {
+		dialer := websocket.Dialer{}
+		conn, _, err := dialer.Dial(serverURL, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Connection should be open
+		Expect(conn).NotTo(BeNil())
+
+		// Close connection - should clean up gracefully without session handler
+		err = conn.Close()
+		Expect(err).NotTo(HaveOccurred())
+
+		// Wait a bit for cleanup
+		time.Sleep(50 * time.Millisecond)
 	})
 })
 
