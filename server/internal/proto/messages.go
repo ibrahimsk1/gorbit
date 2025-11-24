@@ -119,7 +119,9 @@ type SnapshotMessage struct {
 }
 
 // ShipSnapshot represents ship state in a snapshot.
+// Used in SnapshotMessage: {"id":u32,"pos":{"x":f64,"y":f64},"vel":{"x":f64,"y":f64},"rot":f64,"energy":f32}
 type ShipSnapshot struct {
+	ID     uint32       `json:"id"`     // Ship identifier
 	Pos    Vec2Snapshot `json:"pos"`    // Position
 	Vel    Vec2Snapshot `json:"vel"`    // Velocity
 	Rot    float64      `json:"rot"`    // Rotation angle in radians
