@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/gorbit/orbitalrush/internal/session"
+	"github.com/gorbit/orbitalrush/internal/sim/rules"
 	"github.com/gorbit/orbitalrush/internal/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -482,6 +483,126 @@ var _ = Describe("Room Code Generation", Label("scope:unit", "loop:g6-room", "la
 			Expect(sess).NotTo(BeNil())
 			// Session should be running (started in goroutine)
 			// We can't easily verify goroutine execution without waiting, but we can check session exists
+		})
+	})
+
+	Describe("Session Coordination", Label("scope:unit", "loop:g6-room", "layer:room", "b:session-coordination", "r:high", "double:fake-io", "dep:none"), func() {
+		It("enqueues command to room's session", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn1 := &transport.Connection{}
+			conn2 := &transport.Connection{}
+			manager.JoinRoom(code, conn1)
+			manager.JoinRoom(code, conn2)
+			clock := session.NewRealClock()
+			manager.StartMatch(code, 1, clock)
+
+			cmd := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
+			err := manager.EnqueueCommandToRoom(code, 1, 1, cmd)
+
+			Expect(err).To(BeNil())
+		})
+
+		It("returns error when enqueueing command to non-existent room", func() {
+			manager := NewRoomManager()
+			cmd := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
+
+			err := manager.EnqueueCommandToRoom("NONEXIST", 1, 1, cmd)
+
+			Expect(err).NotTo(BeNil())
+			Expect(errors.Is(err, ErrRoomNotFound)).To(BeTrue())
+		})
+
+		It("returns error when enqueueing command to room without session", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn := &transport.Connection{}
+			manager.JoinRoom(code, conn)
+			cmd := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
+
+			err := manager.EnqueueCommandToRoom(code, 1, 1, cmd)
+
+			Expect(err).NotTo(BeNil())
+			Expect(errors.Is(err, ErrSessionNotFound)).To(BeTrue())
+		})
+
+		It("gets world state from room's session", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn1 := &transport.Connection{}
+			conn2 := &transport.Connection{}
+			manager.JoinRoom(code, conn1)
+			manager.JoinRoom(code, conn2)
+			clock := session.NewRealClock()
+			manager.StartMatch(code, 1, clock)
+
+			world, err := manager.GetWorldFromRoom(code)
+
+			Expect(err).To(BeNil())
+			Expect(world.Ships).To(HaveLen(2))
+			Expect(world.Planets).To(HaveLen(BeNumerically(">=", 3)))
+			Expect(world.Planets).To(HaveLen(BeNumerically("<=", 5)))
+		})
+
+		It("returns error when getting world from non-existent room", func() {
+			manager := NewRoomManager()
+
+			_, err := manager.GetWorldFromRoom("NONEXIST")
+
+			Expect(err).NotTo(BeNil())
+			Expect(errors.Is(err, ErrRoomNotFound)).To(BeTrue())
+		})
+
+		It("returns error when getting world from room without session", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn := &transport.Connection{}
+			manager.JoinRoom(code, conn)
+
+			_, err := manager.GetWorldFromRoom(code)
+
+			Expect(err).NotTo(BeNil())
+			Expect(errors.Is(err, ErrSessionNotFound)).To(BeTrue())
+		})
+
+		It("verifies session lifecycle integration", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn1 := &transport.Connection{}
+			conn2 := &transport.Connection{}
+			manager.JoinRoom(code, conn1)
+			manager.JoinRoom(code, conn2)
+			clock := session.NewRealClock()
+
+			// Start match (creates session)
+			err := manager.StartMatch(code, 1, clock)
+			Expect(err).To(BeNil())
+
+			// Get world (session exists)
+			world1, err := manager.GetWorldFromRoom(code)
+			Expect(err).To(BeNil())
+			Expect(world1.Ships).To(HaveLen(2))
+
+			// Enqueue commands
+			cmd1 := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
+			cmd2 := rules.InputCommand{Thrust: 0.5, Turn: 0.3}
+			err = manager.EnqueueCommandToRoom(code, 1, 1, cmd1)
+			Expect(err).To(BeNil())
+			err = manager.EnqueueCommandToRoom(code, 2, 1, cmd2)
+			Expect(err).To(BeNil())
+
+			// Get world again (should still work)
+			world2, err := manager.GetWorldFromRoom(code)
+			Expect(err).To(BeNil())
+			Expect(world2.Ships).To(HaveLen(2))
+
+			// Leave all players (stops session)
+			manager.LeaveRoom(code, 1)
+			manager.LeaveRoom(code, 2)
+
+			// Room should be removed
+			_, err = manager.GetRoom(code)
+			Expect(errors.Is(err, ErrRoomNotFound)).To(BeTrue())
 		})
 	})
 })

@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorbit/orbitalrush/internal/session"
 	"github.com/gorbit/orbitalrush/internal/sim/entities"
+	"github.com/gorbit/orbitalrush/internal/sim/rules"
 	"github.com/gorbit/orbitalrush/internal/transport"
 )
 
@@ -37,6 +38,8 @@ var (
 	ErrNotHost = errors.New("player is not the room host")
 	// ErrNotEnoughPlayers is returned when trying to start a match with less than 2 players.
 	ErrNotEnoughPlayers = errors.New("room must have at least 2 players to start match")
+	// ErrSessionNotFound is returned when trying to access a session that does not exist (room in lobby state).
+	ErrSessionNotFound = errors.New("session not found (room is not in playing state)")
 
 	// DefaultRoomManager is the singleton instance of RoomManager.
 	DefaultRoomManager *RoomManager
@@ -254,5 +257,51 @@ func (rm *RoomManager) LeaveRoom(roomCode string, playerID uint32) error {
 	}
 
 	return nil
+}
+
+// EnqueueCommandToRoom enqueues a command to a room's session.
+// Returns an error if the room or session does not exist.
+func (rm *RoomManager) EnqueueCommandToRoom(roomCode string, playerID uint32, seq uint32, cmd rules.InputCommand) error {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	// Find room
+	room, exists := rm.rooms[roomCode]
+	if !exists {
+		return ErrRoomNotFound
+	}
+
+	// Get session
+	sess := room.GetSession()
+	if sess == nil {
+		return ErrSessionNotFound
+	}
+
+	// Enqueue command
+	_ = sess.EnqueueCommand(seq, playerID, cmd)
+	return nil
+}
+
+// GetWorldFromRoom gets the current world state from a room's session.
+// Returns an error if the room or session does not exist.
+func (rm *RoomManager) GetWorldFromRoom(roomCode string) (entities.World, error) {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	// Find room
+	room, exists := rm.rooms[roomCode]
+	if !exists {
+		return entities.World{}, ErrRoomNotFound
+	}
+
+	// Get session
+	sess := room.GetSession()
+	if sess == nil {
+		return entities.World{}, ErrSessionNotFound
+	}
+
+	// Get world
+	world := sess.GetWorld()
+	return world, nil
 }
 
