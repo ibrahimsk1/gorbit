@@ -9,6 +9,8 @@ import { StateManager, type GameState } from '../sim/state-manager'
 import { Scene } from './scene'
 import { App } from '../core/app'
 import { Camera } from './camera'
+import { Radar } from './radar'
+import type { SnapshotMessage } from '../net/protocol'
 import { ShipSpriteFactory } from './sprites/ship-sprite'
 import { PlanetSpriteFactory } from './sprites/planet-sprite'
 import { PalletSpriteFactory } from './sprites/pallet-sprite'
@@ -26,10 +28,13 @@ export class Renderer {
   private planetSprites: Map<number, Graphics> = new Map()
   private palletSprites: Map<number, Graphics> = new Map()
   private boundsSprite: Graphics | null = null
+  private radar: Radar
 
   // World bounds constants (2000 m × 2000 m)
   private readonly WORLD_WIDTH = 2000
   private readonly WORLD_HEIGHT = 2000
+  private readonly RADAR_WIDTH = 200
+  private readonly RADAR_HEIGHT = 200
 
   constructor(stateManager: StateManager, scene: Scene, app: App) {
     this.stateManager = stateManager
@@ -45,6 +50,21 @@ export class Renderer {
       pixiApp.screen.height,
       0.1 // Default lerp factor
     )
+
+    // Create Radar with world bounds, 200×200px size, radar container from scene
+    const radarLayer = scene.getLayer('radar')
+    this.radar = new Radar(
+      this.WORLD_WIDTH,
+      this.WORLD_HEIGHT,
+      this.RADAR_WIDTH,
+      this.RADAR_HEIGHT,
+      radarLayer
+    )
+
+    // Position radar in top-right corner
+    const pixiAppScreen = pixiApp.screen
+    radarLayer.x = pixiAppScreen.width - this.RADAR_WIDTH - 10 // 10px margin from edge
+    radarLayer.y = 10 // 10px margin from top
   }
 
   /**
@@ -92,6 +112,28 @@ export class Renderer {
 
     // Update world bounds visualization
     this.updateWorldBounds(state, gameLayer)
+
+    // Update radar with latest snapshot and myShipId
+    const snapshot = this.gameStateToSnapshot(state)
+    this.radar.update(snapshot, state.myShipId)
+  }
+
+  /**
+   * Converts GameState to SnapshotMessage format for Radar.
+   * Radar needs SnapshotMessage, but Renderer only has GameState.
+   */
+  private gameStateToSnapshot(state: GameState): SnapshotMessage {
+    return {
+      t: 'snapshot',
+      tick: state.tick,
+      ships: state.ships,
+      planets: state.planets,
+      pallets: state.pallets,
+      worldBounds: state.worldBounds,
+      myShipId: state.myShipId,
+      done: state.done,
+      win: state.win
+    }
   }
 
   /**
@@ -259,6 +301,11 @@ export class Renderer {
       }
       this.boundsSprite.destroy()
       this.boundsSprite = null
+    }
+
+    // Destroy radar
+    if (this.radar) {
+      this.radar.destroy()
     }
   }
 

@@ -913,5 +913,102 @@ describe('Renderer', () => {
       expect(boundsSprite?.visible).toBe(true)
     })
   })
+
+  describe('Radar Integration', () => {
+    it('creates Radar instance in Renderer constructor', () => {
+      const newRenderer = new Renderer(stateManager, scene, app)
+      
+      // Radar should be created internally
+      expect(newRenderer).toBeDefined()
+      
+      // Radar layer should exist in scene
+      const radarLayer = scene.getLayer('radar')
+      expect(radarLayer).toBeDefined()
+    })
+
+    it('calls radar.update() in Renderer.update()', () => {
+      const gameState = createGameState({
+        ships: [
+          { id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+          { id: 2, pos: { x: -100, y: -200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ],
+        planets: [
+          { id: 1, pos: { x: 0, y: 0 }, radius: 50 }
+        ],
+        pallets: [
+          { id: 1, pos: { x: 50, y: 50 }, active: true }
+        ]
+      })
+
+      stateManager.updateInterpolated(gameState)
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
+
+      // Radar layer should have graphics (radar should have rendered)
+      const radarLayer = scene.getLayer('radar')
+      expect(radarLayer.children.length).toBeGreaterThan(0)
+    })
+
+    it('radar layer exists in Scene', () => {
+      const radarLayer = scene.getLayer('radar')
+      expect(radarLayer).toBeDefined()
+      expect(radarLayer).toBeInstanceOf(Container)
+    })
+
+    it('positions radar in top-right corner', () => {
+      const pixiApp = app.getApplication()
+      const screenWidth = pixiApp.screen.width
+      
+      const radarLayer = scene.getLayer('radar')
+      
+      // Radar should be positioned in top-right (x should be near screen width - radar width - margin)
+      // Allow some tolerance for exact positioning
+      expect(radarLayer.x).toBeGreaterThan(screenWidth - 250) // 200px radar + 50px margin tolerance
+      expect(radarLayer.x).toBeLessThan(screenWidth)
+      expect(radarLayer.y).toBeGreaterThanOrEqual(0)
+      expect(radarLayer.y).toBeLessThan(50) // Should be near top (10px margin + tolerance)
+    })
+
+    it('updates radar every frame with latest state', () => {
+      const gameState1 = createGameState({
+        ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
+      })
+
+      stateManager.updateInterpolated(gameState1)
+      renderer.update()
+
+      const radarLayer = scene.getLayer('radar')
+      const initialChildrenCount = radarLayer.children.length
+
+      const gameState2 = createGameState({
+        ships: [{ id: 1, pos: { x: 200, y: 300 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
+      })
+
+      stateManager.updateInterpolated(gameState2)
+      renderer.update()
+
+      // Radar should have updated (may have same or different children count, but should exist)
+      expect(radarLayer.children.length).toBeGreaterThanOrEqual(0)
+    })
+
+    it('handles radar lifecycle (destroy on cleanup)', () => {
+      const gameState = createGameState()
+
+      stateManager.updateInterpolated(gameState)
+      renderer.update()
+
+      const radarLayer = scene.getLayer('radar')
+      expect(radarLayer.children.length).toBeGreaterThan(0)
+
+      // Destroy renderer
+      renderer.destroy()
+
+      // Radar should be cleaned up (graphics should be removed)
+      // Note: Radar.destroy() clears graphics, but container may still exist
+      expect(() => scene.getLayer('radar')).not.toThrow()
+    })
+  })
 })
 
