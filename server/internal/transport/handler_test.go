@@ -1550,7 +1550,7 @@ var _ = Describe("Connection Disconnection Handling", Label("scope:integration",
 		// Create a connection wrapper to test registry
 		// Note: We can't easily get the actual Connection from WebSocketHandler,
 		// so this test verifies the registry behavior in isolation
-		testConn := NewConnection(conn.(*websocket.Conn))
+		testConn := NewConnection(conn)
 		registry.Associate(testConn, "TEST01", 1)
 
 		// Verify connection is associated
