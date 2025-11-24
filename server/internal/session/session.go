@@ -27,7 +27,16 @@ type Session struct {
 }
 
 // NewSession creates a new session with the given clock, initial world state, and max queue size.
-func NewSession(clock Clock, world entities.World, maxQueueSize int) *Session {
+// If worldWidth or worldHeight is 0.0, the corresponding constant from entities package is used.
+func NewSession(clock Clock, world entities.World, maxQueueSize int, worldWidth, worldHeight float64) *Session {
+	// Use constants if 0.0 is passed (sentinel value for "use default")
+	if worldWidth == 0.0 {
+		worldWidth = entities.WORLD_WIDTH
+	}
+	if worldHeight == 0.0 {
+		worldHeight = entities.WORLD_HEIGHT
+	}
+
 	return &Session{
 		world:        world,
 		queue:        NewCommandQueue(maxQueueSize),
@@ -37,8 +46,8 @@ func NewSession(clock Clock, world entities.World, maxQueueSize int) *Session {
 		G:            1.0,        // Gravitational constant
 		aMax:         100.0,      // Maximum acceleration
 		pickupRadius: 15.0,       // Pallet pickup radius (about ship length for better gameplay)
-		worldWidth:   2000.0,     // World width for wraparound
-		worldHeight:  2000.0,     // World height for wraparound
+		worldWidth:   worldWidth,  // World width for wraparound
+		worldHeight:  worldHeight, // World height for wraparound
 		running:      false,
 		maxQueueSize: maxQueueSize,
 	}
