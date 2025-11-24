@@ -25,6 +25,7 @@ export class Renderer {
   private shipSprites: Map<number, Graphics> = new Map()
   private planetSprites: Map<number, Graphics> = new Map()
   private palletSprites: Map<number, Graphics> = new Map()
+  private boundsSprite: Graphics | null = null
 
   // World bounds constants (2000 m × 2000 m)
   private readonly WORLD_WIDTH = 2000
@@ -88,6 +89,9 @@ export class Renderer {
 
     // Update pallet sprites (generic array iteration, match by id)
     this.updatePalletSprites(state.pallets, gameLayer)
+
+    // Update world bounds visualization
+    this.updateWorldBounds(state, gameLayer)
   }
 
   /**
@@ -187,10 +191,48 @@ export class Renderer {
   }
 
   /**
+   * Updates world bounds visualization (rectangle outline).
+   * Uses world bounds from state or falls back to constants.
+   */
+  private updateWorldBounds(state: GameState, gameLayer: typeof gameLayer): void {
+    const backgroundLayer = this.scene.getLayer('background')
+    
+    // Use world bounds from state, or fall back to constants
+    const worldWidth = state.worldBounds?.width ?? this.WORLD_WIDTH
+    const worldHeight = state.worldBounds?.height ?? this.WORLD_HEIGHT
+
+    // World bounds rectangle is centered at origin
+    // Top-left corner: (-width/2, height/2) in world coordinates
+    // Bottom-right corner: (width/2, -height/2) in world coordinates
+    const topLeft = this.worldToScreen(-worldWidth / 2, worldHeight / 2)
+    const topRight = this.worldToScreen(worldWidth / 2, worldHeight / 2)
+    const bottomRight = this.worldToScreen(worldWidth / 2, -worldHeight / 2)
+    const bottomLeft = this.worldToScreen(-worldWidth / 2, -worldHeight / 2)
+
+    if (!this.boundsSprite) {
+      // Create new bounds sprite
+      this.boundsSprite = new Graphics()
+      backgroundLayer.addChild(this.boundsSprite)
+    }
+
+    // Clear and redraw bounds rectangle outline
+    this.boundsSprite.clear()
+    this.boundsSprite.moveTo(topLeft.x, topLeft.y)
+    this.boundsSprite.lineTo(topRight.x, topRight.y)
+    this.boundsSprite.lineTo(bottomRight.x, bottomRight.y)
+    this.boundsSprite.lineTo(bottomLeft.x, bottomLeft.y)
+    this.boundsSprite.lineTo(topLeft.x, topLeft.y)
+    
+    // Stroke outline (not fill)
+    this.boundsSprite.stroke({ width: 2, color: 0xffffff, alpha: 0.5 })
+  }
+
+  /**
    * Clears all sprites from scene.
    */
   clear(): void {
     const gameLayer = this.scene.getLayer('game')
+    const backgroundLayer = this.scene.getLayer('background')
 
     // Destroy ship sprites (v1 multiplayer format: multiple ships)
     for (const sprite of this.shipSprites.values()) {
@@ -209,6 +251,15 @@ export class Renderer {
       PalletSpriteFactory.destroy(sprite)
     }
     this.palletSprites.clear()
+
+    // Destroy world bounds sprite
+    if (this.boundsSprite) {
+      if (this.boundsSprite.parent) {
+        this.boundsSprite.parent.removeChild(this.boundsSprite)
+      }
+      this.boundsSprite.destroy()
+      this.boundsSprite = null
+    }
   }
 
   /**

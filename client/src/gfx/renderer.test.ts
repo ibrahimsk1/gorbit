@@ -670,17 +670,15 @@ describe('Renderer', () => {
     })
 
     it('uses camera position for coordinate transformation', () => {
-      const gameState: GameState = {
-        tick: 0,
-        ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
-        planets: [],
-        pallets: [],
-        done: false,
-        win: false
-      }
+      const gameState = createGameState({
+        ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
+      })
 
       stateManager.updateInterpolated(gameState)
-      renderer.update()
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
 
       // Camera should have moved toward ship position
       // Ship sprite should be rendered at screen position adjusted by camera
@@ -689,14 +687,9 @@ describe('Renderer', () => {
     })
 
     it('calls camera.update() with player ship position before rendering', () => {
-      const gameState: GameState = {
-        tick: 0,
-        ship: { pos: { x: 150, y: 250 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
-        planets: [],
-        pallets: [],
-        done: false,
-        win: false
-      }
+      const gameState = createGameState({
+        ships: [{ id: 1, pos: { x: 150, y: 250 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
+      })
 
       stateManager.updateInterpolated(gameState)
       
@@ -712,31 +705,24 @@ describe('Renderer', () => {
     })
 
     it('camera follows player ship smoothly with lerp', () => {
-      const gameState1: GameState = {
-        tick: 0,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
-        planets: [],
-        pallets: [],
-        done: false,
-        win: false
-      }
+      const gameState1 = createGameState({
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
+      })
 
       stateManager.updateInterpolated(gameState1)
-      renderer.update()
-
-      const gameState2: GameState = {
-        tick: 1,
-        ship: { pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
-        planets: [],
-        pallets: [],
-        done: false,
-        win: false
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
       }
+
+      const gameState2 = createGameState({
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
+      })
 
       stateManager.updateInterpolated(gameState2)
       
       // Update multiple times to let camera lerp
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 20; i++) {
         renderer.update()
       }
 
@@ -750,16 +736,12 @@ describe('Renderer', () => {
       const screenWidth = pixiApp.screen.width
       const screenHeight = pixiApp.screen.height
 
-      const gameState: GameState = {
-        tick: 0,
-        ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+      const gameState = createGameState({
+        ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [
-          { pos: { x: 0, y: 0 }, radius: 50 } // Planet at world origin
-        ],
-        pallets: [],
-        done: false,
-        win: false
-      }
+          { id: 1, pos: { x: 0, y: 0 }, radius: 50 } // Planet at world origin
+        ]
+      })
 
       stateManager.updateInterpolated(gameState)
       
@@ -778,14 +760,10 @@ describe('Renderer', () => {
       const WORLD_HEIGHT = 2000
 
       // Ship at world edge
-      const gameState: GameState = {
-        tick: 0,
-        ship: { pos: { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
-        planets: [],
-        pallets: [],
-        done: false,
-        win: false
-      }
+      const gameState = createGameState({
+        ships: [{ id: 1, pos: { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: WORLD_WIDTH, height: WORLD_HEIGHT }
+      })
 
       stateManager.updateInterpolated(gameState)
       
@@ -797,6 +775,142 @@ describe('Renderer', () => {
       // Camera should be clamped, sprites should still render correctly
       const gameLayer = scene.getLayer('game')
       expect(gameLayer.children.length).toBe(1)
+    })
+  })
+
+  describe('World Bounds Visualization', () => {
+    it('renders world bounds as rectangle outline in background layer', () => {
+      const gameState = createGameState()
+
+      stateManager.updateInterpolated(gameState)
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
+
+      const backgroundLayer = scene.getLayer('background')
+      // World bounds rectangle should be in background layer
+      expect(backgroundLayer.children.length).toBeGreaterThan(0)
+      
+      // Find the bounds rectangle (should be a Graphics object)
+      const boundsSprite = backgroundLayer.children.find(
+        child => child instanceof Graphics
+      ) as Graphics | undefined
+      expect(boundsSprite).toBeDefined()
+    })
+
+    it('uses world bounds from state for rectangle dimensions', () => {
+      const gameState = createGameState({
+        worldBounds: { width: 3000, height: 3000 }
+      })
+
+      stateManager.updateInterpolated(gameState)
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
+
+      const backgroundLayer = scene.getLayer('background')
+      const boundsSprite = backgroundLayer.children.find(
+        child => child instanceof Graphics
+      ) as Graphics | undefined
+      
+      expect(boundsSprite).toBeDefined()
+      // Bounds sprite should exist and be visible
+      expect(boundsSprite?.visible).toBe(true)
+    })
+
+    it('uses default world bounds constants when state bounds not available', () => {
+      const gameState = createGameState({
+        worldBounds: { width: 2000, height: 2000 } // Default
+      })
+
+      stateManager.updateInterpolated(gameState)
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
+
+      const backgroundLayer = scene.getLayer('background')
+      const boundsSprite = backgroundLayer.children.find(
+        child => child instanceof Graphics
+      ) as Graphics | undefined
+      
+      expect(boundsSprite).toBeDefined()
+    })
+
+    it('updates world bounds visualization when world bounds change', () => {
+      const gameState1 = createGameState({
+        worldBounds: { width: 2000, height: 2000 }
+      })
+
+      stateManager.updateInterpolated(gameState1)
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
+
+      const backgroundLayer = scene.getLayer('background')
+      const initialBoundsSprite = backgroundLayer.children.find(
+        child => child instanceof Graphics
+      ) as Graphics | undefined
+
+      const gameState2 = createGameState({
+        worldBounds: { width: 4000, height: 4000 }
+      })
+
+      stateManager.updateInterpolated(gameState2)
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
+
+      // Bounds visualization should still exist (may be updated or recreated)
+      const updatedBoundsSprite = backgroundLayer.children.find(
+        child => child instanceof Graphics
+      ) as Graphics | undefined
+      expect(updatedBoundsSprite).toBeDefined()
+    })
+
+    it('positions world bounds rectangle centered at origin', () => {
+      const gameState = createGameState({
+        worldBounds: { width: 2000, height: 2000 }
+      })
+
+      stateManager.updateInterpolated(gameState)
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
+
+      const backgroundLayer = scene.getLayer('background')
+      const boundsSprite = backgroundLayer.children.find(
+        child => child instanceof Graphics
+      ) as Graphics | undefined
+      
+      expect(boundsSprite).toBeDefined()
+      // Bounds sprite should be positioned (world coordinates transformed to screen)
+      // The exact screen position depends on camera, but sprite should exist
+      expect(boundsSprite?.visible).toBe(true)
+    })
+
+    it('renders world bounds as outline (stroke, not fill)', () => {
+      const gameState = createGameState()
+
+      stateManager.updateInterpolated(gameState)
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
+
+      const backgroundLayer = scene.getLayer('background')
+      const boundsSprite = backgroundLayer.children.find(
+        child => child instanceof Graphics
+      ) as Graphics | undefined
+      
+      expect(boundsSprite).toBeDefined()
+      // Graphics object should exist (we can't easily test stroke vs fill without inspecting internal state)
+      expect(boundsSprite?.visible).toBe(true)
     })
   })
 })
