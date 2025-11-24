@@ -237,7 +237,7 @@ type InputMessageHandler interface {
 	HandleInput(msg *proto.InputMessage) error
 }
 
-// ParseMessage parses a JSON message and returns a typed message (InputMessage).
+// ParseMessage parses a JSON message and returns a typed message (InputMessage or room management messages).
 // Returns an error if the message is malformed, invalid, or of unknown type.
 func ParseMessage(data []byte) (interface{}, error) {
 	if len(data) == 0 {
@@ -270,6 +270,46 @@ func ParseMessage(data []byte) (interface{}, error) {
 		}
 		if err := proto.ValidateInputMessage(&msg); err != nil {
 			return nil, fmt.Errorf("invalid InputMessage: %w", err)
+		}
+		return &msg, nil
+
+	case "createRoom":
+		var msg proto.CreateRoomMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return nil, fmt.Errorf("failed to parse CreateRoomMessage: %w", err)
+		}
+		if err := proto.ValidateCreateRoomMessage(&msg); err != nil {
+			return nil, fmt.Errorf("invalid CreateRoomMessage: %w", err)
+		}
+		return &msg, nil
+
+	case "joinRoom":
+		var msg proto.JoinRoomMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return nil, fmt.Errorf("failed to parse JoinRoomMessage: %w", err)
+		}
+		if err := proto.ValidateJoinRoomMessage(&msg); err != nil {
+			return nil, fmt.Errorf("invalid JoinRoomMessage: %w", err)
+		}
+		return &msg, nil
+
+	case "leaveRoom":
+		var msg proto.LeaveRoomMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return nil, fmt.Errorf("failed to parse LeaveRoomMessage: %w", err)
+		}
+		if err := proto.ValidateLeaveRoomMessage(&msg); err != nil {
+			return nil, fmt.Errorf("invalid LeaveRoomMessage: %w", err)
+		}
+		return &msg, nil
+
+	case "startMatch":
+		var msg proto.StartMatchMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return nil, fmt.Errorf("failed to parse StartMatchMessage: %w", err)
+		}
+		if err := proto.ValidateStartMatchMessage(&msg); err != nil {
+			return nil, fmt.Errorf("invalid StartMatchMessage: %w", err)
 		}
 		return &msg, nil
 

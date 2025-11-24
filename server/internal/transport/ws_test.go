@@ -484,6 +484,106 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 			Expect(err.Error()).To(ContainSubstring("turn"))
 		})
 
+		It("successfully parses valid CreateRoomMessage JSON", func() {
+			jsonData := []byte(`{"t":"createRoom"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(msg).NotTo(BeNil())
+
+			createRoomMsg, ok := msg.(*proto.CreateRoomMessage)
+			Expect(ok).To(BeTrue())
+			Expect(createRoomMsg.Type).To(Equal("createRoom"))
+		})
+
+		It("successfully parses valid JoinRoomMessage JSON", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC123"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(msg).NotTo(BeNil())
+
+			joinRoomMsg, ok := msg.(*proto.JoinRoomMessage)
+			Expect(ok).To(BeTrue())
+			Expect(joinRoomMsg.Type).To(Equal("joinRoom"))
+			Expect(joinRoomMsg.RoomCode).To(Equal("ABC123"))
+		})
+
+		It("successfully parses valid LeaveRoomMessage JSON", func() {
+			jsonData := []byte(`{"t":"leaveRoom"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(msg).NotTo(BeNil())
+
+			leaveRoomMsg, ok := msg.(*proto.LeaveRoomMessage)
+			Expect(ok).To(BeTrue())
+			Expect(leaveRoomMsg.Type).To(Equal("leaveRoom"))
+		})
+
+		It("successfully parses valid StartMatchMessage JSON", func() {
+			jsonData := []byte(`{"t":"startMatch"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(msg).NotTo(BeNil())
+
+			startMatchMsg, ok := msg.(*proto.StartMatchMessage)
+			Expect(ok).To(BeTrue())
+			Expect(startMatchMsg.Type).To(Equal("startMatch"))
+		})
+
+		It("returns error for CreateRoomMessage with invalid type", func() {
+			jsonData := []byte(`{"t":"invalid"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+		})
+
+		It("returns error for JoinRoomMessage with invalid roomCode (too short)", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("roomCode"))
+		})
+
+		It("returns error for JoinRoomMessage with invalid roomCode (too long)", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC1234"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("roomCode"))
+		})
+
+		It("returns error for JoinRoomMessage with invalid roomCode (non-alphanumeric)", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC-12"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("roomCode"))
+		})
+
+		It("returns error for LeaveRoomMessage with invalid type", func() {
+			jsonData := []byte(`{"t":"invalid"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+		})
+
+		It("returns error for StartMatchMessage with invalid type", func() {
+			jsonData := []byte(`{"t":"invalid"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+		})
+
 	})
 
 	Describe("RouteMessage", func() {
