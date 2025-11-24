@@ -13,8 +13,8 @@ import (
 type ProtocolVersion string
 
 // ProtocolVersionV1 is the current protocol version.
-// This version defines the initial protocol contract with InputMessage,
-// RestartMessage, and SnapshotMessage types.
+// This version defines the initial protocol contract with InputMessage
+// and SnapshotMessage types.
 const ProtocolVersionV1 ProtocolVersion = "v1"
 
 // ParseVersion parses a version string and returns a ProtocolVersion.

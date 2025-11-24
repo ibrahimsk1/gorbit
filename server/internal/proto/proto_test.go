@@ -79,47 +79,9 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 		})
 	})
 
-	Describe("RestartMessage", func() {
-		It("serializes to JSON matching TDD spec", func() {
-			msg := RestartMessage{
-				Type: "restart",
-			}
-
-			data, err := json.Marshal(msg)
-			Expect(err).NotTo(HaveOccurred())
-
-			expected := `{"t":"restart"}`
-			Expect(string(data)).To(MatchJSON(expected))
-		})
-
-		It("deserializes from valid JSON", func() {
-			jsonStr := `{"t":"restart"}`
-			var msg RestartMessage
-
-			err := json.Unmarshal([]byte(jsonStr), &msg)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(msg.Type).To(Equal("restart"))
-		})
-
-		It("round-trips correctly", func() {
-			original := RestartMessage{
-				Type: "restart",
-			}
-
-			data, err := json.Marshal(original)
-			Expect(err).NotTo(HaveOccurred())
-
-			var roundTripped RestartMessage
-			err = json.Unmarshal(data, &roundTripped)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(roundTripped).To(Equal(original))
-		})
-	})
-
 	Describe("Room Management Messages", Label("scope:contract", "loop:g4-proto", "layer:contract", "b:message-types", "r:high"), func() {
 		Describe("PlayerInfo", func() {
-			It("serializes to JSON matching TDD spec", func() {
+		It("serializes to JSON matching TDD spec", func() {
 				player := PlayerInfo{
 					ID:   42,
 					Name: "Player1",
@@ -163,39 +125,39 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 			It("serializes to JSON matching TDD spec", func() {
 				msg := CreateRoomMessage{
 					Type: "createRoom",
-				}
+			}
 
-				data, err := json.Marshal(msg)
-				Expect(err).NotTo(HaveOccurred())
+			data, err := json.Marshal(msg)
+			Expect(err).NotTo(HaveOccurred())
 
 				expected := `{"t":"createRoom"}`
-				Expect(string(data)).To(MatchJSON(expected))
-			})
+			Expect(string(data)).To(MatchJSON(expected))
+		})
 
-			It("deserializes from valid JSON", func() {
+		It("deserializes from valid JSON", func() {
 				jsonStr := `{"t":"createRoom"}`
 				var msg CreateRoomMessage
 
-				err := json.Unmarshal([]byte(jsonStr), &msg)
-				Expect(err).NotTo(HaveOccurred())
+			err := json.Unmarshal([]byte(jsonStr), &msg)
+			Expect(err).NotTo(HaveOccurred())
 				Expect(msg.Type).To(Equal("createRoom"))
-			})
+		})
 
-			It("round-trips correctly", func() {
+		It("round-trips correctly", func() {
 				original := CreateRoomMessage{
 					Type: "createRoom",
-				}
+			}
 
-				data, err := json.Marshal(original)
-				Expect(err).NotTo(HaveOccurred())
+			data, err := json.Marshal(original)
+			Expect(err).NotTo(HaveOccurred())
 
 				var roundTripped CreateRoomMessage
-				err = json.Unmarshal(data, &roundTripped)
-				Expect(err).NotTo(HaveOccurred())
+			err = json.Unmarshal(data, &roundTripped)
+			Expect(err).NotTo(HaveOccurred())
 
-				Expect(roundTripped).To(Equal(original))
-			})
+			Expect(roundTripped).To(Equal(original))
 		})
+	})
 
 		Describe("JoinRoomMessage", func() {
 			It("serializes to JSON matching TDD spec", func() {
@@ -1270,21 +1232,6 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				err := ValidateInputMessage(msg)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("turn"))
-			})
-		})
-
-		Describe("ValidateRestartMessage", func() {
-			It("accepts valid messages", func() {
-				msg := &RestartMessage{Type: "restart"}
-				err := ValidateRestartMessage(msg)
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("rejects invalid type", func() {
-				msg := &RestartMessage{Type: "invalid"}
-				err := ValidateRestartMessage(msg)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("type"))
 			})
 		})
 

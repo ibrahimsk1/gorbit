@@ -9,12 +9,6 @@ type InputMessage struct {
 	Turn   float32 `json:"turn"`   // Turn input [-1.0, 1.0]
 }
 
-// RestartMessage represents a client restart request message.
-// Client → Server message format: {"t":"restart"}
-type RestartMessage struct {
-	Type string `json:"t"` // Message type: "restart"
-}
-
 // PlayerInfo represents player information.
 // Used in room state messages: {"id":u32,"name":str}
 type PlayerInfo struct {

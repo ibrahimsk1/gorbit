@@ -31,20 +31,6 @@ func ValidateInputMessage(msg *InputMessage) error {
 	return nil
 }
 
-// ValidateRestartMessage validates a RestartMessage.
-// Returns an error if the message is invalid.
-func ValidateRestartMessage(msg *RestartMessage) error {
-	if msg == nil {
-		return fmt.Errorf("restart message is nil")
-	}
-
-	if msg.Type != "restart" {
-		return fmt.Errorf("invalid type: expected 'restart', got '%s'", msg.Type)
-	}
-
-	return nil
-}
-
 // ValidateSnapshotMessage validates a SnapshotMessage.
 // Returns an error if the message is invalid.
 func ValidateSnapshotMessage(msg *SnapshotMessage) error {
