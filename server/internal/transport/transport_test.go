@@ -212,68 +212,6 @@ var _ = Describe("WebSocket Transport End-to-End", Label("scope:integration", "l
 		})
 	})
 
-	Describe("Restart Message Flow", func() {
-		It("resets session state on restart message", func() {
-			dialer := websocket.Dialer{}
-			conn, _, err := dialer.Dial(serverURL, nil)
-			Expect(err).NotTo(HaveOccurred())
-			defer conn.Close()
-
-			// Read initial snapshot
-			conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-			var initialSnapshot proto.SnapshotMessage
-			err = conn.ReadJSON(&initialSnapshot)
-			if err != nil {
-				initialSnapshot.Tick = 0
-			}
-
-			// Advance session by sending some commands
-			for i := 1; i <= 2; i++ {
-				inputMsg := map[string]interface{}{
-					"t":      "input",
-					"seq":    uint32(i),
-					"thrust": 0.5,
-					"turn":   0.0,
-				}
-				conn.WriteJSON(inputMsg)
-			}
-
-			// Wait for progression
-			conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-			var progressedSnapshot proto.SnapshotMessage
-			for i := 0; i < 3; i++ {
-				var snapshot proto.SnapshotMessage
-				err = conn.ReadJSON(&snapshot)
-				if err == nil && snapshot.Tick > initialSnapshot.Tick {
-					progressedSnapshot = snapshot
-					break
-				}
-			}
-
-			// Verify we progressed
-			if progressedSnapshot.Tick > 0 {
-				// Send restart message
-				restartMsg := map[string]interface{}{
-					"t": "restart",
-				}
-				err = conn.WriteJSON(restartMsg)
-				Expect(err).NotTo(HaveOccurred())
-
-				// Wait for reset snapshot
-				conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-				var resetSnapshot proto.SnapshotMessage
-				err = conn.ReadJSON(&resetSnapshot)
-				Expect(err).NotTo(HaveOccurred())
-
-				// Verify state is reset (tick should be 0 or very low)
-				Expect(resetSnapshot.Type).To(Equal("snapshot"))
-				Expect(resetSnapshot.Tick).To(BeNumerically("<=", uint32(2)))
-				// Ship should be at initial position
-				Expect(resetSnapshot.Ship.Pos.X).To(BeNumerically("~", 10.0, 1.0))
-				Expect(resetSnapshot.Ship.Pos.Y).To(BeNumerically("~", 0.0, 1.0))
-			}
-		})
-	})
 
 	Describe("Snapshot Broadcasting", func() {
 		It("broadcasts snapshots at approximately 10-15 Hz rate", func() {

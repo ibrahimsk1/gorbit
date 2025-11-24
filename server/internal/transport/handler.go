@@ -92,7 +92,7 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Route message to session handler
-		err = RouteMessage(data, sessionHandler, sessionHandler)
+		err = RouteMessage(data, sessionHandler)
 		if err != nil {
 			// Record error event
 			if eventsCounter := observability.GetConnectionEventsCounter(); eventsCounter != nil {

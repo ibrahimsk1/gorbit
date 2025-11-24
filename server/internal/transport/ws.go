@@ -237,12 +237,7 @@ type InputMessageHandler interface {
 	HandleInput(msg *proto.InputMessage) error
 }
 
-// RestartMessageHandler handles RestartMessage messages.
-type RestartMessageHandler interface {
-	HandleRestart(msg *proto.RestartMessage) error
-}
-
-// ParseMessage parses a JSON message and returns a typed message (InputMessage or RestartMessage).
+// ParseMessage parses a JSON message and returns a typed message (InputMessage).
 // Returns an error if the message is malformed, invalid, or of unknown type.
 func ParseMessage(data []byte) (interface{}, error) {
 	if len(data) == 0 {
@@ -278,16 +273,6 @@ func ParseMessage(data []byte) (interface{}, error) {
 		}
 		return &msg, nil
 
-	case "restart":
-		var msg proto.RestartMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return nil, fmt.Errorf("failed to parse RestartMessage: %w", err)
-		}
-		if err := proto.ValidateRestartMessage(&msg); err != nil {
-			return nil, fmt.Errorf("invalid RestartMessage: %w", err)
-		}
-		return &msg, nil
-
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", typeStr)
 	}
@@ -295,7 +280,7 @@ func ParseMessage(data []byte) (interface{}, error) {
 
 // RouteMessage parses a JSON message, validates it, and routes it to the appropriate handler.
 // Returns an error if parsing, validation, or handler execution fails.
-func RouteMessage(data []byte, inputHandler InputMessageHandler, restartHandler RestartMessageHandler) error {
+func RouteMessage(data []byte, inputHandler InputMessageHandler) error {
 	msg, err := ParseMessage(data)
 	if err != nil {
 		return err
@@ -308,12 +293,6 @@ func RouteMessage(data []byte, inputHandler InputMessageHandler, restartHandler 
 			return fmt.Errorf("InputMessageHandler is nil")
 		}
 		return inputHandler.HandleInput(m)
-
-	case *proto.RestartMessage:
-		if restartHandler == nil {
-			return fmt.Errorf("RestartMessageHandler is nil")
-		}
-		return restartHandler.HandleRestart(m)
 
 	default:
 		return fmt.Errorf("unexpected message type: %T", msg)
@@ -378,7 +357,7 @@ func NewInitialWorld() entities.World {
 }
 
 // SessionHandler manages a session for a WebSocket connection.
-// It implements InputMessageHandler and RestartMessageHandler interfaces.
+// It implements InputMessageHandler interface.
 type SessionHandler struct {
 	session        *session.Session
 	conn           *Connection
@@ -415,21 +394,11 @@ func (h *SessionHandler) HandleInput(msg *proto.InputMessage) error {
 		Turn:   msg.Turn,
 	}
 
-	success := h.session.EnqueueCommand(msg.Seq, cmd)
+	// Use playerID 1 as default for per-connection sessions (will be removed in step 6)
+	success := h.session.EnqueueCommand(msg.Seq, 1, cmd)
 	if !success {
 		return fmt.Errorf("failed to enqueue command with seq %d", msg.Seq)
 	}
-
-	return nil
-}
-
-// HandleRestart resets the session to the initial world state.
-func (h *SessionHandler) HandleRestart(msg *proto.RestartMessage) error {
-	// Stop current session
-	h.session.Stop()
-
-	// Create new session with initial world state
-	h.session = session.NewSession(h.clock, h.initialWorld, 100, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
 
 	return nil
 }

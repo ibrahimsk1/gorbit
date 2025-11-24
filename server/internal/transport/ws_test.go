@@ -387,18 +387,6 @@ func (h *mockInputHandler) HandleInput(msg *proto.InputMessage) error {
 	return nil
 }
 
-type mockRestartHandler struct {
-	lastMessage *proto.RestartMessage
-	shouldError bool
-}
-
-func (h *mockRestartHandler) HandleRestart(msg *proto.RestartMessage) error {
-	h.lastMessage = msg
-	if h.shouldError {
-		return errors.New("handler error")
-	}
-	return nil
-}
 
 var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop:g5-adapter", "layer:server", "dep:ws", "b:message-routing", "r:high"), func() {
 
@@ -418,17 +406,6 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 			Expect(inputMsg.Turn).To(Equal(float32(-0.5)))
 		})
 
-		It("successfully parses valid RestartMessage JSON", func() {
-			jsonData := []byte(`{"t":"restart"}`)
-			msg, err := ParseMessage(jsonData)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(msg).NotTo(BeNil())
-
-			restartMsg, ok := msg.(*proto.RestartMessage)
-			Expect(ok).To(BeTrue())
-			Expect(restartMsg.Type).To(Equal("restart"))
-		})
 
 		It("returns error for malformed JSON", func() {
 			jsonData := []byte(`{"t":"input","seq":invalid}`)
@@ -507,59 +484,31 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 			Expect(err.Error()).To(ContainSubstring("turn"))
 		})
 
-		It("returns error for RestartMessage with invalid type", func() {
-			jsonData := []byte(`{"t":"invalid"}`)
-			msg, err := ParseMessage(jsonData)
-
-			Expect(err).To(HaveOccurred())
-			Expect(msg).To(BeNil())
-		})
 	})
 
 	Describe("RouteMessage", func() {
 		var inputHandler *mockInputHandler
-		var restartHandler *mockRestartHandler
 
 		BeforeEach(func() {
 			inputHandler = &mockInputHandler{}
-			restartHandler = &mockRestartHandler{}
 		})
 
 		It("successfully routes valid InputMessage to InputMessageHandler", func() {
 			jsonData := []byte(`{"t":"input","seq":42,"thrust":0.75,"turn":-0.5}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+			err := RouteMessage(jsonData, inputHandler)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(inputHandler.lastMessage).NotTo(BeNil())
 			Expect(inputHandler.lastMessage.Seq).To(Equal(uint32(42)))
 			Expect(inputHandler.lastMessage.Thrust).To(Equal(float32(0.75)))
 			Expect(inputHandler.lastMessage.Turn).To(Equal(float32(-0.5)))
-			Expect(restartHandler.lastMessage).To(BeNil())
 		})
 
-		It("successfully routes valid RestartMessage to RestartMessageHandler", func() {
-			jsonData := []byte(`{"t":"restart"}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(restartHandler.lastMessage).NotTo(BeNil())
-			Expect(restartHandler.lastMessage.Type).To(Equal("restart"))
-			Expect(inputHandler.lastMessage).To(BeNil())
-		})
 
 		It("returns handler error if InputMessageHandler fails", func() {
 			inputHandler.shouldError = true
 			jsonData := []byte(`{"t":"input","seq":1,"thrust":0.5,"turn":0.0}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("handler error"))
-		})
-
-		It("returns handler error if RestartMessageHandler fails", func() {
-			restartHandler.shouldError = true
-			jsonData := []byte(`{"t":"restart"}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+			err := RouteMessage(jsonData, inputHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("handler error"))
@@ -567,16 +516,15 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 
 		It("returns error for malformed messages", func() {
 			jsonData := []byte(`{"t":"input","seq":invalid}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+			err := RouteMessage(jsonData, inputHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(inputHandler.lastMessage).To(BeNil())
-			Expect(restartHandler.lastMessage).To(BeNil())
 		})
 
 		It("returns error for validation failures", func() {
 			jsonData := []byte(`{"t":"input","seq":0,"thrust":0.5,"turn":0.0}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+			err := RouteMessage(jsonData, inputHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(inputHandler.lastMessage).To(BeNil())
@@ -584,11 +532,10 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 
 		It("returns error for unknown message types", func() {
 			jsonData := []byte(`{"t":"unknown"}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+			err := RouteMessage(jsonData, inputHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(inputHandler.lastMessage).To(BeNil())
-			Expect(restartHandler.lastMessage).To(BeNil())
 		})
 	})
 
@@ -778,58 +725,6 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			Expect(world.Tick).To(BeNumerically(">", uint32(0)))
 		})
 
-		It("successfully resets session world state on restart", func() {
-			var conn *websocket.Conn
-			var clientConn *websocket.Conn
-
-			mux := http.NewServeMux()
-			mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-				var err error
-				conn, err = UpgradeConnection(w, r)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-			})
-
-			testServer = httptest.NewServer(mux)
-			serverURL = "ws" + testServer.URL[4:] + "/ws"
-
-			dialer := websocket.Dialer{}
-			var err error
-			clientConn, _, err = dialer.Dial(serverURL, nil)
-			Expect(err).NotTo(HaveOccurred())
-			defer clientConn.Close()
-
-			Eventually(func() bool {
-				return conn != nil
-			}).Should(BeTrue())
-
-			connection := NewConnection(conn)
-			defer connection.Close()
-
-			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
-
-			// Advance session to tick 10
-			clock.Advance(10 * 33 * time.Millisecond)
-			handler.session.Run(10)
-			world := handler.session.GetWorld()
-			// Session may process fewer ticks if time hasn't advanced enough
-			// Just verify we've progressed past tick 0
-			Expect(world.Tick).To(BeNumerically(">=", uint32(1)))
-
-			// Restart
-			restartMsg := &proto.RestartMessage{Type: "restart"}
-			err = handler.HandleRestart(restartMsg)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify world is reset
-			world = handler.session.GetWorld()
-			Expect(world.Tick).To(Equal(uint32(0)))
-			Expect(world.Ship.Pos.X).To(Equal(10.0))
-			Expect(world.Ship.Pos.Y).To(Equal(0.0))
-		})
 	})
 
 	Describe("Session Run Loop and Snapshot Broadcasting", func() {
@@ -1018,64 +913,6 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			Expect(snapshot.Tick).To(BeNumerically(">", uint32(0)))
 		})
 
-		It("handles restart message and broadcasts reset snapshot", func() {
-			var conn *websocket.Conn
-			var clientConn *websocket.Conn
-
-			mux := http.NewServeMux()
-			mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-				var err error
-				conn, err = UpgradeConnection(w, r)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-			})
-
-			testServer = httptest.NewServer(mux)
-			serverURL = "ws" + testServer.URL[4:] + "/ws"
-
-			dialer := websocket.Dialer{}
-			var err error
-			clientConn, _, err = dialer.Dial(serverURL, nil)
-			Expect(err).NotTo(HaveOccurred())
-			defer clientConn.Close()
-
-			Eventually(func() bool {
-				return conn != nil
-			}).Should(BeTrue())
-
-			connection := NewConnection(conn)
-			defer connection.Close()
-
-			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
-			handler.Start()
-			defer handler.Stop()
-
-			// Advance session to tick 5
-			clock.Advance(5 * 33 * time.Millisecond)
-
-			// Send restart message
-			restartMsg := map[string]interface{}{
-				"t": "restart",
-			}
-			err = clientConn.WriteJSON(restartMsg)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Advance time to process restart and broadcast snapshot
-			clock.Advance(200 * time.Millisecond)
-
-			// Read snapshot
-			var snapshot proto.SnapshotMessage
-			err = clientConn.ReadJSON(&snapshot)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify snapshot shows reset state
-			Expect(snapshot.Type).To(Equal("snapshot"))
-			// After restart, tick should be 0 or very low
-			Expect(snapshot.Tick).To(BeNumerically("<=", uint32(2)))
-		})
 	})
 
 	Describe("Graceful Shutdown", func() {
