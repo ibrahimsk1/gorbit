@@ -407,33 +407,37 @@ func NewErrorMessage(err error) []byte {
 }
 
 // NewInitialWorld creates a default initial world state for new sessions.
+// NOTE: This is legacy code for per-connection sessions (removed in step 6).
+// For room-based sessions, initial world is created by RoomManager.StartMatch.
 // Ship at position (70, 0) with zero velocity, 100 energy.
-// Sun at origin (0, 0) with radius 50, mass 1000.
-// Ship starts outside sun radius (70 > 50) to avoid immediate collision.
+// Planet at origin (0, 0) with radius 50, mass 1000.
+// Ship starts outside planet radius (70 > 50) to avoid immediate collision.
 // Initial pallets positioned around the world in a circular pattern.
 func NewInitialWorld() entities.World {
 	ship := entities.NewShip(
+		1, // Player ID 1 for legacy single-player sessions
 		entities.NewVec2(70.0, 0.0),
 		entities.NewVec2(0.0, 0.0),
 		0.0,
 		100.0,
 	)
-	sun := entities.NewSun(
+	planet := entities.NewPlanet(
+		1, // Planet ID 1
 		entities.NewVec2(0.0, 0.0),
 		50.0,
 		1000.0,
 	)
 
-	// Create initial pallets positioned in a circle around the sun
+	// Create initial pallets positioned in a circle around the planet
 	// Position them at various distances and angles for gameplay variety
 	pallets := []entities.Pallet{
-		// First ring - closer to sun
+		// First ring - closer to planet
 		entities.NewPallet(1, entities.NewVec2(80.0, 0.0), true),  // Right
 		entities.NewPallet(2, entities.NewVec2(-80.0, 0.0), true), // Left
 		entities.NewPallet(3, entities.NewVec2(0.0, 80.0), true),  // Up
 		entities.NewPallet(4, entities.NewVec2(0.0, -80.0), true), // Down
 
-		// Second ring - further from sun
+		// Second ring - further from planet
 		entities.NewPallet(5, entities.NewVec2(120.0, 60.0), true),   // Right-up
 		entities.NewPallet(6, entities.NewVec2(-120.0, 60.0), true),  // Left-up
 		entities.NewPallet(7, entities.NewVec2(120.0, -60.0), true),  // Right-down
@@ -444,7 +448,7 @@ func NewInitialWorld() entities.World {
 		entities.NewPallet(10, entities.NewVec2(-150.0, 0.0), true), // Far left
 	}
 
-	return entities.NewWorld(ship, sun, pallets)
+	return entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, pallets)
 }
 
 // SessionHandler manages a session for a WebSocket connection.

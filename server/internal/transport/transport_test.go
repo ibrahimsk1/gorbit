@@ -103,11 +103,13 @@ var _ = Describe("WebSocket Transport End-to-End", Label("scope:integration", "l
 			err = conn.ReadJSON(&snapshot)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify snapshot
+			// Verify snapshot (multiplayer format)
 			Expect(snapshot.Type).To(Equal("snapshot"))
 			Expect(snapshot.Tick).To(BeNumerically(">", uint32(0)))
+			// Ships array should have at least one ship
+			Expect(len(snapshot.Ships)).To(BeNumerically(">=", 1))
 			// Ship state should reflect command processing
-			Expect(snapshot.Ship.Energy).To(BeNumerically("<=", float32(100.0)))
+			Expect(snapshot.Ships[0].Energy).To(BeNumerically("<=", float32(100.0)))
 		})
 
 		It("processes multiple input commands in sequence", func() {
@@ -164,7 +166,11 @@ var _ = Describe("WebSocket Transport End-to-End", Label("scope:integration", "l
 			}
 
 			initialTick := initialSnapshot.Tick
-			initialPosX := initialSnapshot.Ship.Pos.X
+			// Get initial position from first ship in Ships array
+			var initialPosX float64
+			if len(initialSnapshot.Ships) > 0 {
+				initialPosX = initialSnapshot.Ships[0].Pos.X
+			}
 
 			// Send input command with thrust
 			inputMsg := map[string]interface{}{
@@ -187,7 +193,9 @@ var _ = Describe("WebSocket Transport End-to-End", Label("scope:integration", "l
 					receivedSnapshots = append(receivedSnapshots, snapshot)
 					// Verify snapshot has valid structure
 					Expect(snapshot.Tick).To(BeNumerically(">=", uint32(0)))
-					Expect(snapshot.Ship.Energy).To(BeNumerically(">=", float32(0.0)))
+					// Verify Ships array
+					Expect(len(snapshot.Ships)).To(BeNumerically(">=", 1))
+					Expect(snapshot.Ships[0].Energy).To(BeNumerically(">=", float32(0.0)))
 				}
 				if len(receivedSnapshots) >= 3 {
 					break
@@ -203,7 +211,10 @@ var _ = Describe("WebSocket Transport End-to-End", Label("scope:integration", "l
 					hasProgression = true
 					// Ship position may have changed due to gravity or thrust
 					// Use approximate matching to account for floating point precision
-					Expect(snapshot.Ship.Pos.X).To(BeNumerically("~", initialPosX, 0.1))
+					// Verify ship position changed
+					if len(snapshot.Ships) > 0 {
+						Expect(snapshot.Ships[0].Pos.X).To(BeNumerically("~", initialPosX, 0.1))
+					}
 					break
 				}
 			}
@@ -258,22 +269,23 @@ var _ = Describe("WebSocket Transport End-to-End", Label("scope:integration", "l
 			Expect(snapshot.Type).To(Equal("snapshot"))
 			Expect(snapshot.Tick).To(BeNumerically(">=", uint32(0)))
 
-			// Verify ship fields
-			Expect(snapshot.Ship.Pos.X).To(BeNumerically(">=", -1000.0)) // Reasonable bounds
-			Expect(snapshot.Ship.Pos.Y).To(BeNumerically(">=", -1000.0))
-			Expect(snapshot.Ship.Energy).To(BeNumerically(">=", float32(0.0)))
+			// Verify Ships array (multiplayer format)
+			Expect(len(snapshot.Ships)).To(BeNumerically(">=", 1))
+			Expect(snapshot.Ships[0].Pos.X).To(BeNumerically(">=", -1000.0)) // Reasonable bounds
+			Expect(snapshot.Ships[0].Pos.Y).To(BeNumerically(">=", -1000.0))
+			Expect(snapshot.Ships[0].Energy).To(BeNumerically(">=", float32(0.0)))
 
-			// Verify sun fields
-			Expect(snapshot.Sun.Pos.X).To(Equal(0.0))
-			Expect(snapshot.Sun.Pos.Y).To(Equal(0.0))
-			Expect(snapshot.Sun.Radius).To(Equal(float32(50.0)))
+			// Verify Planets array
+			Expect(len(snapshot.Planets)).To(BeNumerically(">=", 1))
+			Expect(snapshot.Planets[0].Pos.X).To(Equal(0.0))
+			Expect(snapshot.Planets[0].Pos.Y).To(Equal(0.0))
+			Expect(snapshot.Planets[0].Radius).To(Equal(float32(50.0)))
 
 			// Verify pallets (should be array, may be empty)
 			Expect(snapshot.Pallets).NotTo(BeNil())
 
-			// Verify done/win flags exist
-			_ = snapshot.Done
-			_ = snapshot.Win
+			// Verify MyShipId
+			Expect(snapshot.MyShipId).To(BeNumerically(">", uint32(0)))
 		})
 	})
 
@@ -485,7 +497,9 @@ var _ = Describe("WebSocket Transport End-to-End", Label("scope:integration", "l
 				for _, snapshot := range snapshots {
 					Expect(snapshot.Type).To(Equal("snapshot"))
 					Expect(snapshot.Tick).To(BeNumerically(">=", uint32(0)))
-					Expect(snapshot.Ship.Energy).To(BeNumerically(">=", float32(0.0)))
+					// Verify Ships array
+					Expect(len(snapshot.Ships)).To(BeNumerically(">=", 1))
+					Expect(snapshot.Ships[0].Energy).To(BeNumerically(">=", float32(0.0)))
 				}
 			}
 		})
@@ -525,7 +539,9 @@ var _ = Describe("WebSocket Transport End-to-End", Label("scope:integration", "l
 					receivedSnapshots = append(receivedSnapshots, snapshot)
 					// Verify snapshot has valid structure
 					Expect(snapshot.Tick).To(BeNumerically(">=", uint32(0)))
-					Expect(snapshot.Ship.Energy).To(BeNumerically(">=", float32(0.0)))
+					// Verify Ships array
+					Expect(len(snapshot.Ships)).To(BeNumerically(">=", 1))
+					Expect(snapshot.Ships[0].Energy).To(BeNumerically(">=", float32(0.0)))
 				}
 				if len(receivedSnapshots) >= 3 {
 					break

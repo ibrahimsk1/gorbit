@@ -881,18 +881,13 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 
 	// Helper function to create initial world state
 	newInitialWorld := func() entities.World {
-		ship := entities.NewShip(
-			entities.NewVec2(10.0, 0.0),
-			entities.NewVec2(0.0, 0.0),
-			0.0,
-			100.0,
-		)
-		sun := entities.NewSun(
-			entities.NewVec2(0.0, 0.0),
-			50.0,
-			1000.0,
-		)
-		return entities.NewWorld(ship, sun, nil)
+		ships := []entities.Ship{
+			entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0),
+		}
+		planets := []entities.Planet{
+			entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+		}
+		return entities.NewWorld(ships, planets, nil)
 	}
 
 	BeforeEach(func() {
@@ -1110,16 +1105,20 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			err = clientConn.ReadJSON(&snapshot)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify snapshot content
+			// Verify snapshot content (multiplayer format)
 			Expect(snapshot.Type).To(Equal("snapshot"))
+			// Ships array should have at least one ship
+			Expect(len(snapshot.Ships)).To(BeNumerically(">=", 1))
 			// Ship position may have changed slightly due to gravity, use approximate matching
-			Expect(snapshot.Ship.Pos.X).To(BeNumerically("~", 10.0, 0.5))
-			Expect(snapshot.Ship.Pos.Y).To(BeNumerically("~", 0.0, 0.5))
+			Expect(snapshot.Ships[0].Pos.X).To(BeNumerically("~", 10.0, 0.5))
+			Expect(snapshot.Ships[0].Pos.Y).To(BeNumerically("~", 0.0, 0.5))
 			// Energy may have decreased if ship was thrusting, but should be close to 100
-			Expect(snapshot.Ship.Energy).To(BeNumerically(">=", float32(90.0)))
-			Expect(snapshot.Sun.Pos.X).To(Equal(0.0))
-			Expect(snapshot.Sun.Pos.Y).To(Equal(0.0))
-			Expect(snapshot.Sun.Radius).To(Equal(float32(50.0)))
+			Expect(snapshot.Ships[0].Energy).To(BeNumerically(">=", float32(90.0)))
+			// Planets array should have at least one planet
+			Expect(len(snapshot.Planets)).To(BeNumerically(">=", 1))
+			Expect(snapshot.Planets[0].Pos.X).To(Equal(0.0))
+			Expect(snapshot.Planets[0].Pos.Y).To(Equal(0.0))
+			Expect(snapshot.Planets[0].Radius).To(Equal(float32(50.0)))
 			Expect(snapshot.Pallets).To(BeEmpty())
 			// Game may have ended if ship collided with sun, so just verify snapshot structure
 			// Don't assert on Done/Win as they depend on game state
