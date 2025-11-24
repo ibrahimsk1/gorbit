@@ -765,6 +765,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				Tick:  42,
 				Ships: []ShipSnapshot{
 					{
+						ID:     1,
 					Pos:    Vec2Snapshot{X: 10.5, Y: 20.3},
 					Vel:    Vec2Snapshot{X: 1.0, Y: -2.0},
 					Rot:    1.57,
@@ -813,6 +814,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				"tick": 100,
 				"ships": [
 					{
+						"id": 1,
 					"pos": {"x": 5.0, "y": 10.0},
 					"vel": {"x": 0.5, "y": -0.5},
 					"rot": 0.785,
@@ -839,6 +841,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 			Expect(msg.Type).To(Equal("snapshot"))
 			Expect(msg.Tick).To(Equal(uint32(100)))
 			Expect(len(msg.Ships)).To(Equal(1))
+			Expect(msg.Ships[0].ID).To(Equal(uint32(1)))
 			Expect(msg.Ships[0].Pos.X).To(Equal(5.0))
 			Expect(msg.Ships[0].Pos.Y).To(Equal(10.0))
 			Expect(msg.Ships[0].Vel.X).To(Equal(0.5))
@@ -866,6 +869,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				Tick:  200,
 				Ships: []ShipSnapshot{
 					{
+						ID:     1,
 					Pos:    Vec2Snapshot{X: -5.5, Y: 7.3},
 					Vel:    Vec2Snapshot{X: -1.2, Y: 0.8},
 					Rot:    3.14,
@@ -936,12 +940,14 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				Tick: 1,
 				Ships: []ShipSnapshot{
 					{
+						ID:     1,
 						Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
 						Vel:    Vec2Snapshot{X: 1.0, Y: 0.0},
 						Rot:    0.0,
 						Energy: 100.0,
 					},
 					{
+						ID:     2,
 						Pos:    Vec2Snapshot{X: -10.0, Y: -20.0},
 						Vel:    Vec2Snapshot{X: -1.0, Y: 0.0},
 						Rot:    3.14,
@@ -975,7 +981,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				Type: "snapshot",
 				Tick: 1,
 				Ships: []ShipSnapshot{
-					{Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Vel: Vec2Snapshot{X: 0.0, Y: 0.0}, Rot: 0.0, Energy: 100.0},
+					{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Vel: Vec2Snapshot{X: 0.0, Y: 0.0}, Rot: 0.0, Energy: 100.0},
 				},
 				Planets: []PlanetSnapshot{
 					{ID: 1, Pos: Vec2Snapshot{X: 100.0, Y: 100.0}, Radius: 10.0},
@@ -1074,8 +1080,9 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 			Expect(string(data)).To(MatchJSON(expected))
 		})
 
-		It("ShipSnapshot serializes correctly", func() {
+		It("ShipSnapshot serializes correctly", Label("scope:contract", "loop:g4-proto", "layer:contract", "b:snapshot-types", "r:medium"), func() {
 			ship := ShipSnapshot{
+				ID:     42,
 				Pos:    Vec2Snapshot{X: 1.0, Y: 2.0},
 				Vel:    Vec2Snapshot{X: 3.0, Y: 4.0},
 				Rot:    1.5,
@@ -1087,10 +1094,63 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 			var unmarshaled map[string]interface{}
 			err = json.Unmarshal(data, &unmarshaled)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(unmarshaled).To(HaveKey("id"))
 			Expect(unmarshaled).To(HaveKey("pos"))
 			Expect(unmarshaled).To(HaveKey("vel"))
 			Expect(unmarshaled).To(HaveKey("rot"))
 			Expect(unmarshaled).To(HaveKey("energy"))
+			Expect(unmarshaled["id"]).To(BeNumerically("==", 42))
+		})
+
+		It("ShipSnapshot deserializes with ID field", Label("scope:contract", "loop:g4-proto", "layer:contract", "b:snapshot-types", "r:medium"), func() {
+			jsonStr := `{"id":100,"pos":{"x":10.0,"y":20.0},"vel":{"x":1.0,"y":-1.0},"rot":1.57,"energy":75.5}`
+			var ship ShipSnapshot
+
+			err := json.Unmarshal([]byte(jsonStr), &ship)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ship.ID).To(Equal(uint32(100)))
+			Expect(ship.Pos.X).To(Equal(10.0))
+			Expect(ship.Pos.Y).To(Equal(20.0))
+		})
+
+		It("ShipSnapshot round-trips with ID field", Label("scope:contract", "loop:g4-proto", "layer:contract", "b:snapshot-types", "r:medium"), func() {
+			original := ShipSnapshot{
+				ID:     123,
+				Pos:    Vec2Snapshot{X: 5.5, Y: 7.3},
+				Vel:    Vec2Snapshot{X: 1.2, Y: -0.8},
+				Rot:    3.14,
+				Energy: 50.25,
+			}
+
+			data, err := json.Marshal(original)
+			Expect(err).NotTo(HaveOccurred())
+
+			var roundTripped ShipSnapshot
+			err = json.Unmarshal(data, &roundTripped)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(roundTripped).To(Equal(original))
+		})
+
+		It("ShipSnapshot enforces exact JSON field name for ID", Label("scope:contract", "loop:g4-proto", "layer:contract", "b:snapshot-types", "r:medium"), func() {
+			ship := ShipSnapshot{
+				ID:     1,
+				Pos:    Vec2Snapshot{X: 0, Y: 0},
+				Vel:    Vec2Snapshot{X: 0, Y: 0},
+				Rot:    0,
+				Energy: 100,
+			}
+
+			data, err := json.Marshal(ship)
+			Expect(err).NotTo(HaveOccurred())
+
+			var unmarshaled map[string]interface{}
+			err = json.Unmarshal(data, &unmarshaled)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(unmarshaled).To(HaveKey("id"))
+			Expect(unmarshaled).NotTo(HaveKey("ID"))
+			Expect(unmarshaled).NotTo(HaveKey("shipId"))
 		})
 
 		It("SunSnapshot serializes correctly", func() {
@@ -1235,17 +1295,18 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 					Tick:  1,
 					Ships: []ShipSnapshot{
 						{
-							Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
-							Vel:    Vec2Snapshot{X: 0.0, Y: 0.0},
-							Rot:    0.0,
-							Energy: 100.0,
-						},
+							ID:     1,
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Vel:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Rot:    0.0,
+						Energy: 100.0,
+					},
 					},
 					Planets: []PlanetSnapshot{
 						{
 							ID:     1,
-							Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
-							Radius: 5.0,
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Radius: 5.0,
 						},
 					},
 					Pallets: []PalletSnapshot{},
@@ -1272,11 +1333,12 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 					Tick:  1,
 					Ships: []ShipSnapshot{
 						{
-							Pos:    Vec2Snapshot{X: math.NaN(), Y: 0.0},
-							Vel:    Vec2Snapshot{X: 0.0, Y: 0.0},
-							Rot:    0.0,
-							Energy: 100.0,
-						},
+							ID:     1,
+						Pos:    Vec2Snapshot{X: math.NaN(), Y: 0.0},
+						Vel:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Rot:    0.0,
+						Energy: 100.0,
+					},
 					},
 					Planets: []PlanetSnapshot{
 						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Radius: 5.0},
@@ -1295,17 +1357,18 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 					Tick:  1,
 					Ships: []ShipSnapshot{
 						{
-							Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
-							Vel:    Vec2Snapshot{X: 0.0, Y: 0.0},
-							Rot:    0.0,
-							Energy: 100.0,
-						},
+							ID:     1,
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Vel:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Rot:    0.0,
+						Energy: 100.0,
+					},
 					},
 					Planets: []PlanetSnapshot{
 						{
 							ID:     1,
-							Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
-							Radius: 0.0, // Invalid: radius must be > 0
+						Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+						Radius: 0.0, // Invalid: radius must be > 0
 						},
 					},
 					Pallets: []PalletSnapshot{},
@@ -1340,6 +1403,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 		Describe("ValidateShipSnapshot", func() {
 			It("accepts valid ship snapshots", func() {
 				ship := &ShipSnapshot{
+				ID:     1,
 					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
 					Vel:    Vec2Snapshot{X: 1.0, Y: -1.0},
 					Rot:    1.57,
@@ -1351,6 +1415,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 
 			It("rejects invalid position (NaN)", func() {
 				ship := &ShipSnapshot{
+				ID:     1,
 					Pos:    Vec2Snapshot{X: math.NaN(), Y: 20.0},
 					Vel:    Vec2Snapshot{X: 1.0, Y: -1.0},
 					Rot:    1.57,
@@ -1362,6 +1427,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 
 			It("rejects invalid velocity (Inf)", func() {
 				ship := &ShipSnapshot{
+				ID:     1,
 					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
 					Vel:    Vec2Snapshot{X: math.Inf(1), Y: -1.0},
 					Rot:    1.57,
@@ -1373,6 +1439,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 
 			It("rejects negative energy", func() {
 				ship := &ShipSnapshot{
+				ID:     1,
 					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
 					Vel:    Vec2Snapshot{X: 1.0, Y: -1.0},
 					Rot:    1.57,
@@ -1385,6 +1452,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 
 			It("accepts zero energy", func() {
 				ship := &ShipSnapshot{
+				ID:     1,
 					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
 					Vel:    Vec2Snapshot{X: 1.0, Y: -1.0},
 					Rot:    1.57,
@@ -1711,7 +1779,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				msg := SnapshotMessage{
 					Type:    "snapshot",
 					Tick:    1,
-					Ships:   []ShipSnapshot{{Pos: Vec2Snapshot{X: 0, Y: 0}, Vel: Vec2Snapshot{X: 0, Y: 0}, Rot: 0, Energy: 100}},
+					Ships:   []ShipSnapshot{{ID: 1, Pos: Vec2Snapshot{X: 0, Y: 0}, Vel: Vec2Snapshot{X: 0, Y: 0}, Rot: 0, Energy: 100}},
 					Planets: []PlanetSnapshot{{ID: 1, Pos: Vec2Snapshot{X: 0, Y: 0}, Radius: 5}},
 					Pallets: []PalletSnapshot{},
 					WorldBounds: WorldBounds{Width: 1000.0, Height: 1000.0},
@@ -1825,11 +1893,11 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 					Tick:  100,
 					Ships: []ShipSnapshot{
 						{
-							Pos:    Vec2Snapshot{X: 10, Y: 20},
-							Vel:    Vec2Snapshot{X: 1, Y: -1},
-							Rot:    1.57,
-							Energy: 75,
-						},
+						Pos:    Vec2Snapshot{X: 10, Y: 20},
+						Vel:    Vec2Snapshot{X: 1, Y: -1},
+						Rot:    1.57,
+						Energy: 75,
+					},
 					},
 					Planets: []PlanetSnapshot{
 						{ID: 1, Pos: Vec2Snapshot{X: 0, Y: 0}, Radius: 5},
@@ -1883,7 +1951,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 			msg := SnapshotMessage{
 				Type:    "snapshot",
 				Tick:    ^uint32(0), // Maximum uint32
-				Ships:   []ShipSnapshot{{Pos: Vec2Snapshot{X: 0, Y: 0}, Vel: Vec2Snapshot{X: 0, Y: 0}, Rot: 0, Energy: 100}},
+				Ships:   []ShipSnapshot{{ID: 1, Pos: Vec2Snapshot{X: 0, Y: 0}, Vel: Vec2Snapshot{X: 0, Y: 0}, Rot: 0, Energy: 100}},
 				Planets: []PlanetSnapshot{{ID: 1, Pos: Vec2Snapshot{X: 0, Y: 0}, Radius: 5}},
 				Pallets: []PalletSnapshot{},
 				WorldBounds: WorldBounds{Width: 1000.0, Height: 1000.0},
@@ -1905,11 +1973,12 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				Tick:  1,
 				Ships: []ShipSnapshot{
 					{
-						Pos:    Vec2Snapshot{X: 1e10, Y: -1e10},
-						Vel:    Vec2Snapshot{X: 1e5, Y: -1e5},
-						Rot:    6.283185307179586, // 2*pi
-						Energy: 1e6,
-					},
+						ID:     1,
+					Pos:    Vec2Snapshot{X: 1e10, Y: -1e10},
+					Vel:    Vec2Snapshot{X: 1e5, Y: -1e5},
+					Rot:    6.283185307179586, // 2*pi
+					Energy: 1e6,
+				},
 				},
 				Planets: []PlanetSnapshot{
 					{ID: 1, Pos: Vec2Snapshot{X: 0, Y: 0}, Radius: 1e5},
@@ -1925,6 +1994,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 			var unmarshaled SnapshotMessage
 			err = json.Unmarshal(data, &unmarshaled)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(unmarshaled.Ships[0].ID).To(Equal(uint32(1)))
 			Expect(unmarshaled.Ships[0].Pos.X).To(BeNumerically("~", 1e10, 1e-5))
 		})
 
@@ -1963,7 +2033,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 			msg := SnapshotMessage{
 				Type:    "snapshot",
 				Tick:    1,
-				Ships:   []ShipSnapshot{{Pos: Vec2Snapshot{X: 0, Y: 0}, Vel: Vec2Snapshot{X: 0, Y: 0}, Rot: 0, Energy: 100}},
+				Ships:   []ShipSnapshot{{ID: 1, Pos: Vec2Snapshot{X: 0, Y: 0}, Vel: Vec2Snapshot{X: 0, Y: 0}, Rot: 0, Energy: 100}},
 				Planets: []PlanetSnapshot{{ID: 1, Pos: Vec2Snapshot{X: 0, Y: 0}, Radius: 5}},
 				Pallets: pallets,
 				WorldBounds: WorldBounds{Width: 1000.0, Height: 1000.0},
