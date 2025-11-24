@@ -391,7 +391,7 @@ type SessionHandler struct {
 // NewSessionHandler creates a new SessionHandler with a new session.
 // The logger parameter is optional. If provided and enabled, it will be injected into the session for tick time logging.
 func NewSessionHandler(conn *Connection, clock session.Clock, initialWorld entities.World, logger logr.Logger) *SessionHandler {
-	sess := session.NewSession(clock, initialWorld, 100) // maxQueueSize = 100
+	sess := session.NewSession(clock, initialWorld, 100, entities.WORLD_WIDTH, entities.WORLD_HEIGHT) // maxQueueSize = 100
 	// Set logger if it's enabled (zero logger will return false)
 	if logger.Enabled() {
 		sess.SetLogger(logger)
@@ -429,7 +429,7 @@ func (h *SessionHandler) HandleRestart(msg *proto.RestartMessage) error {
 	h.session.Stop()
 
 	// Create new session with initial world state
-	h.session = session.NewSession(h.clock, h.initialWorld, 100)
+	h.session = session.NewSession(h.clock, h.initialWorld, 100, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
 
 	return nil
 }

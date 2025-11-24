@@ -37,7 +37,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
 
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			Expect(session.GetWorld().Tick).To(Equal(uint32(0)))
 			Expect(session.GetWorld().Ship.Pos.X).To(Equal(10.0))
@@ -55,7 +55,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
 
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Ticker should be initialized
 			Expect(session.ticker).NotTo(BeNil())
@@ -73,7 +73,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
 
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			Expect(session.queue).NotTo(BeNil())
 			Expect(session.queue.Size()).To(Equal(0))
@@ -90,12 +90,99 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
 
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			Expect(session.dt).To(Equal(dt))
 			Expect(session.G).To(Equal(G))
 			Expect(session.aMax).To(Equal(aMax))
 			Expect(session.pickupRadius).To(Equal(pickupRadius))
+		})
+
+		It("uses default world bounds from entities constants when 0.0 passed", Label(
+			"scope:unit",
+			"loop:g5-session",
+			"layer:session",
+			"b:world-bounds",
+			"r:low",
+			"double:fake",
+			"dep:none",
+		), func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld(ship, sun, nil)
+
+			session := NewSession(clock, world, 100, 0.0, 0.0)
+
+			Expect(session.worldWidth).To(Equal(entities.WORLD_WIDTH))
+			Expect(session.worldHeight).To(Equal(entities.WORLD_HEIGHT))
+		})
+
+		It("uses custom world bounds when provided", Label(
+			"scope:unit",
+			"loop:g5-session",
+			"layer:session",
+			"b:world-bounds",
+			"r:low",
+			"double:fake",
+			"dep:none",
+		), func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld(ship, sun, nil)
+
+			customWidth := 3000.0
+			customHeight := 4000.0
+			session := NewSession(clock, world, 100, customWidth, customHeight)
+
+			Expect(session.worldWidth).To(Equal(customWidth))
+			Expect(session.worldHeight).To(Equal(customHeight))
+		})
+
+		It("passes world bounds to rules.Step during tick processing", Label(
+			"scope:unit",
+			"loop:g5-session",
+			"layer:session",
+			"b:world-bounds",
+			"r:low",
+			"double:fake",
+			"dep:none",
+		), func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld(ship, sun, nil)
+
+			customWidth := 2500.0
+			customHeight := 2500.0
+			session := NewSession(clock, world, 100, customWidth, customHeight)
+
+			// Enqueue command and run tick
+			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			clock.Advance(33 * time.Millisecond)
+			session.Run(1)
+
+			// Verify world bounds were stored and used
+			Expect(session.worldWidth).To(Equal(customWidth))
+			Expect(session.worldHeight).To(Equal(customHeight))
+			// Verify tick processed (world state changed)
+			Expect(session.GetWorld().Tick).To(Equal(uint32(1)))
 		})
 	})
 
@@ -110,7 +197,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			cmd := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
 			success := session.EnqueueCommand(1, 1, cmd)
@@ -129,7 +216,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Enqueue commands out of order
 			session.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.2, Turn: 0.0})
@@ -163,7 +250,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			cmd := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
 			success := session.EnqueueCommand(1, 42, cmd)
@@ -195,7 +282,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 0.1, Turn: 0.0})
 			session.EnqueueCommand(2, 2, rules.InputCommand{Thrust: 0.2, Turn: 0.0})
@@ -228,7 +315,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			initialTick := session.GetWorld().Tick
 
@@ -250,7 +337,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			initialPos := session.GetWorld().Ship.Pos
 
@@ -275,7 +362,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			initialPos := session.GetWorld().Ship.Pos
 
@@ -303,7 +390,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 				entities.NewPallet(1, entities.NewVec2(0.5, 0.0), true),
 			}
 			world := entities.NewWorld(ship, sun, pallets)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Enqueue thrust command
 			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
@@ -333,8 +420,8 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			world1 := entities.NewWorld(ship, sun, nil)
 			world2 := entities.NewWorld(ship, sun, nil)
 
-			session1 := NewSession(clock1, world1, 100)
-			session2 := NewSession(clock2, world2, 100)
+			session1 := NewSession(clock1, world1, 100, 0.0, 0.0)
+			session2 := NewSession(clock2, world2, 100, 0.0, 0.0)
 
 			// Enqueue same commands
 			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
@@ -372,7 +459,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			initialTick := session.GetWorld().Tick
 			initialPos := session.GetWorld().Ship.Pos
@@ -397,7 +484,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			Expect(session.GetWorld().Tick).To(Equal(uint32(0)))
 
@@ -421,14 +508,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			initialWorld := entities.NewWorld(ship, sun, nil)
 
 			// First application
-			session1 := NewSession(clock, initialWorld, 100)
+			session1 := NewSession(clock, initialWorld, 100, 0.0, 0.0)
 			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond)
 			session1.Run(1)
 			state1 := session1.GetWorld()
 
 			// Second application (same initial state, same command)
-			session2 := NewSession(clock, initialWorld, 100)
+			session2 := NewSession(clock, initialWorld, 100, 0.0, 0.0)
 			session2.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond)
 			session2.Run(1)
@@ -458,7 +545,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			// Apply command three times, each time from the same initial state
 			var states []entities.World
 			for i := 0; i < 3; i++ {
-				session := NewSession(clock, initialWorld, 100)
+				session := NewSession(clock, initialWorld, 100, 0.0, 0.0)
 				session.EnqueueCommand(1, 1, cmd)
 				clock.Advance(33 * time.Millisecond)
 				session.Run(1)
@@ -484,7 +571,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Enqueue command with sequence 1
 			success1 := session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
@@ -524,13 +611,13 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			world2 := entities.NewWorld(ship2, sun, nil)
 
 			// Apply same command to different initial states
-			session1 := NewSession(clock, world1, 100)
+			session1 := NewSession(clock, world1, 100, 0.0, 0.0)
 			session1.EnqueueCommand(1, 1, cmd)
 			clock.Advance(33 * time.Millisecond)
 			session1.Run(1)
 			state1 := session1.GetWorld()
 
-			session2 := NewSession(clock, world2, 100)
+			session2 := NewSession(clock, world2, 100, 0.0, 0.0)
 			session2.EnqueueCommand(1, 1, cmd)
 			clock.Advance(33 * time.Millisecond)
 			session2.Run(1)
@@ -540,7 +627,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			Expect(state1.Ship.Pos.X).NotTo(BeNumerically("~", state2.Ship.Pos.X, 0.1))
 
 			// But applying same command to same initial state should produce same result
-			session3 := NewSession(clock, world1, 100)
+			session3 := NewSession(clock, world1, 100, 0.0, 0.0)
 			session3.EnqueueCommand(1, 1, cmd)
 			clock.Advance(33 * time.Millisecond)
 			session3.Run(1)
@@ -562,7 +649,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			initialWorld := entities.NewWorld(ship, sun, nil)
 
 			// First run: apply command sequence 1, then sequence 2
-			session1 := NewSession(clock, initialWorld, 100)
+			session1 := NewSession(clock, initialWorld, 100, 0.0, 0.0)
 			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			session1.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond * 2)
@@ -570,7 +657,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			state1 := session1.GetWorld()
 
 			// Second run: same commands, same initial state
-			session2 := NewSession(clock, initialWorld, 100)
+			session2 := NewSession(clock, initialWorld, 100, 0.0, 0.0)
 			session2.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			session2.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond * 2)
@@ -595,7 +682,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			retrievedWorld := session.GetWorld()
 			Expect(retrievedWorld.Tick).To(Equal(uint32(0)))
@@ -612,7 +699,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			Expect(session.IsRunning()).To(BeFalse())
 
@@ -630,7 +717,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			session.Stop()
 			Expect(session.IsRunning()).To(BeFalse())
@@ -652,8 +739,8 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			world1 := entities.NewWorld(ship, sun, nil)
 			world2 := entities.NewWorld(ship, sun, nil)
 
-			session1 := NewSession(clock1, world1, 100)
-			session2 := NewSession(clock2, world2, 100)
+			session1 := NewSession(clock1, world1, 100, 0.0, 0.0)
+			session2 := NewSession(clock2, world2, 100, 0.0, 0.0)
 
 			// Apply same sequence of commands
 			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
@@ -694,7 +781,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Enqueue commands out of order
 			session.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
@@ -725,7 +812,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			initialWorld := entities.NewWorld(ship, sun, nil)
 
 			// First run: apply commands and capture snapshot
-			session1 := NewSession(clock, initialWorld, 100)
+			session1 := NewSession(clock, initialWorld, 100, 0.0, 0.0)
 			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			session1.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond * 2)
@@ -743,7 +830,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 
 			// Second run: restore from snapshot and replay same commands
 			restoredWorld := manager.RestoreSnapshot(snapshot)
-			session2 := NewSession(clock, restoredWorld, 100)
+			session2 := NewSession(clock, restoredWorld, 100, 0.0, 0.0)
 			session2.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
 			clock.Advance(33 * time.Millisecond)
 			session2.Run(1)
@@ -766,7 +853,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			initialPos := world.Ship.Pos
 
@@ -802,7 +889,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Apply command and run
 			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
@@ -851,7 +938,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			manager := NewSnapshotManager()
 
 			// First run: apply commands and capture snapshots
-			session1 := NewSession(clock, initialWorld, 100)
+			session1 := NewSession(clock, initialWorld, 100, 0.0, 0.0)
 			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond)
 			session1.Run(1)
@@ -869,7 +956,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 
 			// Second run: rollback to snapshot1 and replay
 			restoredWorld1 := manager.RestoreSnapshot(snapshot1)
-			session2 := NewSession(clock, restoredWorld1, 100)
+			session2 := NewSession(clock, restoredWorld1, 100, 0.0, 0.0)
 			session2.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond)
 			session2.Run(1)
@@ -908,7 +995,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 5.0, 1000.0)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Get initial histogram state
 			histogram := observability.GetTickDurationHistogram()
@@ -939,7 +1026,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 5.0, 1000.0)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Run session for many ticks to get distribution
 			clock.Advance(33 * time.Millisecond * 100)
@@ -972,8 +1059,8 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			world1 := entities.NewWorld(ship, sun, nil)
 			world2 := entities.NewWorld(ship, sun, nil)
 
-			session1 := NewSession(clock1, world1, 100)
-			session2 := NewSession(clock2, world2, 100)
+			session1 := NewSession(clock1, world1, 100, 0.0, 0.0)
+			session2 := NewSession(clock2, world2, 100, 0.0, 0.0)
 
 			// Enqueue same commands
 			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
@@ -1011,7 +1098,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			)
 			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), 5.0, 1000.0)
 			world := entities.NewWorld(ship, sun, nil)
-			session := NewSession(clock, world, 100)
+			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Measure time for running many ticks
 			clock.Advance(33 * time.Millisecond * 1000)
