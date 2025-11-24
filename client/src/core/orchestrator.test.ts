@@ -4,7 +4,7 @@
  * Labels: scope:unit loop:g2-app layer:core double:fake-io
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { AppOrchestrator } from './orchestrator'
 import { App } from './app'
 import { Scene } from '../gfx/scene'
@@ -151,12 +151,34 @@ describe('AppOrchestrator', () => {
   let container: HTMLElement
 
   beforeEach(async () => {
+    // Create fresh container for each test
     container = document.createElement('div')
     container.id = 'app'
     document.body.appendChild(container)
     
+    // Create fresh App instance for each test
     app = new App()
     await app.init(container)
+  })
+
+  afterEach(() => {
+    // Cleanup: destroy App instance and remove container to prevent memory leaks
+    // This prevents memory accumulation from PixiJS resources (WebGL contexts, textures, etc.)
+    try {
+      if (app) {
+        app.destroy()
+      }
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+    
+    try {
+      if (container && container.parentNode) {
+        container.parentNode.removeChild(container)
+      }
+    } catch (error) {
+      // Ignore cleanup errors
+    }
   })
 
   describe('Constructor', () => {
