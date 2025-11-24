@@ -1,11 +1,13 @@
 /**
  * Orbital Rush Client - Main entry point
  * Initializes all systems and wires them together for full game functionality.
+ * 
+ * Labels: scope:integration loop:g2-app layer:core
  */
 
 import { App } from './core/app'
+import { AppOrchestrator } from './core/orchestrator'
 import { Scene } from './gfx/scene'
-import { RenderLoop } from './core/render-loop'
 import { Renderer } from './gfx/renderer'
 import { StateManager } from './sim/state-manager'
 import { LocalSimulator } from './sim/local-simulator'
@@ -25,24 +27,25 @@ const INPUT_SEND_INTERVAL_MS = 1000 / 30 // 30Hz input rate (matches server tick
 async function init() {
   // Initialize Pixi Application
   const app = new App()
-  await app.init()
 
-  // Create scene hierarchy
-  const scene = new Scene(app)
-
-  // Initialize all systems in dependency order
+  // Initialize simulation systems (not part of orchestrator's interface)
   const stateManager = new StateManager()
   const localSimulator = new LocalSimulator()
   const commandHistory = new CommandHistory()
   const predictionSystem = new PredictionSystem(stateManager, localSimulator, commandHistory)
   const reconciliationSystem = new ReconciliationSystem(stateManager, localSimulator, commandHistory, predictionSystem)
   const interpolationSystem = new InterpolationSystem(stateManager)
-  const renderer = new Renderer(stateManager, scene, app)
+
+  // Create subsystems
   const networkClient = new NetworkClient()
   const keyboardInput = new KeyboardInputHandler()
+  
+  // Scene needs to be created before Renderer (Renderer depends on Scene)
+  const scene = new Scene(app)
+  const renderer = new Renderer(stateManager, scene, app)
   const hud = new HUD(scene, stateManager)
 
-  // Set up WebSocket connection and snapshot handling
+  // Set up custom snapshot handler (uses simulation systems not in orchestrator)
   networkClient.onSnapshot((snapshot: SnapshotMessage) => {
     // Update authoritative state from server
     stateManager.updateAuthoritative(snapshot)
@@ -54,17 +57,18 @@ async function init() {
     reconciliationSystem.reconcile(snapshot)
   })
 
-  networkClient.onConnect(() => {
-    console.log('Connected to game server')
+  // Create orchestrator with all subsystems
+  const orchestrator = new AppOrchestrator(app, {
+    networkClient,
+    renderer,
+    hud,
+    inputHandler: keyboardInput,
+    stateManager,
+    scene
   })
 
-  networkClient.onDisconnect(() => {
-    console.log('Disconnected from game server')
-  })
-
-  networkClient.onError((error) => {
-    console.error('Network error:', error)
-  })
+  // Initialize orchestrator (initializes App, sets up event handlers)
+  await orchestrator.init()
 
   // Connect to server
   try {
@@ -74,23 +78,13 @@ async function init() {
     // Continue anyway - might be testing without server
   }
 
-  // Set up keyboard input
+  // Start orchestrator (starts render loop and game loop)
+  orchestrator.start()
+
+  // Set up input sending loop (custom logic, runs in parallel with game loop)
   let lastInputSendTime = 0
   let commandSequence = 0
-
-  window.addEventListener('keydown', (event) => {
-    keyboardInput.onKeyDown(event.key)
-  })
-
-  window.addEventListener('keyup', (event) => {
-    keyboardInput.onKeyUp(event.key)
-  })
-
-  // Start render loop
-  const renderLoop = new RenderLoop(app)
-  
-  // Game loop that runs alongside render loop
-  const gameLoop = () => {
+  const inputLoop = () => {
     const now = performance.now()
 
     // Send input commands at regular intervals
@@ -111,32 +105,19 @@ async function init() {
       lastInputSendTime = now
     }
 
-    // Update interpolation system
-    interpolationSystem.update(now)
-
-    // Update renderer with current state
-    renderer.update()
-
-    // Update HUD
-    hud.update()
-
-    // Continue game loop
-    requestAnimationFrame(gameLoop)
+    requestAnimationFrame(inputLoop)
   }
+  inputLoop()
 
-  // Start both loops
-  renderLoop.start()
-  gameLoop()
+  // Set up interpolation update loop (runs in parallel with game loop)
+  const interpolationLoop = () => {
+    interpolationSystem.update(performance.now())
+    requestAnimationFrame(interpolationLoop)
+  }
+  interpolationLoop()
 
-  // Cleanup on page unload
-  window.addEventListener('beforeunload', () => {
-    renderLoop.stop()
-    networkClient.disconnect()
-    renderer.destroy()
-    hud.destroy()
-    scene.destroy()
-    app.destroy()
-  })
+  // Cleanup is handled by orchestrator's destroy() on beforeunload
+  // Orchestrator will clean up: render loop, input handler, network client, renderer, HUD, scene, app
 }
 
 init().catch(console.error)
