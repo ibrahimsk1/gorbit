@@ -6,18 +6,19 @@ import (
 	"github.com/gorbit/orbitalrush/internal/sim/rules"
 )
 
-// QueuedCommand represents a command with its sequence number.
+// QueuedCommand represents a command with its sequence number and player ID.
 type QueuedCommand struct {
 	Sequence uint32
 	Command  rules.InputCommand
+	PlayerID uint32 // Player ID for multiplayer support
 }
 
 // CommandQueue is a queue that stores input commands with sequence numbers,
 // maintains ordering, and deduplicates by sequence.
 type CommandQueue struct {
 	commands     map[uint32]*QueuedCommand // O(1) lookup by sequence
-	ordered      []uint32                   // Sorted sequence numbers for ordering
-	maxSize      int                        // Maximum queue size
+	ordered      []uint32                  // Sorted sequence numbers for ordering
+	maxSize      int                       // Maximum queue size
 	nextSequence uint32                    // Next expected sequence number
 }
 
@@ -31,14 +32,14 @@ func NewCommandQueue(maxSize int) *CommandQueue {
 	}
 }
 
-// Enqueue adds a command to the queue with the specified sequence number.
+// Enqueue adds a command to the queue with the specified sequence number and player ID.
 // Returns false if:
 //   - The sequence number already exists (duplicate)
 //   - The sequence number is less than nextSequence (already processed)
 //   - The queue is full
 //
 // Returns true on success.
-func (q *CommandQueue) Enqueue(seq uint32, cmd rules.InputCommand) bool {
+func (q *CommandQueue) Enqueue(seq uint32, playerID uint32, cmd rules.InputCommand) bool {
 	// Reject if sequence is less than nextSequence (already processed)
 	if seq < q.nextSequence {
 		return false
@@ -58,6 +59,7 @@ func (q *CommandQueue) Enqueue(seq uint32, cmd rules.InputCommand) bool {
 	queuedCmd := &QueuedCommand{
 		Sequence: seq,
 		Command:  cmd,
+		PlayerID: playerID,
 	}
 	q.commands[seq] = queuedCmd
 
@@ -121,4 +123,3 @@ func (q *CommandQueue) Clear() {
 	q.ordered = make([]uint32, 0)
 	// Note: nextSequence is not reset, as it tracks what has been processed
 }
-

@@ -19,13 +19,24 @@ type Session struct {
 	G            float64
 	aMax         float64
 	pickupRadius float64
+	worldWidth   float64 // World width for wraparound (2000.0 m)
+	worldHeight  float64 // World height for wraparound (2000.0 m)
 	running      bool
 	logger       logr.Logger // Optional logger for observability
 	maxQueueSize int         // Maximum queue size for threshold logging
 }
 
 // NewSession creates a new session with the given clock, initial world state, and max queue size.
-func NewSession(clock Clock, world entities.World, maxQueueSize int) *Session {
+// If worldWidth or worldHeight is 0.0, the corresponding constant from entities package is used.
+func NewSession(clock Clock, world entities.World, maxQueueSize int, worldWidth, worldHeight float64) *Session {
+	// Use constants if 0.0 is passed (sentinel value for "use default")
+	if worldWidth == 0.0 {
+		worldWidth = entities.WORLD_WIDTH
+	}
+	if worldHeight == 0.0 {
+		worldHeight = entities.WORLD_HEIGHT
+	}
+
 	return &Session{
 		world:        world,
 		queue:        NewCommandQueue(maxQueueSize),
@@ -35,15 +46,17 @@ func NewSession(clock Clock, world entities.World, maxQueueSize int) *Session {
 		G:            1.0,        // Gravitational constant
 		aMax:         100.0,      // Maximum acceleration
 		pickupRadius: 15.0,       // Pallet pickup radius (about ship length for better gameplay)
+		worldWidth:   worldWidth,  // World width for wraparound
+		worldHeight:  worldHeight, // World height for wraparound
 		running:      false,
 		maxQueueSize: maxQueueSize,
 	}
 }
 
-// EnqueueCommand adds a command to the queue with the specified sequence number.
+// EnqueueCommand adds a command to the queue with the specified sequence number and player ID.
 // Returns true if the command was successfully enqueued, false otherwise.
-func (s *Session) EnqueueCommand(seq uint32, cmd rules.InputCommand) bool {
-	success := s.queue.Enqueue(seq, cmd)
+func (s *Session) EnqueueCommand(seq uint32, playerID uint32, cmd rules.InputCommand) bool {
+	success := s.queue.Enqueue(seq, playerID, cmd)
 	
 	// Update queue depth metric
 	queueSize := s.queue.Size()
@@ -103,18 +116,21 @@ func (s *Session) Run(maxTicks int) error {
 
 		// Get next command from queue (or zero command if queue is empty)
 		var input rules.InputCommand
+		var playerID uint32
 		if queuedCmd, ok := s.queue.Dequeue(); ok {
 			input = queuedCmd.Command
+			playerID = queuedCmd.PlayerID
 		} else {
-			// No command available, use zero command
+			// No command available, use zero command and playerID 0
 			input = rules.InputCommand{Thrust: 0.0, Turn: 0.0}
+			playerID = 0
 		}
 		
 		// Update queue depth metric after dequeue
 		observability.UpdateQueueDepth(s.queue.Size())
 
 		// Call rules.Step() to update world state
-		s.world = rules.Step(s.world, input, s.dt, s.G, s.aMax, s.pickupRadius)
+		s.world = rules.Step(s.world, playerID, input, s.dt, s.G, s.aMax, s.pickupRadius, s.worldWidth, s.worldHeight)
 
 		ticksProcessed++
 
