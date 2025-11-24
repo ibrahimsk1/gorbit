@@ -1,0 +1,11 @@
+# Cursor Rules for GOrbit Project
+
+## Test Execution
+- When running tests via npm test or vitest, always use the `--run` flag to prevent watch mode
+- Tests should execute once and exit, not wait for file changes
+- Example: `npm test -- --run radar.test.ts` instead of `npm test -- radar.test.ts`
+
+## General Guidelines
+- Always use non-interactive flags for commands that might wait for user input
+- Prefer one-shot execution over watch/daemon modes when running commands programmatically
+

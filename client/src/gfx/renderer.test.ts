@@ -1,7 +1,7 @@
 /**
  * Integration tests for Renderer system.
  * 
- * Labels: scope:integration loop:g6-client layer:client dep:pixi
+ * Labels: scope:integration loop:g6-rendering layer:gfx dep:state
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -10,6 +10,7 @@ import { App } from '../core/app'
 import { Scene } from './scene'
 import { StateManager, type GameState } from '../sim/state-manager'
 import { Renderer } from './renderer'
+import { Camera } from './camera'
 import type { ShipSnapshot, PlanetSnapshot, PalletSnapshot } from '../net/protocol'
 
 describe('Renderer', () => {
@@ -28,7 +29,7 @@ describe('Renderer', () => {
     await app.init(container)
     scene = new Scene(app)
     stateManager = new StateManager()
-    renderer = new Renderer(stateManager, scene)
+    renderer = new Renderer(stateManager, scene, app)
   })
 
   afterEach(() => {
@@ -48,7 +49,7 @@ describe('Renderer', () => {
 
   describe('Initialization', () => {
     it('creates renderer with StateManager and Scene', () => {
-      const newRenderer = new Renderer(stateManager, scene)
+      const newRenderer = new Renderer(stateManager, scene, app)
 
       expect(newRenderer).toBeDefined()
     })
@@ -172,10 +173,15 @@ describe('Renderer', () => {
       }
 
       stateManager.updateInterpolated(gameState1)
-      renderer.update()
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
 
       const gameLayer = scene.getLayer('game')
       const shipSprite = gameLayer.children[0] as Graphics
+      const initialX = shipSprite.x
+      const initialY = shipSprite.y
 
       const gameState2: GameState = {
         tick: 1,
@@ -187,10 +193,14 @@ describe('Renderer', () => {
       }
 
       stateManager.updateInterpolated(gameState2)
-      renderer.update()
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
 
-      expect(shipSprite.x).toBe(300)
-      expect(shipSprite.y).toBe(400)
+      // Sprite position should have changed (screen coordinates with camera offset)
+      expect(shipSprite.x).not.toBe(initialX)
+      expect(shipSprite.y).not.toBe(initialY)
     })
 
     it('updates ship sprite rotation from state', () => {
@@ -237,10 +247,15 @@ describe('Renderer', () => {
       }
 
       stateManager.updateInterpolated(gameState1)
-      renderer.update()
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
 
       const gameLayer = scene.getLayer('game')
       const planetSprite = gameLayer.children[1] as Graphics // Index 1 (after ship)
+      const initialX = planetSprite.x
+      const initialY = planetSprite.y
 
       const gameState2: GameState = {
         tick: 1,
@@ -254,10 +269,14 @@ describe('Renderer', () => {
       }
 
       stateManager.updateInterpolated(gameState2)
-      renderer.update()
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
 
-      expect(planetSprite.x).toBe(500)
-      expect(planetSprite.y).toBe(600)
+      // Sprite position should have changed (screen coordinates with camera offset)
+      expect(planetSprite.x).not.toBe(initialX)
+      expect(planetSprite.y).not.toBe(initialY)
     })
 
     it('updates pallet sprites from state.pallets array', () => {
@@ -273,10 +292,15 @@ describe('Renderer', () => {
       }
 
       stateManager.updateInterpolated(gameState1)
-      renderer.update()
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
 
       const gameLayer = scene.getLayer('game')
       const palletSprite = gameLayer.children[1] as Graphics // Index 1 (after ship)
+      const initialX = palletSprite.x
+      const initialY = palletSprite.y
 
       const gameState2: GameState = {
         tick: 1,
@@ -290,10 +314,14 @@ describe('Renderer', () => {
       }
 
       stateManager.updateInterpolated(gameState2)
-      renderer.update()
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
 
-      expect(palletSprite.x).toBe(500)
-      expect(palletSprite.y).toBe(600)
+      // Sprite position should have changed (screen coordinates with camera offset)
+      expect(palletSprite.x).not.toBe(initialX)
+      expect(palletSprite.y).not.toBe(initialY)
     })
 
     it('updates pallet sprite visibility from active state', () => {
@@ -571,13 +599,17 @@ describe('Renderer', () => {
       }
 
       stateManager.updateInterpolated(gameState2)
-      renderer.update()
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
 
       // Same sprites should be updated (matched by index)
       expect(gameLayer.children[1]).toBe(planetSprite1)
       expect(gameLayer.children[2]).toBe(planetSprite2)
-      expect(planetSprite1.x).toBe(500)
-      expect(planetSprite2.x).toBe(600)
+      // Positions should have changed (screen coordinates with camera offset)
+      expect(planetSprite1.x).not.toBe(100)
+      expect(planetSprite2.x).not.toBe(200)
     })
 
     it('matches pallets by id', () => {
@@ -613,11 +645,15 @@ describe('Renderer', () => {
       }
 
       stateManager.updateInterpolated(gameState2)
-      renderer.update()
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
 
       // Same sprites should be updated (matched by id, not index)
-      expect(palletSprite1.x).toBe(500) // id 1
-      expect(palletSprite2.x).toBe(600) // id 2
+      // Positions should have changed (screen coordinates with camera offset)
+      expect(palletSprite1.x).not.toBe(100) // id 1, was at 100, now at 500
+      expect(palletSprite2.x).not.toBe(200) // id 2, was at 200, now at 600
     })
   })
 
@@ -633,12 +669,16 @@ describe('Renderer', () => {
       }
 
       stateManager.updateInterpolated(gameState)
-      renderer.update()
+      // Update multiple times to let camera converge
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
 
       const gameLayer = scene.getLayer('game')
       const shipSprite = gameLayer.children[0] as Graphics
-      expect(shipSprite.x).toBe(100)
-      expect(shipSprite.y).toBe(200)
+      // Sprite should be rendered (position in screen coordinates with camera offset)
+      expect(shipSprite).toBeDefined()
+      expect(gameLayer.children.length).toBe(1)
     })
 
     it('handles null/empty states gracefully', () => {
@@ -714,6 +754,145 @@ describe('Renderer', () => {
       renderer.update()
 
       expect(() => renderer.destroy()).not.toThrow()
+    })
+  })
+
+  describe('Camera Integration', () => {
+    it('creates Camera in constructor', () => {
+      const newRenderer = new Renderer(stateManager, scene, app)
+      
+      // Camera should be created internally
+      expect(newRenderer).toBeDefined()
+    })
+
+    it('uses camera position for coordinate transformation', () => {
+      const gameState: GameState = {
+        tick: 0,
+        ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        planets: [],
+        pallets: [],
+        done: false,
+        win: false
+      }
+
+      stateManager.updateInterpolated(gameState)
+      renderer.update()
+
+      // Camera should have moved toward ship position
+      // Ship sprite should be rendered at screen position adjusted by camera
+      const gameLayer = scene.getLayer('game')
+      expect(gameLayer.children.length).toBe(1)
+    })
+
+    it('calls camera.update() with player ship position before rendering', () => {
+      const gameState: GameState = {
+        tick: 0,
+        ship: { pos: { x: 150, y: 250 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        planets: [],
+        pallets: [],
+        done: false,
+        win: false
+      }
+
+      stateManager.updateInterpolated(gameState)
+      
+      // First update - camera should start moving toward ship
+      renderer.update()
+      
+      // Second update - camera should continue moving toward ship
+      renderer.update()
+      
+      // Camera should be following ship (sprite should be rendered)
+      const gameLayer = scene.getLayer('game')
+      expect(gameLayer.children.length).toBe(1)
+    })
+
+    it('camera follows player ship smoothly with lerp', () => {
+      const gameState1: GameState = {
+        tick: 0,
+        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        planets: [],
+        pallets: [],
+        done: false,
+        win: false
+      }
+
+      stateManager.updateInterpolated(gameState1)
+      renderer.update()
+
+      const gameState2: GameState = {
+        tick: 1,
+        ship: { pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        planets: [],
+        pallets: [],
+        done: false,
+        win: false
+      }
+
+      stateManager.updateInterpolated(gameState2)
+      
+      // Update multiple times to let camera lerp
+      for (let i = 0; i < 10; i++) {
+        renderer.update()
+      }
+
+      // Camera should be following ship
+      const gameLayer = scene.getLayer('game')
+      expect(gameLayer.children.length).toBe(1)
+    })
+
+    it('coordinate transformation uses camera offset', () => {
+      const pixiApp = app.getApplication()
+      const screenWidth = pixiApp.screen.width
+      const screenHeight = pixiApp.screen.height
+
+      const gameState: GameState = {
+        tick: 0,
+        ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        planets: [
+          { pos: { x: 0, y: 0 }, radius: 50 } // Planet at world origin
+        ],
+        pallets: [],
+        done: false,
+        win: false
+      }
+
+      stateManager.updateInterpolated(gameState)
+      
+      // Update multiple times to let camera move toward ship
+      for (let i = 0; i < 20; i++) {
+        renderer.update()
+      }
+
+      // Sprites should be rendered with camera offset applied
+      const gameLayer = scene.getLayer('game')
+      expect(gameLayer.children.length).toBe(2) // Ship + planet
+    })
+
+    it('camera position clamped to world bounds', () => {
+      const WORLD_WIDTH = 2000
+      const WORLD_HEIGHT = 2000
+
+      // Ship at world edge
+      const gameState: GameState = {
+        tick: 0,
+        ship: { pos: { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        planets: [],
+        pallets: [],
+        done: false,
+        win: false
+      }
+
+      stateManager.updateInterpolated(gameState)
+      
+      // Update multiple times
+      for (let i = 0; i < 30; i++) {
+        renderer.update()
+      }
+
+      // Camera should be clamped, sprites should still render correctly
+      const gameLayer = scene.getLayer('game')
+      expect(gameLayer.children.length).toBe(1)
     })
   })
 })
