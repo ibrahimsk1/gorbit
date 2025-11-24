@@ -1,7 +1,7 @@
 /**
- * Integration tests for protocol types, type guards, and validation.
+ * Contract tests for protocol types, type guards, and validation.
  * 
- * Labels: scope:integration loop:g6-client layer:client
+ * Labels: scope:contract loop:g4-proto layer:contract
  */
 
 import { describe, it, expect } from 'vitest'
@@ -10,20 +10,47 @@ import {
   ShipSnapshot,
   PlanetSnapshot,
   PalletSnapshot,
+  WorldBounds,
   InputMessage,
   RestartMessage,
   SnapshotMessage,
   Message,
+  PlayerInfo,
+  CreateRoomMessage,
+  JoinRoomMessage,
+  LeaveRoomMessage,
+  StartMatchMessage,
+  RoomCreatedMessage,
+  RoomStateMessage,
+  PlayerJoinedMessage,
+  PlayerLeftMessage,
+  MatchStartedMessage,
+  MatchEndedMessage,
   isInputMessage,
   isSnapshotMessage,
   isRestartMessage,
   isMessage,
+  isPlayerInfo,
+  isCreateRoomMessage,
+  isJoinRoomMessage,
+  isLeaveRoomMessage,
+  isStartMatchMessage,
+  isRoomCreatedMessage,
+  isRoomStateMessage,
+  isPlayerJoinedMessage,
+  isPlayerLeftMessage,
+  isMatchStartedMessage,
+  isMatchEndedMessage,
   validateVec2Snapshot,
   validateShipSnapshot,
   validatePlanetSnapshot,
   validatePalletSnapshot,
   createInputMessage,
   createRestartMessage,
+  createCreateRoomMessage,
+  createJoinRoomMessage,
+  createLeaveRoomMessage,
+  createStartMatchMessage,
   PROTOCOL_VERSION
 } from './protocol'
 
@@ -86,8 +113,9 @@ describe('Protocol Type Definitions', () => {
     expect(restart.t).toBe('restart')
   })
 
-  it('should define SnapshotMessage with planets array', () => {
-    const snapshot: SnapshotMessage = {
+  // v0 format (legacy) - will be updated in cu/protocol-tests
+  it('should define SnapshotMessage with planets array (v0 format)', () => {
+    const snapshot: any = {
       t: 'snapshot',
       tick: 42,
       ship: {
@@ -118,8 +146,95 @@ describe('Protocol Type Definitions', () => {
     expect(snapshot.pallets).toHaveLength(1)
   })
 
-  it('should support multiple planets in array', () => {
+  // v1 multiplayer format
+  // Labels: scope:contract loop:g4-proto layer:contract b:snapshot-format
+  it('should define WorldBounds with width and height', () => {
+    const bounds: WorldBounds = { width: 2000.0, height: 2000.0 }
+    expect(bounds.width).toBe(2000.0)
+    expect(bounds.height).toBe(2000.0)
+  })
+
+  it('should define ShipSnapshot with id field (v1 format)', () => {
+    const ship: ShipSnapshot = {
+      id: 1,
+      pos: { x: 10, y: 20 },
+      vel: { x: 1, y: 2 },
+      rot: 1.5,
+      energy: 75.0
+    }
+    expect(ship.id).toBe(1)
+    expect(ship.pos.x).toBe(10)
+    expect(ship.vel.y).toBe(2)
+    expect(ship.rot).toBe(1.5)
+    expect(ship.energy).toBe(75.0)
+  })
+
+  it('should define PlanetSnapshot with id field (v1 format)', () => {
+    const planet: PlanetSnapshot = {
+      id: 1,
+      pos: { x: 0, y: 0 },
+      radius: 5.0
+    }
+    expect(planet.id).toBe(1)
+    expect(planet.pos.x).toBe(0)
+    expect(planet.radius).toBe(5.0)
+  })
+
+  it('should define SnapshotMessage with ships array, worldBounds, and myShipId (v1 format)', () => {
     const snapshot: SnapshotMessage = {
+      t: 'snapshot',
+      tick: 42,
+      ships: [
+        {
+          id: 1,
+          pos: { x: 10, y: 20 },
+          vel: { x: 1, y: 2 },
+          rot: 1.5,
+          energy: 75.0
+        },
+        {
+          id: 2,
+          pos: { x: 30, y: 40 },
+          vel: { x: 0, y: 0 },
+          rot: 0.0,
+          energy: 100.0
+        }
+      ],
+      planets: [
+        {
+          id: 1,
+          pos: { x: 0, y: 0 },
+          radius: 5.0
+        }
+      ],
+      pallets: [
+        {
+          id: 1,
+          pos: { x: 5, y: 5 },
+          active: true
+        }
+      ],
+      worldBounds: { width: 2000.0, height: 2000.0 },
+      myShipId: 1,
+      done: false,
+      win: false
+    }
+    expect(snapshot.t).toBe('snapshot')
+    expect(snapshot.tick).toBe(42)
+    expect(snapshot.ships).toHaveLength(2)
+    expect(snapshot.ships[0].id).toBe(1)
+    expect(snapshot.ships[1].id).toBe(2)
+    expect(snapshot.worldBounds.width).toBe(2000.0)
+    expect(snapshot.worldBounds.height).toBe(2000.0)
+    expect(snapshot.myShipId).toBe(1)
+    expect(snapshot.planets).toHaveLength(1)
+    expect(snapshot.planets[0].id).toBe(1)
+    expect(snapshot.pallets).toHaveLength(1)
+  })
+
+  // v0 format (legacy) - will be updated in cu/protocol-tests
+  it('should support multiple planets in array (v0 format)', () => {
+    const snapshot: any = {
       t: 'snapshot',
       tick: 1,
       ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
@@ -136,8 +251,8 @@ describe('Protocol Type Definitions', () => {
     expect(snapshot.planets[1].radius).toBe(3.0)
   })
 
-  it('should support empty planets array', () => {
-    const snapshot: SnapshotMessage = {
+  it('should support empty planets array (v0 format)', () => {
+    const snapshot: any = {
       t: 'snapshot',
       tick: 1,
       ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
@@ -149,8 +264,8 @@ describe('Protocol Type Definitions', () => {
     expect(snapshot.planets).toHaveLength(0)
   })
 
-  it('should support multiple pallets in array', () => {
-    const snapshot: SnapshotMessage = {
+  it('should support multiple pallets in array (v0 format)', () => {
+    const snapshot: any = {
       t: 'snapshot',
       tick: 1,
       ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
@@ -174,15 +289,104 @@ describe('Protocol Type Definitions', () => {
     const snapshot: Message = {
       t: 'snapshot',
       tick: 1,
-      ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
-      planets: [],
+      ships: [
+        { id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+      ],
+      planets: [
+        { id: 1, pos: { x: 0, y: 0 }, radius: 5.0 }
+      ],
       pallets: [],
+      worldBounds: { width: 2000.0, height: 2000.0 },
+      myShipId: 1,
       done: false,
       win: false
     }
     expect(input.t).toBe('input')
     expect(restart.t).toBe('restart')
     expect(snapshot.t).toBe('snapshot')
+  })
+
+  // Room management message types
+  // Labels: scope:contract loop:g4-proto layer:contract b:room-messages
+  it('should define PlayerInfo with id and name', () => {
+    const player: PlayerInfo = { id: 1, name: 'Player1' }
+    expect(player.id).toBe(1)
+    expect(player.name).toBe('Player1')
+  })
+
+  it('should define CreateRoomMessage with correct structure', () => {
+    const msg: CreateRoomMessage = { t: 'createRoom' }
+    expect(msg.t).toBe('createRoom')
+  })
+
+  it('should define JoinRoomMessage with roomCode', () => {
+    const msg: JoinRoomMessage = { t: 'joinRoom', roomCode: 'ABC123' }
+    expect(msg.t).toBe('joinRoom')
+    expect(msg.roomCode).toBe('ABC123')
+  })
+
+  it('should define LeaveRoomMessage with correct structure', () => {
+    const msg: LeaveRoomMessage = { t: 'leaveRoom' }
+    expect(msg.t).toBe('leaveRoom')
+  })
+
+  it('should define StartMatchMessage with correct structure', () => {
+    const msg: StartMatchMessage = { t: 'startMatch' }
+    expect(msg.t).toBe('startMatch')
+  })
+
+  it('should define RoomCreatedMessage with roomCode', () => {
+    const msg: RoomCreatedMessage = { t: 'roomCreated', roomCode: 'XYZ789' }
+    expect(msg.t).toBe('roomCreated')
+    expect(msg.roomCode).toBe('XYZ789')
+  })
+
+  it('should define RoomStateMessage with roomCode, players, state, and hostId', () => {
+    const msg: RoomStateMessage = {
+      t: 'roomState',
+      roomCode: 'ABC123',
+      players: [{ id: 1, name: 'Player1' }, { id: 2, name: 'Player2' }],
+      state: 'lobby',
+      hostId: 1
+    }
+    expect(msg.t).toBe('roomState')
+    expect(msg.roomCode).toBe('ABC123')
+    expect(msg.players).toHaveLength(2)
+    expect(msg.state).toBe('lobby')
+    expect(msg.hostId).toBe(1)
+  })
+
+  it('should define PlayerJoinedMessage with player', () => {
+    const msg: PlayerJoinedMessage = {
+      t: 'playerJoined',
+      player: { id: 2, name: 'Player2' }
+    }
+    expect(msg.t).toBe('playerJoined')
+    expect(msg.player.id).toBe(2)
+    expect(msg.player.name).toBe('Player2')
+  })
+
+  it('should define PlayerLeftMessage with playerId', () => {
+    const msg: PlayerLeftMessage = { t: 'playerLeft', playerId: 2 }
+    expect(msg.t).toBe('playerLeft')
+    expect(msg.playerId).toBe(2)
+  })
+
+  it('should define MatchStartedMessage with correct structure', () => {
+    const msg: MatchStartedMessage = { t: 'matchStarted' }
+    expect(msg.t).toBe('matchStarted')
+  })
+
+  it('should define MatchEndedMessage with optional winnerId', () => {
+    const msg: MatchEndedMessage = { t: 'matchEnded', winnerId: 1 }
+    expect(msg.t).toBe('matchEnded')
+    expect(msg.winnerId).toBe(1)
+  })
+
+  it('should support MatchEndedMessage without winnerId', () => {
+    const msg: MatchEndedMessage = { t: 'matchEnded' }
+    expect(msg.t).toBe('matchEnded')
+    expect(msg.winnerId).toBeUndefined()
   })
 })
 
@@ -218,13 +422,17 @@ describe('Type Guards', () => {
   })
 
   describe('isSnapshotMessage', () => {
-    it('should return true for valid SnapshotMessage', () => {
+    it('should return true for valid SnapshotMessage (v1 format)', () => {
       const msg = {
         t: 'snapshot',
         tick: 42,
-        ship: { pos: { x: 10, y: 20 }, vel: { x: 1, y: 2 }, rot: 1.5, energy: 75 },
-        planets: [{ pos: { x: 0, y: 0 }, radius: 5.0 }],
+        ships: [
+          { id: 1, pos: { x: 10, y: 20 }, vel: { x: 1, y: 2 }, rot: 1.5, energy: 75 }
+        ],
+        planets: [{ id: 1, pos: { x: 0, y: 0 }, radius: 5.0 }],
         pallets: [{ id: 1, pos: { x: 5, y: 5 }, active: true }],
+        worldBounds: { width: 2000.0, height: 2000.0 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -245,9 +453,13 @@ describe('Type Guards', () => {
       const msg = {
         t: 'snapshot',
         tick: 42,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [
+          { id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ],
         planets: 'not-an-array',
         pallets: [],
+        worldBounds: { width: 2000.0, height: 2000.0 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -286,16 +498,78 @@ describe('Type Guards', () => {
       expect(isMessage(msg)).toBe(true)
     })
 
-    it('should return true for SnapshotMessage', () => {
+    it('should return true for SnapshotMessage (v1 format)', () => {
       const msg = {
         t: 'snapshot',
         tick: 42,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [
+          { id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ],
         planets: [],
         pallets: [],
+        worldBounds: { width: 2000.0, height: 2000.0 },
+        myShipId: 1,
         done: false,
         win: false
       }
+      expect(isMessage(msg)).toBe(true)
+    })
+
+    // Room management message type guards
+    // Labels: scope:contract loop:g4-proto layer:contract b:type-guards
+    it('should return true for CreateRoomMessage', () => {
+      const msg = { t: 'createRoom' }
+      expect(isMessage(msg)).toBe(true)
+    })
+
+    it('should return true for JoinRoomMessage', () => {
+      const msg = { t: 'joinRoom', roomCode: 'ABC123' }
+      expect(isMessage(msg)).toBe(true)
+    })
+
+    it('should return true for LeaveRoomMessage', () => {
+      const msg = { t: 'leaveRoom' }
+      expect(isMessage(msg)).toBe(true)
+    })
+
+    it('should return true for StartMatchMessage', () => {
+      const msg = { t: 'startMatch' }
+      expect(isMessage(msg)).toBe(true)
+    })
+
+    it('should return true for RoomCreatedMessage', () => {
+      const msg = { t: 'roomCreated', roomCode: 'XYZ789' }
+      expect(isMessage(msg)).toBe(true)
+    })
+
+    it('should return true for RoomStateMessage', () => {
+      const msg = {
+        t: 'roomState',
+        roomCode: 'ABC123',
+        players: [{ id: 1, name: 'Player1' }],
+        state: 'lobby',
+        hostId: 1
+      }
+      expect(isMessage(msg)).toBe(true)
+    })
+
+    it('should return true for PlayerJoinedMessage', () => {
+      const msg = { t: 'playerJoined', player: { id: 2, name: 'Player2' } }
+      expect(isMessage(msg)).toBe(true)
+    })
+
+    it('should return true for PlayerLeftMessage', () => {
+      const msg = { t: 'playerLeft', playerId: 2 }
+      expect(isMessage(msg)).toBe(true)
+    })
+
+    it('should return true for MatchStartedMessage', () => {
+      const msg = { t: 'matchStarted' }
+      expect(isMessage(msg)).toBe(true)
+    })
+
+    it('should return true for MatchEndedMessage', () => {
+      const msg = { t: 'matchEnded', winnerId: 1 }
       expect(isMessage(msg)).toBe(true)
     })
 
@@ -306,6 +580,273 @@ describe('Type Guards', () => {
 
     it('should return false for null', () => {
       expect(isMessage(null)).toBe(false)
+    })
+  })
+
+  // Room management message type guards
+  // Labels: scope:contract loop:g4-proto layer:contract b:type-guards
+  describe('Room Management Type Guards', () => {
+    describe('isPlayerInfo', () => {
+      it('should return true for valid PlayerInfo', () => {
+        const player = { id: 1, name: 'Player1' }
+        expect(isPlayerInfo(player)).toBe(true)
+      })
+
+      it('should return false for missing id', () => {
+        const player = { name: 'Player1' }
+        expect(isPlayerInfo(player)).toBe(false)
+      })
+
+      it('should return false for missing name', () => {
+        const player = { id: 1 }
+        expect(isPlayerInfo(player)).toBe(false)
+      })
+
+      it('should return false for wrong types', () => {
+        expect(isPlayerInfo({ id: '1', name: 'Player1' })).toBe(false)
+        expect(isPlayerInfo({ id: 1, name: 123 })).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isPlayerInfo(null)).toBe(false)
+      })
+    })
+
+    describe('isCreateRoomMessage', () => {
+      it('should return true for valid CreateRoomMessage', () => {
+        const msg = { t: 'createRoom' }
+        expect(isCreateRoomMessage(msg)).toBe(true)
+      })
+
+      it('should return false for wrong type', () => {
+        const msg = { t: 'joinRoom' }
+        expect(isCreateRoomMessage(msg)).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isCreateRoomMessage(null)).toBe(false)
+      })
+    })
+
+    describe('isJoinRoomMessage', () => {
+      it('should return true for valid JoinRoomMessage', () => {
+        const msg = { t: 'joinRoom', roomCode: 'ABC123' }
+        expect(isJoinRoomMessage(msg)).toBe(true)
+      })
+
+      it('should return false for missing roomCode', () => {
+        const msg = { t: 'joinRoom' }
+        expect(isJoinRoomMessage(msg)).toBe(false)
+      })
+
+      it('should return false for wrong type', () => {
+        const msg = { t: 'createRoom', roomCode: 'ABC123' }
+        expect(isJoinRoomMessage(msg)).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isJoinRoomMessage(null)).toBe(false)
+      })
+    })
+
+    describe('isLeaveRoomMessage', () => {
+      it('should return true for valid LeaveRoomMessage', () => {
+        const msg = { t: 'leaveRoom' }
+        expect(isLeaveRoomMessage(msg)).toBe(true)
+      })
+
+      it('should return false for wrong type', () => {
+        const msg = { t: 'createRoom' }
+        expect(isLeaveRoomMessage(msg)).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isLeaveRoomMessage(null)).toBe(false)
+      })
+    })
+
+    describe('isStartMatchMessage', () => {
+      it('should return true for valid StartMatchMessage', () => {
+        const msg = { t: 'startMatch' }
+        expect(isStartMatchMessage(msg)).toBe(true)
+      })
+
+      it('should return false for wrong type', () => {
+        const msg = { t: 'createRoom' }
+        expect(isStartMatchMessage(msg)).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isStartMatchMessage(null)).toBe(false)
+      })
+    })
+
+    describe('isRoomCreatedMessage', () => {
+      it('should return true for valid RoomCreatedMessage', () => {
+        const msg = { t: 'roomCreated', roomCode: 'XYZ789' }
+        expect(isRoomCreatedMessage(msg)).toBe(true)
+      })
+
+      it('should return false for missing roomCode', () => {
+        const msg = { t: 'roomCreated' }
+        expect(isRoomCreatedMessage(msg)).toBe(false)
+      })
+
+      it('should return false for wrong type', () => {
+        const msg = { t: 'createRoom', roomCode: 'XYZ789' }
+        expect(isRoomCreatedMessage(msg)).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isRoomCreatedMessage(null)).toBe(false)
+      })
+    })
+
+    describe('isRoomStateMessage', () => {
+      it('should return true for valid RoomStateMessage', () => {
+        const msg = {
+          t: 'roomState',
+          roomCode: 'ABC123',
+          players: [{ id: 1, name: 'Player1' }],
+          state: 'lobby',
+          hostId: 1
+        }
+        expect(isRoomStateMessage(msg)).toBe(true)
+      })
+
+      it('should return false for missing roomCode', () => {
+        const msg = {
+          t: 'roomState',
+          players: [{ id: 1, name: 'Player1' }],
+          state: 'lobby',
+          hostId: 1
+        }
+        expect(isRoomStateMessage(msg)).toBe(false)
+      })
+
+      it('should return false for missing players', () => {
+        const msg = {
+          t: 'roomState',
+          roomCode: 'ABC123',
+          state: 'lobby',
+          hostId: 1
+        }
+        expect(isRoomStateMessage(msg)).toBe(false)
+      })
+
+      it('should return false for invalid players array', () => {
+        const msg = {
+          t: 'roomState',
+          roomCode: 'ABC123',
+          players: 'not-an-array',
+          state: 'lobby',
+          hostId: 1
+        }
+        expect(isRoomStateMessage(msg)).toBe(false)
+      })
+
+      it('should return false for missing state', () => {
+        const msg = {
+          t: 'roomState',
+          roomCode: 'ABC123',
+          players: [{ id: 1, name: 'Player1' }],
+          hostId: 1
+        }
+        expect(isRoomStateMessage(msg)).toBe(false)
+      })
+
+      it('should return false for missing hostId', () => {
+        const msg = {
+          t: 'roomState',
+          roomCode: 'ABC123',
+          players: [{ id: 1, name: 'Player1' }],
+          state: 'lobby'
+        }
+        expect(isRoomStateMessage(msg)).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isRoomStateMessage(null)).toBe(false)
+      })
+    })
+
+    describe('isPlayerJoinedMessage', () => {
+      it('should return true for valid PlayerJoinedMessage', () => {
+        const msg = { t: 'playerJoined', player: { id: 2, name: 'Player2' } }
+        expect(isPlayerJoinedMessage(msg)).toBe(true)
+      })
+
+      it('should return false for missing player', () => {
+        const msg = { t: 'playerJoined' }
+        expect(isPlayerJoinedMessage(msg)).toBe(false)
+      })
+
+      it('should return false for invalid player', () => {
+        const msg = { t: 'playerJoined', player: { id: 2 } }
+        expect(isPlayerJoinedMessage(msg)).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isPlayerJoinedMessage(null)).toBe(false)
+      })
+    })
+
+    describe('isPlayerLeftMessage', () => {
+      it('should return true for valid PlayerLeftMessage', () => {
+        const msg = { t: 'playerLeft', playerId: 2 }
+        expect(isPlayerLeftMessage(msg)).toBe(true)
+      })
+
+      it('should return false for missing playerId', () => {
+        const msg = { t: 'playerLeft' }
+        expect(isPlayerLeftMessage(msg)).toBe(false)
+      })
+
+      it('should return false for wrong type', () => {
+        const msg = { t: 'playerJoined', playerId: 2 }
+        expect(isPlayerLeftMessage(msg)).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isPlayerLeftMessage(null)).toBe(false)
+      })
+    })
+
+    describe('isMatchStartedMessage', () => {
+      it('should return true for valid MatchStartedMessage', () => {
+        const msg = { t: 'matchStarted' }
+        expect(isMatchStartedMessage(msg)).toBe(true)
+      })
+
+      it('should return false for wrong type', () => {
+        const msg = { t: 'matchEnded' }
+        expect(isMatchStartedMessage(msg)).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isMatchStartedMessage(null)).toBe(false)
+      })
+    })
+
+    describe('isMatchEndedMessage', () => {
+      it('should return true for valid MatchEndedMessage with winnerId', () => {
+        const msg = { t: 'matchEnded', winnerId: 1 }
+        expect(isMatchEndedMessage(msg)).toBe(true)
+      })
+
+      it('should return true for valid MatchEndedMessage without winnerId', () => {
+        const msg = { t: 'matchEnded' }
+        expect(isMatchEndedMessage(msg)).toBe(true)
+      })
+
+      it('should return false for wrong type', () => {
+        const msg = { t: 'matchStarted', winnerId: 1 }
+        expect(isMatchEndedMessage(msg)).toBe(false)
+      })
+
+      it('should return false for null', () => {
+        expect(isMatchEndedMessage(null)).toBe(false)
+      })
     })
   })
 })
@@ -342,8 +883,9 @@ describe('Validation Functions', () => {
   })
 
   describe('validateShipSnapshot', () => {
-    it('should return ShipSnapshot for valid data', () => {
+    it('should return ShipSnapshot for valid data (v1 format with id)', () => {
       const data = {
+        id: 1,
         pos: { x: 10, y: 20 },
         vel: { x: 1, y: 2 },
         rot: 1.5,
@@ -373,8 +915,8 @@ describe('Validation Functions', () => {
   })
 
   describe('validatePlanetSnapshot', () => {
-    it('should return PlanetSnapshot for valid data', () => {
-      const data = { pos: { x: 0, y: 0 }, radius: 5.0 }
+    it('should return PlanetSnapshot for valid data (v1 format with id)', () => {
+      const data = { id: 1, pos: { x: 0, y: 0 }, radius: 5.0 }
       const result = validatePlanetSnapshot(data)
       expect(result).toEqual(data)
     })
@@ -431,6 +973,38 @@ describe('Helper Functions', () => {
     it('should create valid RestartMessage', () => {
       const msg = createRestartMessage()
       expect(msg).toEqual({ t: 'restart' })
+    })
+  })
+
+  // Room management factory functions
+  // Labels: scope:contract loop:g4-proto layer:contract b:factory-functions
+  describe('Room Management Factory Functions', () => {
+    describe('createCreateRoomMessage', () => {
+      it('should create valid CreateRoomMessage', () => {
+        const msg = createCreateRoomMessage()
+        expect(msg).toEqual({ t: 'createRoom' })
+      })
+    })
+
+    describe('createJoinRoomMessage', () => {
+      it('should create valid JoinRoomMessage with roomCode', () => {
+        const msg = createJoinRoomMessage('ABC123')
+        expect(msg).toEqual({ t: 'joinRoom', roomCode: 'ABC123' })
+      })
+    })
+
+    describe('createLeaveRoomMessage', () => {
+      it('should create valid LeaveRoomMessage', () => {
+        const msg = createLeaveRoomMessage()
+        expect(msg).toEqual({ t: 'leaveRoom' })
+      })
+    })
+
+    describe('createStartMatchMessage', () => {
+      it('should create valid StartMatchMessage', () => {
+        const msg = createStartMatchMessage()
+        expect(msg).toEqual({ t: 'startMatch' })
+      })
     })
   })
 })
