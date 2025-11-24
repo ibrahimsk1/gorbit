@@ -17,7 +17,7 @@ func TestSession(t *testing.T) {
 	RunSpecs(t, "Session Tick Loop Suite")
 }
 
-var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer:sim", "double:fake-io", "b:tick-orchestration", "r:high"), func() {
+var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "layer:session", "double:fake", "b:command-enqueue", "r:high", "dep:none"), func() {
 	const dt = 1.0 / 30.0 // 30Hz tick rate
 	const G = 1.0         // Gravitational constant
 	const aMax = 100.0    // Maximum acceleration
@@ -113,7 +113,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			session := NewSession(clock, world, 100)
 
 			cmd := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
-			success := session.EnqueueCommand(1, cmd)
+			success := session.EnqueueCommand(1, 1, cmd)
 
 			Expect(success).To(BeTrue())
 			Expect(session.queue.Size()).To(Equal(1))
@@ -132,9 +132,9 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			session := NewSession(clock, world, 100)
 
 			// Enqueue commands out of order
-			session.EnqueueCommand(2, rules.InputCommand{Thrust: 0.2, Turn: 0.0})
-			session.EnqueueCommand(1, rules.InputCommand{Thrust: 0.1, Turn: 0.0})
-			session.EnqueueCommand(3, rules.InputCommand{Thrust: 0.3, Turn: 0.0})
+			session.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.2, Turn: 0.0})
+			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 0.1, Turn: 0.0})
+			session.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.3, Turn: 0.0})
 
 			// Run for 3 ticks
 			clock.Advance(33 * time.Millisecond * 3)
@@ -143,6 +143,77 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			Expect(err).To(BeNil())
 			// Commands should be processed in order (1, 2, 3)
 			// We can verify by checking world state progression
+		})
+
+		It("enqueues commands with playerID", Label(
+			"scope:unit",
+			"loop:g5-session",
+			"layer:session",
+			"b:command-enqueue",
+			"r:high",
+			"double:fake",
+			"dep:none",
+		), func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld(ship, sun, nil)
+			session := NewSession(clock, world, 100)
+
+			cmd := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
+			success := session.EnqueueCommand(1, 42, cmd)
+
+			Expect(success).To(BeTrue())
+			Expect(session.queue.Size()).To(Equal(1))
+
+			dequeued, ok := session.queue.Dequeue()
+			Expect(ok).To(BeTrue())
+			Expect(dequeued.PlayerID).To(Equal(uint32(42)))
+			Expect(dequeued.Command.Thrust).To(Equal(float32(1.0)))
+		})
+
+		It("enqueues commands from multiple players", Label(
+			"scope:unit",
+			"loop:g5-session",
+			"layer:session",
+			"b:command-enqueue",
+			"r:high",
+			"double:fake",
+			"dep:none",
+		), func() {
+			clock := NewFakeClock()
+			ship := entities.NewShip(
+				entities.NewVec2(10.0, 0.0),
+				entities.NewVec2(0.0, 0.0),
+				0.0,
+				100.0,
+			)
+			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld(ship, sun, nil)
+			session := NewSession(clock, world, 100)
+
+			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 0.1, Turn: 0.0})
+			session.EnqueueCommand(2, 2, rules.InputCommand{Thrust: 0.2, Turn: 0.0})
+			session.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.3, Turn: 0.0})
+
+			Expect(session.queue.Size()).To(Equal(3))
+
+			cmd1, _ := session.queue.Dequeue()
+			Expect(cmd1.PlayerID).To(Equal(uint32(1)))
+			Expect(cmd1.Command.Thrust).To(Equal(float32(0.1)))
+
+			cmd2, _ := session.queue.Dequeue()
+			Expect(cmd2.PlayerID).To(Equal(uint32(2)))
+			Expect(cmd2.Command.Thrust).To(Equal(float32(0.2)))
+
+			cmd3, _ := session.queue.Dequeue()
+			Expect(cmd3.PlayerID).To(Equal(uint32(1)))
+			Expect(cmd3.Command.Thrust).To(Equal(float32(0.3)))
 		})
 	})
 
@@ -184,7 +255,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			initialPos := session.GetWorld().Ship.Pos
 
 			// Enqueue a thrust command
-			session.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 
 			// Advance time and run
 			clock.Advance(33 * time.Millisecond)
@@ -235,7 +306,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			session := NewSession(clock, world, 100)
 
 			// Enqueue thrust command
-			session.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 
 			// Run for many ticks - should stop when game is done
 			clock.Advance(33 * time.Millisecond * 100)
@@ -266,8 +337,8 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			session2 := NewSession(clock2, world2, 100)
 
 			// Enqueue same commands
-			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
-			session2.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session2.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 
 			// Advance clocks by same amount
 			clock1.Advance(33 * time.Millisecond * 5)
@@ -351,14 +422,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 
 			// First application
 			session1 := NewSession(clock, initialWorld, 100)
-			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond)
 			session1.Run(1)
 			state1 := session1.GetWorld()
 
 			// Second application (same initial state, same command)
 			session2 := NewSession(clock, initialWorld, 100)
-			session2.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session2.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond)
 			session2.Run(1)
 			state2 := session2.GetWorld()
@@ -388,7 +459,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			var states []entities.World
 			for i := 0; i < 3; i++ {
 				session := NewSession(clock, initialWorld, 100)
-				session.EnqueueCommand(1, cmd)
+				session.EnqueueCommand(1, 1, cmd)
 				clock.Advance(33 * time.Millisecond)
 				session.Run(1)
 				states = append(states, session.GetWorld())
@@ -416,11 +487,11 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			session := NewSession(clock, world, 100)
 
 			// Enqueue command with sequence 1
-			success1 := session.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			success1 := session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			Expect(success1).To(BeTrue())
 
 			// Try to enqueue same sequence again (should fail)
-			success2 := session.EnqueueCommand(1, rules.InputCommand{Thrust: 0.5, Turn: 0.5})
+			success2 := session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.5})
 			Expect(success2).To(BeFalse())
 
 			// Verify first command is still in queue
@@ -492,16 +563,16 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 
 			// First run: apply command sequence 1, then sequence 2
 			session1 := NewSession(clock, initialWorld, 100)
-			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
-			session1.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond * 2)
 			session1.Run(2)
 			state1 := session1.GetWorld()
 
 			// Second run: same commands, same initial state
 			session2 := NewSession(clock, initialWorld, 100)
-			session2.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
-			session2.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session2.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session2.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond * 2)
 			session2.Run(2)
 			state2 := session2.GetWorld()
@@ -585,13 +656,13 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			session2 := NewSession(clock2, world2, 100)
 
 			// Apply same sequence of commands
-			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
-			session1.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
-			session1.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session1.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
 
-			session2.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
-			session2.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
-			session2.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			session2.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session2.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session2.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
 
 			// Advance time identically
 			clock1.Advance(33 * time.Millisecond * 3)
@@ -626,9 +697,9 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			session := NewSession(clock, world, 100)
 
 			// Enqueue commands out of order
-			session.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
-			session.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
-			session.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 
 			// Advance time and run
 			clock.Advance(33 * time.Millisecond * 3)
@@ -655,8 +726,8 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 
 			// First run: apply commands and capture snapshot
 			session1 := NewSession(clock, initialWorld, 100)
-			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
-			session1.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond * 2)
 			session1.Run(2)
 
@@ -665,7 +736,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			snapshot := manager.CaptureSnapshot(session1.GetWorld(), 2, clock)
 
 			// Continue with more commands
-			session1.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			session1.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
 			clock.Advance(33 * time.Millisecond)
 			session1.Run(1)
 			final1 := session1.GetWorld()
@@ -673,7 +744,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			// Second run: restore from snapshot and replay same commands
 			restoredWorld := manager.RestoreSnapshot(snapshot)
 			session2 := NewSession(clock, restoredWorld, 100)
-			session2.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			session2.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
 			clock.Advance(33 * time.Millisecond)
 			session2.Run(1)
 			final2 := session2.GetWorld()
@@ -700,8 +771,8 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			initialPos := world.Ship.Pos
 
 			// Enqueue commands
-			session.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
-			session.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 
 			// Advance clock by multiple intervals
 			clock.Advance(33 * time.Millisecond * 5)
@@ -734,7 +805,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			session := NewSession(clock, world, 100)
 
 			// Apply command and run
-			session.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond)
 			session.Run(1)
 
@@ -781,17 +852,17 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 
 			// First run: apply commands and capture snapshots
 			session1 := NewSession(clock, initialWorld, 100)
-			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond)
 			session1.Run(1)
 			snapshot1 := manager.CaptureSnapshot(session1.GetWorld(), 1, clock)
 
-			session1.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session1.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond)
 			session1.Run(1)
 			snapshot2 := manager.CaptureSnapshot(session1.GetWorld(), 2, clock)
 
-			session1.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			session1.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
 			clock.Advance(33 * time.Millisecond)
 			session1.Run(1)
 			final1 := session1.GetWorld()
@@ -799,7 +870,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			// Second run: rollback to snapshot1 and replay
 			restoredWorld1 := manager.RestoreSnapshot(snapshot1)
 			session2 := NewSession(clock, restoredWorld1, 100)
-			session2.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session2.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 			clock.Advance(33 * time.Millisecond)
 			session2.Run(1)
 
@@ -809,7 +880,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			Expect(state2.Ship.Pos.X).To(BeNumerically("~", snapshot2.World.Ship.Pos.X, 0.001))
 
 			// Continue replay
-			session2.EnqueueCommand(3, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
+			session2.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
 			clock.Advance(33 * time.Millisecond)
 			session2.Run(1)
 			final2 := session2.GetWorld()
@@ -905,10 +976,10 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g3-orch", "layer
 			session2 := NewSession(clock2, world2, 100)
 
 			// Enqueue same commands
-			session1.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
-			session2.EnqueueCommand(1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
-			session1.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
-			session2.EnqueueCommand(2, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session1.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session2.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
+			session1.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
+			session2.EnqueueCommand(2, 1, rules.InputCommand{Thrust: 0.5, Turn: 0.0})
 
 			// Advance clocks identically
 			clock1.Advance(33 * time.Millisecond * 5)
