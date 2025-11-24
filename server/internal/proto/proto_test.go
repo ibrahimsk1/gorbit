@@ -369,6 +369,393 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				Expect(unmarshaled).NotTo(HaveKey("Name"))
 			})
 		})
+
+	Describe("Room State Messages", Label("scope:contract", "loop:g4-proto", "layer:contract", "b:message-types", "r:high"), func() {
+		Describe("RoomCreatedMessage", func() {
+			It("serializes to JSON matching TDD spec", func() {
+				msg := RoomCreatedMessage{
+					Type:     "roomCreated",
+					RoomCode: "ABC123",
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				expected := `{"t":"roomCreated","roomCode":"ABC123"}`
+				Expect(string(data)).To(MatchJSON(expected))
+			})
+
+			It("deserializes from valid JSON", func() {
+				jsonStr := `{"t":"roomCreated","roomCode":"XYZ789"}`
+				var msg RoomCreatedMessage
+
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg.Type).To(Equal("roomCreated"))
+				Expect(msg.RoomCode).To(Equal("XYZ789"))
+			})
+
+			It("round-trips correctly", func() {
+				original := RoomCreatedMessage{
+					Type:     "roomCreated",
+					RoomCode: "TEST01",
+				}
+
+				data, err := json.Marshal(original)
+				Expect(err).NotTo(HaveOccurred())
+
+				var roundTripped RoomCreatedMessage
+				err = json.Unmarshal(data, &roundTripped)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(roundTripped).To(Equal(original))
+			})
+		})
+
+		Describe("RoomStateMessage", func() {
+			It("serializes to JSON matching TDD spec", func() {
+				msg := RoomStateMessage{
+					Type:     "roomState",
+					RoomCode: "ABC123",
+					Players: []PlayerInfo{
+						{ID: 1, Name: "Player1"},
+						{ID: 2, Name: "Player2"},
+					},
+					State:  "lobby",
+					HostID: 1,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				var unmarshaled map[string]interface{}
+				err = json.Unmarshal(data, &unmarshaled)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(unmarshaled["t"]).To(Equal("roomState"))
+				Expect(unmarshaled["roomCode"]).To(Equal("ABC123"))
+				Expect(unmarshaled["state"]).To(Equal("lobby"))
+				Expect(unmarshaled["hostId"]).To(BeNumerically("==", 1))
+			})
+
+			It("deserializes from valid JSON", func() {
+				jsonStr := `{
+					"t": "roomState",
+					"roomCode": "TEST01",
+					"players": [
+						{"id": 1, "name": "Alice"},
+						{"id": 2, "name": "Bob"}
+					],
+					"state": "playing",
+					"hostId": 1
+				}`
+				var msg RoomStateMessage
+
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg.Type).To(Equal("roomState"))
+				Expect(msg.RoomCode).To(Equal("TEST01"))
+				Expect(len(msg.Players)).To(Equal(2))
+				Expect(msg.Players[0].ID).To(Equal(uint32(1)))
+				Expect(msg.Players[0].Name).To(Equal("Alice"))
+				Expect(msg.Players[1].ID).To(Equal(uint32(2)))
+				Expect(msg.Players[1].Name).To(Equal("Bob"))
+				Expect(msg.State).To(Equal("playing"))
+				Expect(msg.HostID).To(Equal(uint32(1)))
+			})
+
+			It("round-trips correctly", func() {
+				original := RoomStateMessage{
+					Type:     "roomState",
+					RoomCode: "ROUND1",
+					Players: []PlayerInfo{
+						{ID: 10, Name: "TestPlayer"},
+					},
+					State:  "lobby",
+					HostID: 10,
+				}
+
+				data, err := json.Marshal(original)
+				Expect(err).NotTo(HaveOccurred())
+
+				var roundTripped RoomStateMessage
+				err = json.Unmarshal(data, &roundTripped)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(roundTripped.Type).To(Equal(original.Type))
+				Expect(roundTripped.RoomCode).To(Equal(original.RoomCode))
+				Expect(roundTripped.State).To(Equal(original.State))
+				Expect(roundTripped.HostID).To(Equal(original.HostID))
+				Expect(len(roundTripped.Players)).To(Equal(len(original.Players)))
+				Expect(roundTripped.Players[0]).To(Equal(original.Players[0]))
+			})
+
+			It("handles empty players array", func() {
+				msg := RoomStateMessage{
+					Type:     "roomState",
+					RoomCode: "EMPTY1",
+					Players:  []PlayerInfo{},
+					State:    "lobby",
+					HostID:   0,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				var unmarshaled RoomStateMessage
+				err = json.Unmarshal(data, &unmarshaled)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(len(unmarshaled.Players)).To(Equal(0))
+			})
+		})
+
+		Describe("PlayerJoinedMessage", func() {
+			It("serializes to JSON matching TDD spec", func() {
+				msg := PlayerJoinedMessage{
+					Type: "playerJoined",
+					Player: PlayerInfo{
+						ID:   42,
+						Name: "NewPlayer",
+					},
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				expected := `{"t":"playerJoined","player":{"id":42,"name":"NewPlayer"}}`
+				Expect(string(data)).To(MatchJSON(expected))
+			})
+
+			It("deserializes from valid JSON", func() {
+				jsonStr := `{"t":"playerJoined","player":{"id":100,"name":"JoinedPlayer"}}`
+				var msg PlayerJoinedMessage
+
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg.Type).To(Equal("playerJoined"))
+				Expect(msg.Player.ID).To(Equal(uint32(100)))
+				Expect(msg.Player.Name).To(Equal("JoinedPlayer"))
+			})
+
+			It("round-trips correctly", func() {
+				original := PlayerJoinedMessage{
+					Type: "playerJoined",
+					Player: PlayerInfo{
+						ID:   123,
+						Name: "RoundTrip",
+					},
+				}
+
+				data, err := json.Marshal(original)
+				Expect(err).NotTo(HaveOccurred())
+
+				var roundTripped PlayerJoinedMessage
+				err = json.Unmarshal(data, &roundTripped)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(roundTripped).To(Equal(original))
+			})
+		})
+
+		Describe("PlayerLeftMessage", func() {
+			It("serializes to JSON matching TDD spec", func() {
+				msg := PlayerLeftMessage{
+					Type:     "playerLeft",
+					PlayerID: 42,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				expected := `{"t":"playerLeft","playerId":42}`
+				Expect(string(data)).To(MatchJSON(expected))
+			})
+
+			It("deserializes from valid JSON", func() {
+				jsonStr := `{"t":"playerLeft","playerId":100}`
+				var msg PlayerLeftMessage
+
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg.Type).To(Equal("playerLeft"))
+				Expect(msg.PlayerID).To(Equal(uint32(100)))
+			})
+
+			It("round-trips correctly", func() {
+				original := PlayerLeftMessage{
+					Type:     "playerLeft",
+					PlayerID: 999,
+				}
+
+				data, err := json.Marshal(original)
+				Expect(err).NotTo(HaveOccurred())
+
+				var roundTripped PlayerLeftMessage
+				err = json.Unmarshal(data, &roundTripped)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(roundTripped).To(Equal(original))
+			})
+		})
+
+		Describe("MatchStartedMessage", func() {
+			It("serializes to JSON matching TDD spec", func() {
+				msg := MatchStartedMessage{
+					Type: "matchStarted",
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				expected := `{"t":"matchStarted"}`
+				Expect(string(data)).To(MatchJSON(expected))
+			})
+
+			It("deserializes from valid JSON", func() {
+				jsonStr := `{"t":"matchStarted"}`
+				var msg MatchStartedMessage
+
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg.Type).To(Equal("matchStarted"))
+			})
+
+			It("round-trips correctly", func() {
+				original := MatchStartedMessage{
+					Type: "matchStarted",
+				}
+
+				data, err := json.Marshal(original)
+				Expect(err).NotTo(HaveOccurred())
+
+				var roundTripped MatchStartedMessage
+				err = json.Unmarshal(data, &roundTripped)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(roundTripped).To(Equal(original))
+			})
+		})
+
+		Describe("MatchEndedMessage", func() {
+			It("serializes to JSON matching TDD spec", func() {
+				msg := MatchEndedMessage{
+					Type:     "matchEnded",
+					WinnerID: 42,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				expected := `{"t":"matchEnded","winnerId":42}`
+				Expect(string(data)).To(MatchJSON(expected))
+			})
+
+			It("deserializes from valid JSON", func() {
+				jsonStr := `{"t":"matchEnded","winnerId":100}`
+				var msg MatchEndedMessage
+
+				err := json.Unmarshal([]byte(jsonStr), &msg)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(msg.Type).To(Equal("matchEnded"))
+				Expect(msg.WinnerID).To(Equal(uint32(100)))
+			})
+
+			It("round-trips correctly", func() {
+				original := MatchEndedMessage{
+					Type:     "matchEnded",
+					WinnerID: 999,
+				}
+
+				data, err := json.Marshal(original)
+				Expect(err).NotTo(HaveOccurred())
+
+				var roundTripped MatchEndedMessage
+				err = json.Unmarshal(data, &roundTripped)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(roundTripped).To(Equal(original))
+			})
+
+			It("handles zero winnerId (optional field)", func() {
+				msg := MatchEndedMessage{
+					Type:     "matchEnded",
+					WinnerID: 0,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				var unmarshaled MatchEndedMessage
+				err = json.Unmarshal(data, &unmarshaled)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(unmarshaled.WinnerID).To(Equal(uint32(0)))
+			})
+		})
+
+		Describe("Field Name Stability", func() {
+			It("enforces exact JSON field names for RoomStateMessage", func() {
+				msg := RoomStateMessage{
+					Type:     "roomState",
+					RoomCode: "TEST",
+					Players:  []PlayerInfo{},
+					State:    "lobby",
+					HostID:   1,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				var unmarshaled map[string]interface{}
+				err = json.Unmarshal(data, &unmarshaled)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(unmarshaled).To(HaveKey("t"))
+				Expect(unmarshaled).To(HaveKey("roomCode"))
+				Expect(unmarshaled).To(HaveKey("players"))
+				Expect(unmarshaled).To(HaveKey("state"))
+				Expect(unmarshaled).To(HaveKey("hostId"))
+				Expect(unmarshaled).NotTo(HaveKey("host_id"))
+				Expect(unmarshaled).NotTo(HaveKey("HostID"))
+			})
+
+			It("enforces exact JSON field names for PlayerLeftMessage", func() {
+				msg := PlayerLeftMessage{
+					Type:     "playerLeft",
+					PlayerID: 1,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				var unmarshaled map[string]interface{}
+				err = json.Unmarshal(data, &unmarshaled)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(unmarshaled).To(HaveKey("t"))
+				Expect(unmarshaled).To(HaveKey("playerId"))
+				Expect(unmarshaled).NotTo(HaveKey("player_id"))
+				Expect(unmarshaled).NotTo(HaveKey("PlayerID"))
+			})
+
+			It("enforces exact JSON field names for MatchEndedMessage", func() {
+				msg := MatchEndedMessage{
+					Type:     "matchEnded",
+					WinnerID: 1,
+				}
+
+				data, err := json.Marshal(msg)
+				Expect(err).NotTo(HaveOccurred())
+
+				var unmarshaled map[string]interface{}
+				err = json.Unmarshal(data, &unmarshaled)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(unmarshaled).To(HaveKey("t"))
+				Expect(unmarshaled).To(HaveKey("winnerId"))
+				Expect(unmarshaled).NotTo(HaveKey("winner_id"))
+				Expect(unmarshaled).NotTo(HaveKey("WinnerID"))
+			})
+		})
 	})
 
 	Describe("SnapshotMessage", func() {
@@ -1408,5 +1795,6 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 			Expect(len(unmarshaled.Pallets)).To(Equal(100))
 		})
 	})
+})
 })
 

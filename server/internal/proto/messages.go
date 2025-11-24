@@ -47,6 +47,50 @@ type StartMatchMessage struct {
 	Type string `json:"t"` // Message type: "startMatch"
 }
 
+// RoomCreatedMessage represents a server room creation response message.
+// Server → Client message format: {"t":"roomCreated","roomCode":"ABC123"}
+type RoomCreatedMessage struct {
+	Type     string `json:"t"`        // Message type: "roomCreated"
+	RoomCode string `json:"roomCode"` // 6-character room code
+}
+
+// RoomStateMessage represents a server room state update message.
+// Server → Client message format: {"t":"roomState","roomCode":"ABC123","players":[{"id":u32,"name":str}],"state":"lobby|playing","hostId":u32}
+type RoomStateMessage struct {
+	Type     string      `json:"t"`        // Message type: "roomState"
+	RoomCode string      `json:"roomCode"` // 6-character room code
+	Players  []PlayerInfo `json:"players"` // List of players in the room
+	State    string      `json:"state"`    // Room state: "lobby" or "playing"
+	HostID   uint32      `json:"hostId"`   // Host player identifier
+}
+
+// PlayerJoinedMessage represents a server player joined event message.
+// Server → Client message format: {"t":"playerJoined","player":{"id":u32,"name":str}}
+type PlayerJoinedMessage struct {
+	Type   string    `json:"t"`      // Message type: "playerJoined"
+	Player PlayerInfo `json:"player"` // Player information
+}
+
+// PlayerLeftMessage represents a server player left event message.
+// Server → Client message format: {"t":"playerLeft","playerId":u32}
+type PlayerLeftMessage struct {
+	Type     string `json:"t"`        // Message type: "playerLeft"
+	PlayerID uint32 `json:"playerId"` // Player identifier who left
+}
+
+// MatchStartedMessage represents a server match started event message.
+// Server → Client message format: {"t":"matchStarted"}
+type MatchStartedMessage struct {
+	Type string `json:"t"` // Message type: "matchStarted"
+}
+
+// MatchEndedMessage represents a server match ended event message.
+// Server → Client message format: {"t":"matchEnded","winnerId":u32}
+type MatchEndedMessage struct {
+	Type     string `json:"t"`        // Message type: "matchEnded"
+	WinnerID uint32 `json:"winnerId"` // Winner player identifier (optional, may be 0)
+}
+
 // SnapshotMessage represents a server state snapshot message.
 // Server → Client message format with tick, ship, sun, pallets, done, win
 type SnapshotMessage struct {
