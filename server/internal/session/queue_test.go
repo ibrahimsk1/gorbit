@@ -13,7 +13,7 @@ func TestQueue(t *testing.T) {
 	RunSpecs(t, "Command Queue Suite")
 }
 
-var _ = Describe("Command Queue", Label("scope:unit", "loop:g3-orch", "layer:sim", "double:fake-io", "b:command-ordering", "r:high"), func() {
+var _ = Describe("Command Queue", Label("scope:unit", "loop:g5-session", "layer:session", "double:fake", "b:command-queue", "r:high", "dep:none"), func() {
 	Describe("Queue Creation", func() {
 		It("creates queue with max size", func() {
 			queue := NewCommandQueue(100)
@@ -277,6 +277,94 @@ var _ = Describe("Command Queue", Label("scope:unit", "loop:g3-orch", "layer:sim
 			success3 := queue.Enqueue(3, rules.InputCommand{Thrust: 0.3, Turn: 0.0})
 			Expect(success2).To(BeFalse())
 			Expect(success3).To(BeFalse())
+		})
+	})
+
+	Describe("PlayerID Storage", func() {
+		It("stores playerID with command", Label(
+			"scope:unit",
+			"loop:g5-session",
+			"layer:session",
+			"b:command-queue",
+			"r:medium",
+			"double:fake",
+			"dep:none",
+		), func() {
+			cmd := &QueuedCommand{
+				Sequence: 1,
+				Command:  rules.InputCommand{Thrust: 1.0, Turn: 0.0},
+				PlayerID: 42,
+			}
+			Expect(cmd.PlayerID).To(Equal(uint32(42)))
+			Expect(cmd.Sequence).To(Equal(uint32(1)))
+			Expect(cmd.Command.Thrust).To(Equal(float32(1.0)))
+		})
+
+		It("preserves playerID when dequeued", Label(
+			"scope:unit",
+			"loop:g5-session",
+			"layer:session",
+			"b:command-queue",
+			"r:medium",
+			"double:fake",
+			"dep:none",
+		), func() {
+			queue := NewCommandQueue(10)
+			// Manually create QueuedCommand with playerID (Enqueue will be updated in next CU)
+			queuedCmd := &QueuedCommand{
+				Sequence: 1,
+				Command:  rules.InputCommand{Thrust: 1.0, Turn: 0.0},
+				PlayerID: 5,
+			}
+			queue.commands[1] = queuedCmd
+			queue.ordered = []uint32{1}
+
+			dequeued, ok := queue.Dequeue()
+			Expect(ok).To(BeTrue())
+			Expect(dequeued.PlayerID).To(Equal(uint32(5)))
+			Expect(dequeued.Sequence).To(Equal(uint32(1)))
+			Expect(dequeued.Command.Thrust).To(Equal(float32(1.0)))
+		})
+
+		It("defaults playerID to zero when not set", Label(
+			"scope:unit",
+			"loop:g5-session",
+			"layer:session",
+			"b:command-queue",
+			"r:low",
+			"double:fake",
+			"dep:none",
+		), func() {
+			cmd := &QueuedCommand{
+				Sequence: 1,
+				Command:  rules.InputCommand{Thrust: 1.0, Turn: 0.0},
+				// PlayerID not set explicitly
+			}
+			Expect(cmd.PlayerID).To(Equal(uint32(0)))
+		})
+
+		It("preserves playerID through peek operation", Label(
+			"scope:unit",
+			"loop:g5-session",
+			"layer:session",
+			"b:command-queue",
+			"r:low",
+			"double:fake",
+			"dep:none",
+		), func() {
+			queue := NewCommandQueue(10)
+			queuedCmd := &QueuedCommand{
+				Sequence: 1,
+				Command:  rules.InputCommand{Thrust: 0.5, Turn: 0.3},
+				PlayerID: 7,
+			}
+			queue.commands[1] = queuedCmd
+			queue.ordered = []uint32{1}
+
+			peeked, ok := queue.Peek()
+			Expect(ok).To(BeTrue())
+			Expect(peeked.PlayerID).To(Equal(uint32(7)))
+			Expect(queue.Size()).To(Equal(1)) // Size unchanged
 		})
 	})
 })
