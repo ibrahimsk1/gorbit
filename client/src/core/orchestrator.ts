@@ -6,11 +6,17 @@
 
 import { App } from './app'
 import { RenderLoop } from './render-loop'
+import { Scene } from '../gfx/scene'
 import type { Container } from 'pixi.js'
 
 // Subsystem interfaces for dependency injection
 export interface INetworkClient {
-  // Minimal interface - will be expanded in later CUs
+  onSnapshot(callback: (snapshot: any) => void): void
+  onConnect(callback: () => void): void
+  onDisconnect(callback: () => void): void
+  onError(callback: (error: Error) => void): void
+  connect(url: string): Promise<void>
+  isConnected(): boolean
 }
 
 export interface IRenderer {
@@ -32,7 +38,7 @@ export interface IInputHandler {
 }
 
 export interface IStateManager {
-  // Minimal interface - will be expanded in later CUs
+  updateAuthoritative(snapshot: any): void
 }
 
 export interface IScene {
@@ -54,6 +60,8 @@ export class AppOrchestrator {
   private inputHandler: IInputHandler | null = null
   private stateManager: IStateManager | null = null
   private scene: IScene | null = null
+  private initialized: boolean = false
+  private initError: Error | null = null
 
   constructor(
     app: App,
@@ -108,10 +116,67 @@ export class AppOrchestrator {
 
   /**
    * Initializes the app and all subsystems.
-   * Will be implemented in CU cu/app-initialization.
+   * Initializes PixiJS App, creates Scene, and sets up subsystem event handlers.
+   * 
+   * @param container Optional container element for App initialization
+   * @throws Error if initialization fails
    */
-  async init(): Promise<void> {
-    // Placeholder - implementation in CU cu/app-initialization
+  async init(container?: HTMLElement): Promise<void> {
+    if (this.initialized) {
+      // Already initialized, skip
+      return
+    }
+
+    try {
+      // Initialize PixiJS App
+      await this.app.init(container)
+
+      // Create Scene if not provided
+      if (!this.scene) {
+        this.scene = new Scene(this.app)
+      }
+
+      // Set up NetworkClient event handlers if provided
+      if (this.networkClient && this.stateManager) {
+        this.setupNetworkEventHandlers()
+      }
+
+      this.initialized = true
+      this.initError = null
+    } catch (error) {
+      this.initError = error instanceof Error ? error : new Error(String(error))
+      // Log error and rethrow to allow caller to handle
+      console.error('AppOrchestrator initialization error:', this.initError)
+      throw this.initError
+    }
+  }
+
+  /**
+   * Sets up event handlers for NetworkClient.
+   * Private helper method called during initialization.
+   */
+  private setupNetworkEventHandlers(): void {
+    if (!this.networkClient || !this.stateManager) {
+      return
+    }
+
+    // Set up snapshot handler
+    this.networkClient.onSnapshot((snapshot) => {
+      this.stateManager!.updateAuthoritative(snapshot)
+    })
+
+    // Set up connection handlers
+    this.networkClient.onConnect(() => {
+      console.log('Connected to game server')
+    })
+
+    this.networkClient.onDisconnect(() => {
+      console.log('Disconnected from game server')
+    })
+
+    this.networkClient.onError((error) => {
+      console.error('Network error:', error)
+    })
   }
 
   /**
