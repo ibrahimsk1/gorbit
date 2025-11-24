@@ -21,6 +21,10 @@ var (
 	ErrMaxRetriesExceeded = errors.New("failed to generate unique room code after maximum retries")
 	// ErrRoomNotFound is returned when a room with the given code does not exist.
 	ErrRoomNotFound = errors.New("room not found")
+	// ErrRoomNotInLobby is returned when trying to join a room that is not in lobby state.
+	ErrRoomNotInLobby = errors.New("room is not in lobby state")
+	// ErrRoomFull is returned when trying to join a room that has reached maximum capacity (8 players).
+	ErrRoomFull = errors.New("room is full")
 
 	// DefaultRoomManager is the singleton instance of RoomManager.
 	DefaultRoomManager *RoomManager
@@ -128,5 +132,56 @@ func (rm *RoomManager) CreateRoom() (string, error) {
 	rm.rooms[code] = room
 
 	return code, nil
+}
+
+// JoinRoom adds a player to a room by room code.
+// Validates that the room exists, is in lobby state, and has capacity.
+// Assigns a player ID and creates a PlayerConnection.
+// Sets the player as host if they are the first player to join.
+// Returns the room and assigned player ID, or an error if join fails.
+func (rm *RoomManager) JoinRoom(roomCode string, conn *transport.Connection) (*Room, uint32, error) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	// Find room
+	room, exists := rm.rooms[roomCode]
+	if !exists {
+		return nil, 0, ErrRoomNotFound
+	}
+
+	// Validate room state (must be lobby)
+	room.mu.RLock()
+	state := room.State
+	playerCount := len(room.Players)
+	room.mu.RUnlock()
+
+	if state != RoomStateLobby {
+		return nil, 0, ErrRoomNotInLobby
+	}
+
+	// Check capacity (max 8 players)
+	if playerCount >= 8 {
+		return nil, 0, ErrRoomFull
+	}
+
+	// Assign player ID (incrementing from 1)
+	playerID := uint32(playerCount + 1)
+
+	// Create PlayerConnection
+	player := &PlayerConnection{
+		Conn:     conn,
+		PlayerID: playerID,
+		Name:     "", // Empty name in v1
+	}
+
+	// Add player to room
+	room.AddPlayer(player)
+
+	// Set host if first player
+	if playerCount == 0 {
+		room.SetHostPlayerID(playerID)
+	}
+
+	return room, playerID, nil
 }
 
