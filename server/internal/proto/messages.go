@@ -91,16 +91,31 @@ type MatchEndedMessage struct {
 	WinnerID uint32 `json:"winnerId"` // Winner player identifier (optional, may be 0)
 }
 
+// WorldBounds represents world boundaries in a snapshot.
+// Used in SnapshotMessage: {"width":f64,"height":f64}
+type WorldBounds struct {
+	Width  float64 `json:"width"`  // World width
+	Height float64 `json:"height"` // World height
+}
+
+// PlanetSnapshot represents planet state in a snapshot.
+// Used in SnapshotMessage: {"id":u32,"pos":{"x":f64,"y":f64},"radius":f32}
+type PlanetSnapshot struct {
+	ID     uint32       `json:"id"`     // Planet identifier
+	Pos    Vec2Snapshot `json:"pos"`    // Position
+	Radius float32      `json:"radius"` // Radius
+}
+
 // SnapshotMessage represents a server state snapshot message.
-// Server → Client message format with tick, ship, sun, pallets, done, win
+// Server → Client message format with tick, ships[], planets[], pallets[], worldBounds, myShipId
 type SnapshotMessage struct {
-	Type    string          `json:"t"`      // Message type: "snapshot"
-	Tick    uint32          `json:"tick"`   // Current simulation tick
-	Ship    ShipSnapshot    `json:"ship"`   // Ship state
-	Sun     SunSnapshot     `json:"sun"`    // Sun state
-	Pallets []PalletSnapshot `json:"pallets"` // List of pallets
-	Done    bool            `json:"done"`   // Whether the game is finished
-	Win     bool            `json:"win"`    // Whether the player won (only valid if Done is true)
+	Type        string            `json:"t"`          // Message type: "snapshot"
+	Tick        uint32            `json:"tick"`       // Current simulation tick
+	Ships       []ShipSnapshot    `json:"ships"`      // List of ships
+	Planets     []PlanetSnapshot  `json:"planets"`    // List of planets
+	Pallets     []PalletSnapshot  `json:"pallets"`   // List of pallets
+	WorldBounds WorldBounds       `json:"worldBounds"` // World boundaries
+	MyShipId    uint32            `json:"myShipId"`   // Player's ship identifier
 }
 
 // ShipSnapshot represents ship state in a snapshot.
