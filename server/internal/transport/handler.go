@@ -10,6 +10,7 @@ import (
 	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorbit/orbitalrush/internal/proto"
 	"github.com/gorbit/orbitalrush/internal/session"
+	"github.com/gorbit/orbitalrush/internal/sim/entities"
 	"github.com/gorbit/orbitalrush/internal/sim/rules"
 )
 
@@ -85,6 +86,7 @@ type RoomOperations struct {
 	GetRoomFunc           func(roomCode string) (RoomData, error)
 	StartMatchFunc        func(roomCode string, hostPlayerID uint32, clock session.Clock) error // May be nil if not implemented
 	EnqueueCommandToRoomFunc func(roomCode string, playerID uint32, seq uint32, cmd rules.InputCommand) error
+	GetWorldFromRoomFunc  func(roomCode string) (entities.World, error)
 }
 
 // RoomData represents room data needed by transport layer.
@@ -108,6 +110,7 @@ type RoomHandler struct {
 	ops       RoomOperations
 	conn      *Connection
 	clock     session.Clock
+	broadcaster *SnapshotBroadcaster // Optional: will be wired in step 8
 }
 
 // NewRoomHandler creates a new RoomHandler.
@@ -117,7 +120,14 @@ func NewRoomHandler(registry *ConnectionRegistry, ops RoomOperations, conn *Conn
 		ops:      ops,
 		conn:     conn,
 		clock:    clock,
+		broadcaster: nil, // Will be set in step 8
 	}
+}
+
+// SetBroadcaster sets the snapshot broadcaster for the room handler.
+// This will be called in step 8 when wiring up the room-based flow.
+func (h *RoomHandler) SetBroadcaster(broadcaster *SnapshotBroadcaster) {
+	h.broadcaster = broadcaster
 }
 
 // HandleCreateRoom handles CreateRoomMessage by creating a room and sending roomCreated response.
@@ -268,6 +278,11 @@ func (h *RoomHandler) HandleStartMatch(msg *proto.StartMatchMessage) error {
 	}
 	broadcastToRoom(roomData, nil, broadcastData) // Broadcast to all players
 
+	// Start snapshot broadcasting for this room
+	if h.broadcaster != nil {
+		h.broadcaster.StartBroadcasting(roomCode)
+	}
+
 	return nil
 }
 
@@ -343,6 +358,131 @@ func (h *RoomInputHandler) HandleInput(msg *proto.InputMessage) error {
 	}
 
 	return nil
+}
+
+// SnapshotBroadcaster manages per-room snapshot broadcasting.
+// It creates a goroutine per room that polls session world state and broadcasts to all players.
+type SnapshotBroadcaster struct {
+	ops      RoomOperations
+	mu       sync.RWMutex
+	rooms    map[string]*broadcastRoom // roomCode -> broadcastRoom
+	stopChan chan string                // Channel to signal room to stop broadcasting
+}
+
+type broadcastRoom struct {
+	roomCode string
+	done     chan struct{}
+}
+
+// NewSnapshotBroadcaster creates a new SnapshotBroadcaster.
+func NewSnapshotBroadcaster(ops RoomOperations) *SnapshotBroadcaster {
+	return &SnapshotBroadcaster{
+		ops:      ops,
+		rooms:    make(map[string]*broadcastRoom),
+		stopChan: make(chan string, 10), // Buffered channel for stop signals
+	}
+}
+
+// StartBroadcasting starts snapshot broadcasting for a room.
+// Creates a goroutine that polls session world state at 10 Hz (100ms interval)
+// and broadcasts snapshots to all players in the room.
+// Only broadcasts when room is in "playing" state.
+func (sb *SnapshotBroadcaster) StartBroadcasting(roomCode string) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+
+	// Check if already broadcasting for this room
+	if _, exists := sb.rooms[roomCode]; exists {
+		return // Already broadcasting
+	}
+
+	// Create broadcast room
+	br := &broadcastRoom{
+		roomCode: roomCode,
+		done:     make(chan struct{}),
+	}
+	sb.rooms[roomCode] = br
+
+	// Start broadcasting goroutine
+	go sb.broadcastLoop(roomCode, br.done)
+}
+
+// StopBroadcasting stops snapshot broadcasting for a room.
+func (sb *SnapshotBroadcaster) StopBroadcasting(roomCode string) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+
+	br, exists := sb.rooms[roomCode]
+	if !exists {
+		return // Not broadcasting
+	}
+
+	// Signal stop
+	close(br.done)
+	delete(sb.rooms, roomCode)
+}
+
+// broadcastLoop is the main broadcasting loop for a room.
+// Polls session world state at 10 Hz (100ms interval) and broadcasts to all players.
+func (sb *SnapshotBroadcaster) broadcastLoop(roomCode string, done chan struct{}) {
+	ticker := time.NewTicker(100 * time.Millisecond) // 10 Hz
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			// Get room data to check state and get players
+			roomData, err := sb.ops.GetRoomFunc(roomCode)
+			if err != nil {
+				// Room not found, stop broadcasting
+				sb.StopBroadcasting(roomCode)
+				return
+			}
+
+			// Only broadcast when room is in "playing" state
+			if roomData.State != "playing" {
+				// If room ended or in lobby, stop broadcasting
+				if roomData.State == "ended" {
+					sb.StopBroadcasting(roomCode)
+					return
+				}
+				// If in lobby, skip this tick but continue
+				continue
+			}
+
+			// Get world state from room's session
+			if sb.ops.GetWorldFromRoomFunc == nil {
+				continue // Skip if not wired yet
+			}
+
+			world, err := sb.ops.GetWorldFromRoomFunc(roomCode)
+			if err != nil {
+				// Session not found or room not found, skip this tick
+				continue
+			}
+
+			// Convert world to snapshot
+			// NOTE: WorldToSnapshot will be updated for multiplayer format in step 9
+			snapshot := WorldToSnapshot(world)
+
+			// Serialize snapshot
+			data, err := json.Marshal(snapshot)
+			if err != nil {
+				// Log error but continue
+				continue
+			}
+
+			// Broadcast to all players in room
+			for _, player := range roomData.Players {
+				if player.Conn != nil {
+					// Send snapshot (ignore errors - connection might be closed)
+					_ = player.Conn.WriteMessage(data)
+				}
+			}
+		}
+	}
 }
 
 // WebSocketHandler handles WebSocket upgrade requests at the /ws endpoint.
