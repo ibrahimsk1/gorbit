@@ -22,7 +22,7 @@ export class Renderer {
   private scene: Scene
   private app: App
   private camera: Camera
-  private shipSprite: Graphics | null = null
+  private shipSprites: Map<number, Graphics> = new Map()
   private planetSprites: Map<number, Graphics> = new Map()
   private palletSprites: Map<number, Graphics> = new Map()
 
@@ -67,16 +67,21 @@ export class Renderer {
   /**
    * Updates all sprites from current game state.
    * Camera is updated first to follow player's ship, then sprites are rendered.
+   * v1 multiplayer format: handles multiple ships from ships array.
    */
   update(): void {
     const state = this.stateManager.getRenderState()
     const gameLayer = this.scene.getLayer('game')
 
-    // Update camera to follow player's ship (call before rendering)
-    this.camera.update(state.ship.pos)
+    // Find player's ship for camera following
+    const playerShip = state.ships.find(ship => ship.id === state.myShipId)
+    if (playerShip) {
+      // Update camera to follow player's ship (call before rendering)
+      this.camera.update(playerShip.pos)
+    }
 
-    // Update ship sprite
-    this.updateShipSprite(state.ship, gameLayer)
+    // Update ship sprites (v1 multiplayer format: ships array, match by ID)
+    this.updateShipSprites(state.ships, gameLayer)
 
     // Update planet sprites (generic array iteration, match by index)
     this.updatePlanetSprites(state.planets, gameLayer)
@@ -86,20 +91,34 @@ export class Renderer {
   }
 
   /**
-   * Updates ship sprite from ship state.
+   * Updates ship sprites from ships array (v1 multiplayer format, match by ID).
    */
-  private updateShipSprite(ship: GameState['ship'], gameLayer: typeof gameLayer): void {
-    const screenPos = this.worldToScreen(ship.pos.x, ship.pos.y)
-    const transformedShip = {
-      ...ship,
-      pos: { x: screenPos.x, y: screenPos.y }
-    }
-    
-    if (!this.shipSprite) {
-      this.shipSprite = ShipSpriteFactory.create(transformedShip)
-      gameLayer.addChild(this.shipSprite)
-    } else {
-      ShipSpriteFactory.update(this.shipSprite, transformedShip)
+  private updateShipSprites(ships: GameState['ships'], gameLayer: typeof gameLayer): void {
+    // Create/update sprites for ships in array
+    ships.forEach((ship) => {
+      const screenPos = this.worldToScreen(ship.pos.x, ship.pos.y)
+      const transformedShip = {
+        ...ship,
+        pos: { x: screenPos.x, y: screenPos.y }
+      }
+      
+      let sprite = this.shipSprites.get(ship.id)
+      if (!sprite) {
+        sprite = ShipSpriteFactory.create(transformedShip)
+        this.shipSprites.set(ship.id, sprite)
+        gameLayer.addChild(sprite)
+      } else {
+        ShipSpriteFactory.update(sprite, transformedShip)
+      }
+    })
+
+    // Remove sprites for ships no longer in array
+    const currentIds = new Set(ships.map(s => s.id))
+    for (const [id, sprite] of this.shipSprites.entries()) {
+      if (!currentIds.has(id)) {
+        ShipSpriteFactory.destroy(sprite)
+        this.shipSprites.delete(id)
+      }
     }
   }
 
@@ -173,11 +192,11 @@ export class Renderer {
   clear(): void {
     const gameLayer = this.scene.getLayer('game')
 
-    // Destroy ship sprite
-    if (this.shipSprite) {
-      ShipSpriteFactory.destroy(this.shipSprite)
-      this.shipSprite = null
+    // Destroy ship sprites (v1 multiplayer format: multiple ships)
+    for (const sprite of this.shipSprites.values()) {
+      ShipSpriteFactory.destroy(sprite)
     }
+    this.shipSprites.clear()
 
     // Destroy planet sprites
     for (const sprite of this.planetSprites.values()) {

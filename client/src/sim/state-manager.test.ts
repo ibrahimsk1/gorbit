@@ -14,19 +14,24 @@ describe('StateManager', () => {
   const createTestSnapshot = (tick: number): SnapshotMessage => ({
     t: 'snapshot',
     tick,
-    ship: {
-      pos: { x: 100, y: 200 },
-      vel: { x: 10, y: -5 },
-      rot: 1.57,
-      energy: 75.5
-    },
+    ships: [
+      {
+        id: 1,
+        pos: { x: 100, y: 200 },
+        vel: { x: 10, y: -5 },
+        rot: 1.57,
+        energy: 75.5
+      }
+    ],
     planets: [
-      { pos: { x: 0, y: 0 }, radius: 15.0 }
+      { id: 1, pos: { x: 0, y: 0 }, radius: 15.0 }
     ],
     pallets: [
       { id: 1, pos: { x: 50, y: 50 }, active: true },
       { id: 2, pos: { x: -50, y: -50 }, active: false }
     ],
+    worldBounds: { width: 2000, height: 2000 },
+    myShipId: 1,
     done: false,
     win: false
   })
@@ -43,8 +48,11 @@ describe('StateManager', () => {
       const authoritative = stateManager.getAuthoritative()
       expect(authoritative).not.toBeNull()
       expect(authoritative?.tick).toBe(42)
-      expect(authoritative?.ship.pos.x).toBe(100)
-      expect(authoritative?.ship.pos.y).toBe(200)
+      expect(authoritative?.ships).toHaveLength(1)
+      expect(authoritative?.ships[0].pos.x).toBe(100)
+      expect(authoritative?.ships[0].pos.y).toBe(200)
+      expect(authoritative?.myShipId).toBe(1)
+      expect(authoritative?.worldBounds.width).toBe(2000)
       expect(authoritative?.planets).toHaveLength(1)
       expect(authoritative?.pallets).toHaveLength(2)
     })
@@ -57,12 +65,14 @@ describe('StateManager', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [
-          { pos: { x: 0, y: 0 }, radius: 5.0 },
-          { pos: { x: 100, y: 100 }, radius: 3.0 }
+          { id: 1, pos: { x: 0, y: 0 }, radius: 5.0 },
+          { id: 2, pos: { x: 100, y: 100 }, radius: 3.0 }
         ],
         pallets: [],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -78,9 +88,11 @@ describe('StateManager', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [],
         pallets: [],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -94,13 +106,15 @@ describe('StateManager', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [],
         pallets: [
           { id: 1, pos: { x: 10, y: 10 }, active: true },
           { id: 2, pos: { x: 20, y: 20 }, active: true },
           { id: 3, pos: { x: 30, y: 30 }, active: false }
         ],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -130,18 +144,21 @@ describe('StateManager', () => {
 
       const predictedState = {
         tick: 43,
-        ship: {
+        ships: [{
+          id: 1,
           pos: { x: 110, y: 195 },
           vel: { x: 10, y: -5 },
           rot: 1.6,
           energy: 74.5
-        },
+        }],
         planets: [
-          { pos: { x: 0, y: 0 }, radius: 15.0 }
+          { id: 1, pos: { x: 0, y: 0 }, radius: 15.0 }
         ],
         pallets: [
           { id: 1, pos: { x: 50, y: 50 }, active: false }
         ],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -153,8 +170,8 @@ describe('StateManager', () => {
 
       expect(authoritative?.tick).toBe(42)
       expect(predicted?.tick).toBe(43)
-      expect(authoritative?.ship.pos.x).toBe(100)
-      expect(predicted?.ship.pos.x).toBe(110)
+      expect(authoritative?.ships[0].pos.x).toBe(100)
+      expect(predicted?.ships[0].pos.x).toBe(110)
       expect(authoritative?.pallets).toHaveLength(2)
       expect(predicted?.pallets).toHaveLength(1)
     })
@@ -166,14 +183,16 @@ describe('StateManager', () => {
     it('should support array-based entities in predicted state', () => {
       const predictedState = {
         tick: 1,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [
-          { pos: { x: 0, y: 0 }, radius: 5.0 },
-          { pos: { x: 100, y: 100 }, radius: 3.0 }
+          { id: 1, pos: { x: 0, y: 0 }, radius: 5.0 },
+          { id: 2, pos: { x: 100, y: 100 }, radius: 3.0 }
         ],
         pallets: [
           { id: 1, pos: { x: 10, y: 10 }, active: true }
         ],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -189,18 +208,21 @@ describe('StateManager', () => {
     it('should store interpolated state separately', () => {
       const interpolatedState = {
         tick: 42.5,
-        ship: {
+        ships: [{
+          id: 1,
           pos: { x: 105, y: 197.5 },
           vel: { x: 10, y: -5 },
           rot: 1.585,
           energy: 75.0
-        },
+        }],
         planets: [
-          { pos: { x: 0, y: 0 }, radius: 15.0 }
+          { id: 1, pos: { x: 0, y: 0 }, radius: 15.0 }
         ],
         pallets: [
           { id: 1, pos: { x: 50, y: 50 }, active: true }
         ],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -210,7 +232,7 @@ describe('StateManager', () => {
       const interpolated = stateManager.getInterpolated()
       expect(interpolated).not.toBeNull()
       expect(interpolated?.tick).toBe(42.5)
-      expect(interpolated?.ship.pos.x).toBe(105)
+      expect(interpolated?.ships[0].pos.x).toBe(105)
     })
 
     it('should return null for interpolated state before any update', () => {
@@ -220,14 +242,16 @@ describe('StateManager', () => {
     it('should support array-based entities in interpolated state', () => {
       const interpolatedState = {
         tick: 1,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [
-          { pos: { x: 0, y: 0 }, radius: 5.0 }
+          { id: 1, pos: { x: 0, y: 0 }, radius: 5.0 }
         ],
         pallets: [
           { id: 1, pos: { x: 10, y: 10 }, active: true },
           { id: 2, pos: { x: 20, y: 20 }, active: false }
         ],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -246,9 +270,11 @@ describe('StateManager', () => {
 
       const predictedState = {
         tick: 41,
-        ship: { pos: { x: 110, y: 195 }, vel: { x: 10, y: -5 }, rot: 1.6, energy: 74.5 },
-        planets: [{ pos: { x: 0, y: 0 }, radius: 15.0 }],
+        ships: [{ id: 1, pos: { x: 110, y: 195 }, vel: { x: 10, y: -5 }, rot: 1.6, energy: 74.5 }],
+        planets: [{ id: 1, pos: { x: 0, y: 0 }, radius: 15.0 }],
         pallets: [{ id: 1, pos: { x: 50, y: 50 }, active: false }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -256,9 +282,11 @@ describe('StateManager', () => {
 
       const interpolatedState = {
         tick: 40.5,
-        ship: { pos: { x: 105, y: 197.5 }, vel: { x: 10, y: -5 }, rot: 1.585, energy: 75.0 },
-        planets: [{ pos: { x: 0, y: 0 }, radius: 15.0 }],
+        ships: [{ id: 1, pos: { x: 105, y: 197.5 }, vel: { x: 10, y: -5 }, rot: 1.585, energy: 75.0 }],
+        planets: [{ id: 1, pos: { x: 0, y: 0 }, radius: 15.0 }],
         pallets: [{ id: 1, pos: { x: 50, y: 50 }, active: true }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -275,9 +303,11 @@ describe('StateManager', () => {
 
       const interpolatedState = {
         tick: 40.5,
-        ship: { pos: { x: 105, y: 197.5 }, vel: { x: 10, y: -5 }, rot: 1.585, energy: 75.0 },
-        planets: [{ pos: { x: 0, y: 0 }, radius: 15.0 }],
+        ships: [{ id: 1, pos: { x: 105, y: 197.5 }, vel: { x: 10, y: -5 }, rot: 1.585, energy: 75.0 }],
+        planets: [{ id: 1, pos: { x: 0, y: 0 }, radius: 15.0 }],
         pallets: [{ id: 1, pos: { x: 50, y: 50 }, active: true }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -285,7 +315,7 @@ describe('StateManager', () => {
 
       const renderState = stateManager.getRenderState()
       expect(renderState.tick).toBe(40.5)
-      expect(renderState.ship.pos.x).toBe(105)
+      expect(renderState.ships[0].pos.x).toBe(105)
     })
 
     it('should fall back to authoritative state in getRenderState() when interpolated is not available', () => {
@@ -294,7 +324,7 @@ describe('StateManager', () => {
 
       const renderState = stateManager.getRenderState()
       expect(renderState.tick).toBe(40)
-      expect(renderState.ship.pos.x).toBe(100)
+      expect(renderState.ships[0].pos.x).toBe(100)
     })
 
     it('should reset all states', () => {
@@ -302,17 +332,21 @@ describe('StateManager', () => {
       stateManager.updateAuthoritative(snapshot)
       stateManager.updatePredicted({
         tick: 43,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [],
         pallets: [],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       })
       stateManager.updateInterpolated({
         tick: 42.5,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [],
         pallets: [],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       })
@@ -335,9 +369,11 @@ describe('StateManager', () => {
 
       stateManager.updatePredicted({
         tick: 43,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [],
         pallets: [],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       })
@@ -345,9 +381,11 @@ describe('StateManager', () => {
 
       stateManager.updateInterpolated({
         tick: 42.5,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [],
         pallets: [],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       })
@@ -363,9 +401,11 @@ describe('StateManager', () => {
       const authoritative = stateManager.getAuthoritative()
       expect(authoritative).not.toBeNull()
       expect(authoritative?.tick).toBe(snapshot.tick)
-      expect(authoritative?.ship).toEqual(snapshot.ship)
+      expect(authoritative?.ships).toEqual(snapshot.ships)
       expect(authoritative?.planets).toEqual(snapshot.planets)
       expect(authoritative?.pallets).toEqual(snapshot.pallets)
+      expect(authoritative?.worldBounds).toEqual(snapshot.worldBounds)
+      expect(authoritative?.myShipId).toBe(snapshot.myShipId)
       expect(authoritative?.done).toBe(snapshot.done)
       expect(authoritative?.win).toBe(snapshot.win)
     })
@@ -374,15 +414,17 @@ describe('StateManager', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [
-          { pos: { x: 0, y: 0 }, radius: 5.0 },
-          { pos: { x: 100, y: 100 }, radius: 3.0 }
+          { id: 1, pos: { x: 0, y: 0 }, radius: 5.0 },
+          { id: 2, pos: { x: 100, y: 100 }, radius: 3.0 }
         ],
         pallets: [
           { id: 1, pos: { x: 10, y: 10 }, active: true },
           { id: 2, pos: { x: 20, y: 20 }, active: false }
         ],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
