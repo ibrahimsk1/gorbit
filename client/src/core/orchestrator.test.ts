@@ -1,7 +1,7 @@
 /**
- * Unit tests for AppOrchestrator class structure and initialization.
+ * Unit tests for AppOrchestrator class.
  * 
- * Labels: scope:unit loop:g2-app layer:core double:fake-io b:orchestrator-structure b:app-init r:medium r:high
+ * Labels: scope:unit loop:g2-app layer:core double:fake-io
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -160,6 +160,10 @@ describe('AppOrchestrator', () => {
   })
 
   describe('Constructor', () => {
+    /**
+     * Labels: scope:unit loop:g2-app layer:core double:fake-io b:orchestrator-structure r:medium
+     */
+
     it('can be instantiated with subsystem instances', () => {
       const networkClient = new FakeNetworkClient()
       const renderer = new FakeRenderer()
@@ -213,6 +217,10 @@ describe('AppOrchestrator', () => {
   })
 
   describe('Class Structure', () => {
+    /**
+     * Labels: scope:unit loop:g2-app layer:core double:fake-io b:orchestrator-structure r:medium
+     */
+
     it('has init method', () => {
       const orchestrator = new AppOrchestrator(app, {})
       
