@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"sync"
 )
 
 const (
@@ -18,6 +19,12 @@ const (
 var (
 	// ErrMaxRetriesExceeded is returned when GenerateRoomCode cannot generate a unique code after maxRetries attempts.
 	ErrMaxRetriesExceeded = errors.New("failed to generate unique room code after maximum retries")
+	// ErrRoomNotFound is returned when a room with the given code does not exist.
+	ErrRoomNotFound = errors.New("room not found")
+
+	// DefaultRoomManager is the singleton instance of RoomManager.
+	DefaultRoomManager *RoomManager
+	roomManagerOnce    sync.Once
 )
 
 // GenerateRoomCode generates a unique 6-character alphanumeric room code.
@@ -61,5 +68,37 @@ func generateRandomCode() (string, error) {
 	}
 
 	return string(code), nil
+}
+
+// RoomManager manages all rooms and provides room operations.
+// It uses a singleton pattern to ensure one instance per server.
+type RoomManager struct {
+	rooms map[string]*Room // Map from room code to room instance
+	mu    sync.RWMutex     // Mutex for concurrent access
+}
+
+// NewRoomManager returns the singleton RoomManager instance.
+// The singleton is initialized on first call.
+func NewRoomManager() *RoomManager {
+	roomManagerOnce.Do(func() {
+		DefaultRoomManager = &RoomManager{
+			rooms: make(map[string]*Room),
+		}
+	})
+	return DefaultRoomManager
+}
+
+// GetRoom returns the room with the given room code (thread-safe).
+// Returns ErrRoomNotFound if the room does not exist.
+func (rm *RoomManager) GetRoom(roomCode string) (*Room, error) {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	room, exists := rm.rooms[roomCode]
+	if !exists {
+		return nil, ErrRoomNotFound
+	}
+
+	return room, nil
 }
 

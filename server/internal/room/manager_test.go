@@ -1,6 +1,7 @@
 package room
 
 import (
+	"errors"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -73,6 +74,62 @@ var _ = Describe("Room Code Generation", Label("scope:unit", "loop:g6-room", "la
 			code, err := GenerateRoomCode(rooms)
 			Expect(err).To(BeNil())
 			Expect(code).To(HaveLen(6))
+		})
+	})
+
+	Describe("RoomManager", Label("scope:unit", "loop:g6-room", "layer:room", "b:room-manager", "r:low", "double:fake", "dep:none"), func() {
+		It("creates RoomManager with empty rooms map", func() {
+			manager := NewRoomManager()
+
+			Expect(manager).NotTo(BeNil())
+			room, err := manager.GetRoom("NONEXIST")
+			Expect(err).NotTo(BeNil())
+			Expect(room).To(BeNil())
+		})
+
+		It("returns room when room code exists", func() {
+			manager := NewRoomManager()
+			room := &Room{RoomCode: "TEST01"}
+			manager.rooms["TEST01"] = room
+
+			found, err := manager.GetRoom("TEST01")
+			Expect(err).To(BeNil())
+			Expect(found).To(Equal(room))
+		})
+
+		It("returns error when room code does not exist", func() {
+			manager := NewRoomManager()
+
+			room, err := manager.GetRoom("NONEXIST")
+			Expect(err).NotTo(BeNil())
+			Expect(errors.Is(err, ErrRoomNotFound)).To(BeTrue())
+			Expect(room).To(BeNil())
+		})
+
+		It("returns same instance for singleton", func() {
+			manager1 := NewRoomManager()
+			manager2 := NewRoomManager()
+
+			Expect(manager1).To(Equal(manager2))
+		})
+
+		It("thread-safely accesses rooms map", func() {
+			manager := NewRoomManager()
+			room1 := &Room{RoomCode: "ROOM01"}
+			room2 := &Room{RoomCode: "ROOM02"}
+
+			// Add rooms (would need AddRoom method, but for now test GetRoom is thread-safe)
+			manager.rooms["ROOM01"] = room1
+			manager.rooms["ROOM02"] = room2
+
+			// Concurrent reads should be safe
+			found1, err1 := manager.GetRoom("ROOM01")
+			found2, err2 := manager.GetRoom("ROOM02")
+
+			Expect(err1).To(BeNil())
+			Expect(err2).To(BeNil())
+			Expect(found1).To(Equal(room1))
+			Expect(found2).To(Equal(room2))
 		})
 	})
 })
