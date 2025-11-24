@@ -2,8 +2,10 @@ package transport
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -724,6 +726,170 @@ var _ = Describe("Connection Metrics", Label("scope:integration", "loop:g7-ops",
 			Expect(bodyStr).To(ContainSubstring("active_connections"))
 			Expect(bodyStr).To(ContainSubstring("connection_duration_seconds"))
 			Expect(bodyStr).To(ContainSubstring("connection_bytes_total"))
+		})
+	})
+})
+
+var _ = Describe("Connection Registry", Label("scope:integration", "loop:g7-transport", "layer:transport", "dep:none", "b:connection-tracking", "r:high", "double:fake"), func() {
+	var registry *ConnectionRegistry
+	var conn *Connection
+
+	BeforeEach(func() {
+		registry = NewConnectionRegistry()
+		// Create a mock connection for testing
+		mux := http.NewServeMux()
+		var wsConn *websocket.Conn
+		mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+			var err error
+			wsConn, err = UpgradeConnection(w, r)
+			if err == nil {
+				conn = NewConnection(wsConn)
+			}
+		})
+		testServer := httptest.NewServer(mux)
+		defer testServer.Close()
+
+		dialer := websocket.Dialer{}
+		clientConn, _, _ := dialer.Dial("ws"+testServer.URL[4:]+"/ws", nil)
+		defer clientConn.Close()
+
+		// Wait for connection to be established
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	Describe("Associate", func() {
+		It("associates connection with room code and player ID", func() {
+			registry.Associate(conn, "ABC123", 1)
+
+			roomCode, playerID, err := registry.GetRoomInfo(conn)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(roomCode).To(Equal("ABC123"))
+			Expect(playerID).To(Equal(uint32(1)))
+		})
+
+		It("updates association if connection is already associated", func() {
+			registry.Associate(conn, "ABC123", 1)
+			registry.Associate(conn, "XYZ789", 2)
+
+			roomCode, playerID, err := registry.GetRoomInfo(conn)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(roomCode).To(Equal("XYZ789"))
+			Expect(playerID).To(Equal(uint32(2)))
+		})
+	})
+
+	Describe("Disassociate", func() {
+		It("removes connection from registry", func() {
+			registry.Associate(conn, "ABC123", 1)
+			registry.Disassociate(conn)
+
+			_, _, err := registry.GetRoomInfo(conn)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not associated"))
+		})
+
+		It("handles disassociating unassociated connection gracefully", func() {
+			// Should not panic
+			registry.Disassociate(conn)
+		})
+	})
+
+	Describe("GetRoomInfo", func() {
+		It("returns room code and player ID for associated connection", func() {
+			registry.Associate(conn, "ABC123", 42)
+
+			roomCode, playerID, err := registry.GetRoomInfo(conn)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(roomCode).To(Equal("ABC123"))
+			Expect(playerID).To(Equal(uint32(42)))
+		})
+
+		It("returns error for unassociated connection", func() {
+			_, _, err := registry.GetRoomInfo(conn)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not associated"))
+		})
+	})
+
+	Describe("IsAssociated", func() {
+		It("returns true for associated connection", func() {
+			registry.Associate(conn, "ABC123", 1)
+			Expect(registry.IsAssociated(conn)).To(BeTrue())
+		})
+
+		It("returns false for unassociated connection", func() {
+			Expect(registry.IsAssociated(conn)).To(BeFalse())
+		})
+
+		It("returns false after disassociation", func() {
+			registry.Associate(conn, "ABC123", 1)
+			registry.Disassociate(conn)
+			Expect(registry.IsAssociated(conn)).To(BeFalse())
+		})
+	})
+
+	Describe("Thread Safety", func() {
+		It("handles concurrent associate operations", func() {
+			// Create multiple connections
+			var connections []*Connection
+			for i := 0; i < 10; i++ {
+				mux := http.NewServeMux()
+				var wsConn *websocket.Conn
+				mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+					var err error
+					wsConn, err = UpgradeConnection(w, r)
+					if err == nil {
+						connections = append(connections, NewConnection(wsConn))
+					}
+				})
+				testServer := httptest.NewServer(mux)
+				defer testServer.Close()
+
+				dialer := websocket.Dialer{}
+				clientConn, _, _ := dialer.Dial("ws"+testServer.URL[4:]+"/ws", nil)
+				defer clientConn.Close()
+			}
+
+			time.Sleep(100 * time.Millisecond)
+
+			// Concurrently associate connections
+			var wg sync.WaitGroup
+			for i, c := range connections {
+				wg.Add(1)
+				go func(idx int, conn *Connection) {
+					defer wg.Done()
+					registry.Associate(conn, fmt.Sprintf("ROOM%02d", idx), uint32(idx))
+				}(i, c)
+			}
+			wg.Wait()
+
+			// Verify all associations
+			for i, c := range connections {
+				roomCode, playerID, err := registry.GetRoomInfo(c)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(roomCode).To(Equal(fmt.Sprintf("ROOM%02d", i)))
+				Expect(playerID).To(Equal(uint32(i)))
+			}
+		})
+
+		It("handles concurrent associate and disassociate operations", func() {
+			registry.Associate(conn, "ABC123", 1)
+
+			var wg sync.WaitGroup
+			// Concurrently read and write
+			for i := 0; i < 10; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					registry.Associate(conn, "ABC123", 1)
+					registry.IsAssociated(conn)
+					_, _, _ = registry.GetRoomInfo(conn)
+				}()
+			}
+			wg.Wait()
+
+			// Should still be associated
+			Expect(registry.IsAssociated(conn)).To(BeTrue())
 		})
 	})
 })

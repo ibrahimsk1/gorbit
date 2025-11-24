@@ -4,11 +4,75 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorbit/orbitalrush/internal/session"
 )
+
+// connectionInfo stores room association information for a connection.
+type connectionInfo struct {
+	RoomCode string
+	PlayerID uint32
+}
+
+// ConnectionRegistry tracks connections and their room associations.
+// It provides thread-safe operations to associate/disassociate connections with rooms.
+type ConnectionRegistry struct {
+	connections map[*Connection]*connectionInfo
+	mu          sync.RWMutex
+}
+
+// NewConnectionRegistry creates a new ConnectionRegistry.
+func NewConnectionRegistry() *ConnectionRegistry {
+	return &ConnectionRegistry{
+		connections: make(map[*Connection]*connectionInfo),
+	}
+}
+
+// Associate registers a connection with a room code and player ID.
+// If the connection is already associated, it updates the association.
+func (cr *ConnectionRegistry) Associate(conn *Connection, roomCode string, playerID uint32) {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+
+	cr.connections[conn] = &connectionInfo{
+		RoomCode: roomCode,
+		PlayerID: playerID,
+	}
+}
+
+// Disassociate removes a connection from the registry.
+func (cr *ConnectionRegistry) Disassociate(conn *Connection) {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+
+	delete(cr.connections, conn)
+}
+
+// GetRoomInfo returns the room code and player ID for a connection.
+// Returns an error if the connection is not associated with any room.
+func (cr *ConnectionRegistry) GetRoomInfo(conn *Connection) (string, uint32, error) {
+	cr.mu.RLock()
+	defer cr.mu.RUnlock()
+
+	info, exists := cr.connections[conn]
+	if !exists {
+		return "", 0, fmt.Errorf("connection not associated with any room")
+	}
+
+	return info.RoomCode, info.PlayerID, nil
+}
+
+// IsAssociated returns true if the connection is associated with a room.
+func (cr *ConnectionRegistry) IsAssociated(conn *Connection) bool {
+	cr.mu.RLock()
+	defer cr.mu.RUnlock()
+
+	_, exists := cr.connections[conn]
+	return exists
+}
 
 // WebSocketHandler handles WebSocket upgrade requests at the /ws endpoint.
 // It upgrades the HTTP connection to WebSocket, creates a session handler,
