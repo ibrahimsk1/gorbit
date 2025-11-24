@@ -29,31 +29,33 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("creates session with initial world state", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			Expect(session.GetWorld().Tick).To(Equal(uint32(0)))
-			Expect(session.GetWorld().Ship.Pos.X).To(Equal(10.0))
+			Expect(session.GetWorld().Ships[0].Pos.X).To(Equal(10.0))
 			Expect(session.IsRunning()).To(BeFalse())
 		})
 
 		It("initializes ticker at 30 Hz", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
@@ -65,13 +67,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("initializes command queue", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
@@ -82,13 +85,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("sets game constants correctly", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
@@ -109,13 +113,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		), func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
@@ -134,13 +139,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		), func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 
 			customWidth := 3000.0
 			customHeight := 4000.0
@@ -161,13 +167,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		), func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 
 			customWidth := 2500.0
 			customHeight := 2500.0
@@ -190,13 +197,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("enqueues commands correctly", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			cmd := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
@@ -209,13 +217,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("processes commands in sequence order", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Enqueue commands out of order
@@ -243,13 +252,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		), func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			cmd := rules.InputCommand{Thrust: 1.0, Turn: 0.0}
@@ -275,13 +285,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		), func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 0.1, Turn: 0.0})
@@ -308,13 +319,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("processes ticks at 30 Hz rate", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			initialTick := session.GetWorld().Tick
@@ -330,16 +342,17 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("calls rules.Step() with correct parameters", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
-			initialPos := session.GetWorld().Ship.Pos
+			initialPos := session.GetWorld().Ships[0].Pos
 
 			// Enqueue a thrust command
 			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
@@ -349,22 +362,23 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			session.Run(1)
 
 			// Physics should have updated (ship moved due to thrust and gravity)
-			Expect(session.GetWorld().Ship.Pos).NotTo(Equal(initialPos))
+			Expect(session.GetWorld().Ships[0].Pos).NotTo(Equal(initialPos))
 		})
 
 		It("uses zero command when queue is empty", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
-			initialPos := session.GetWorld().Ship.Pos
+			initialPos := session.GetWorld().Ships[0].Pos
 
 			// Run without enqueueing any commands
 			clock.Advance(33 * time.Millisecond)
@@ -372,7 +386,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 
 			// Physics should still update (gravity pulls ship), but no thrust
 			// Ship should move due to gravity only
-			Expect(session.GetWorld().Ship.Pos).NotTo(Equal(initialPos))
+			Expect(session.GetWorld().Ships[0].Pos).NotTo(Equal(initialPos))
 			Expect(session.GetWorld().Tick).To(Equal(uint32(1)))
 		})
 
@@ -384,7 +398,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			// Place pallet very close to ship so it gets picked up quickly
 			pallets := []entities.Pallet{
 				entities.NewPallet(1, entities.NewVec2(0.5, 0.0), true),
@@ -416,7 +430,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world1 := entities.NewWorld(ship, sun, nil)
 			world2 := entities.NewWorld(ship, sun, nil)
 
@@ -440,11 +454,11 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			finalWorld2 := session2.GetWorld()
 
 			Expect(finalWorld1.Tick).To(Equal(finalWorld2.Tick))
-			Expect(finalWorld1.Ship.Pos.X).To(Equal(finalWorld2.Ship.Pos.X))
-			Expect(finalWorld1.Ship.Pos.Y).To(Equal(finalWorld2.Ship.Pos.Y))
-			Expect(finalWorld1.Ship.Vel.X).To(Equal(finalWorld2.Ship.Vel.X))
-			Expect(finalWorld1.Ship.Vel.Y).To(Equal(finalWorld2.Ship.Vel.Y))
-			Expect(finalWorld1.Ship.Energy).To(Equal(finalWorld2.Ship.Energy))
+			Expect(finalWorld1.Ships[0].Pos.X).To(Equal(finalWorld2.Ships[0].Pos.X))
+			Expect(finalWorld1.Ships[0].Pos.Y).To(Equal(finalWorld2.Ships[0].Pos.Y))
+			Expect(finalWorld1.Ships[0].Vel.X).To(Equal(finalWorld2.Ships[0].Vel.X))
+			Expect(finalWorld1.Ships[0].Vel.Y).To(Equal(finalWorld2.Ships[0].Vel.Y))
+			Expect(finalWorld1.Ships[0].Energy).To(Equal(finalWorld2.Ships[0].Energy))
 		})
 	})
 
@@ -452,17 +466,18 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("progresses world state correctly through multiple ticks", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			initialTick := session.GetWorld().Tick
-			initialPos := session.GetWorld().Ship.Pos
+			initialPos := session.GetWorld().Ships[0].Pos
 
 			// Run for 10 ticks
 			clock.Advance(33 * time.Millisecond * 10)
@@ -471,19 +486,20 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			// Tick should have incremented
 			Expect(session.GetWorld().Tick).To(Equal(initialTick + 10))
 			// Position should have changed (gravity pulls ship toward sun)
-			Expect(session.GetWorld().Ship.Pos).NotTo(Equal(initialPos))
+			Expect(session.GetWorld().Ships[0].Pos).NotTo(Equal(initialPos))
 		})
 
 		It("increments tick counter correctly", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			Expect(session.GetWorld().Tick).To(Equal(uint32(0)))
@@ -504,7 +520,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			initialWorld := entities.NewWorld(ship, sun, nil)
 
 			// First application
@@ -523,11 +539,11 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 
 			// Verify states are identical
 			Expect(state1.Tick).To(Equal(state2.Tick))
-			Expect(state1.Ship.Pos.X).To(BeNumerically("~", state2.Ship.Pos.X, 0.001))
-			Expect(state1.Ship.Pos.Y).To(BeNumerically("~", state2.Ship.Pos.Y, 0.001))
-			Expect(state1.Ship.Vel.X).To(BeNumerically("~", state2.Ship.Vel.X, 0.001))
-			Expect(state1.Ship.Vel.Y).To(BeNumerically("~", state2.Ship.Vel.Y, 0.001))
-			Expect(state1.Ship.Energy).To(BeNumerically("~", state2.Ship.Energy, 0.001))
+			Expect(state1.Ships[0].Pos.X).To(BeNumerically("~", state2.Ships[0].Pos.X, 0.001))
+			Expect(state1.Ships[0].Pos.Y).To(BeNumerically("~", state2.Ships[0].Pos.Y, 0.001))
+			Expect(state1.Ships[0].Vel.X).To(BeNumerically("~", state2.Ships[0].Vel.X, 0.001))
+			Expect(state1.Ships[0].Vel.Y).To(BeNumerically("~", state2.Ships[0].Vel.Y, 0.001))
+			Expect(state1.Ships[0].Energy).To(BeNumerically("~", state2.Ships[0].Energy, 0.001))
 		})
 
 		It("applying same command multiple times produces identical results", func() {
@@ -538,7 +554,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			initialWorld := entities.NewWorld(ship, sun, nil)
 			cmd := rules.InputCommand{Thrust: 0.5, Turn: 0.3}
 
@@ -555,22 +571,23 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			// Verify all three states are identical
 			Expect(states[0].Tick).To(Equal(states[1].Tick))
 			Expect(states[1].Tick).To(Equal(states[2].Tick))
-			Expect(states[0].Ship.Pos.X).To(BeNumerically("~", states[1].Ship.Pos.X, 0.001))
-			Expect(states[1].Ship.Pos.X).To(BeNumerically("~", states[2].Ship.Pos.X, 0.001))
-			Expect(states[0].Ship.Energy).To(BeNumerically("~", states[1].Ship.Energy, 0.001))
-			Expect(states[1].Ship.Energy).To(BeNumerically("~", states[2].Ship.Energy, 0.001))
+			Expect(states[0].Ships[0].Pos.X).To(BeNumerically("~", states[1].Ships[0].Pos.X, 0.001))
+			Expect(states[1].Ships[0].Pos.X).To(BeNumerically("~", states[2].Ships[0].Pos.X, 0.001))
+			Expect(states[0].Ships[0].Energy).To(BeNumerically("~", states[1].Ships[0].Energy, 0.001))
+			Expect(states[1].Ships[0].Energy).To(BeNumerically("~", states[2].Ships[0].Energy, 0.001))
 		})
 
 		It("queue rejects duplicate sequence numbers", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Enqueue command with sequence 1
@@ -586,7 +603,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			session.Run(1)
 			finalWorld := session.GetWorld()
 			// Ship should have moved due to thrust=1.0, not thrust=0.5
-			Expect(finalWorld.Ship.Pos.X).To(BeNumerically(">", 10.0))
+			Expect(finalWorld.Ships[0].Pos.X).To(BeNumerically(">", 10.0))
 		})
 
 		It("commands are deterministic (not just cached)", func() {
@@ -606,7 +623,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world1 := entities.NewWorld(ship1, sun, nil)
 			world2 := entities.NewWorld(ship2, sun, nil)
 
@@ -624,7 +641,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			state2 := session2.GetWorld()
 
 			// States should be different (different initial positions)
-			Expect(state1.Ship.Pos.X).NotTo(BeNumerically("~", state2.Ship.Pos.X, 0.1))
+			Expect(state1.Ships[0].Pos.X).NotTo(BeNumerically("~", state2.Ships[0].Pos.X, 0.1))
 
 			// But applying same command to same initial state should produce same result
 			session3 := NewSession(clock, world1, 100, 0.0, 0.0)
@@ -633,8 +650,8 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			session3.Run(1)
 			state3 := session3.GetWorld()
 
-			Expect(state1.Ship.Pos.X).To(BeNumerically("~", state3.Ship.Pos.X, 0.001))
-			Expect(state1.Ship.Pos.Y).To(BeNumerically("~", state3.Ship.Pos.Y, 0.001))
+			Expect(state1.Ships[0].Pos.X).To(BeNumerically("~", state3.Ships[0].Pos.X, 0.001))
+			Expect(state1.Ships[0].Pos.Y).To(BeNumerically("~", state3.Ships[0].Pos.Y, 0.001))
 		})
 
 		It("idempotency holds across multiple ticks", func() {
@@ -645,7 +662,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			initialWorld := entities.NewWorld(ship, sun, nil)
 
 			// First run: apply command sequence 1, then sequence 2
@@ -666,8 +683,8 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 
 			// Verify states are identical
 			Expect(state1.Tick).To(Equal(state2.Tick))
-			Expect(state1.Ship.Pos.X).To(BeNumerically("~", state2.Ship.Pos.X, 0.001))
-			Expect(state1.Ship.Energy).To(BeNumerically("~", state2.Ship.Energy, 0.001))
+			Expect(state1.Ships[0].Pos.X).To(BeNumerically("~", state2.Ships[0].Pos.X, 0.001))
+			Expect(state1.Ships[0].Energy).To(BeNumerically("~", state2.Ships[0].Energy, 0.001))
 		})
 	})
 
@@ -675,30 +692,32 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("GetWorld() returns current world state", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			retrievedWorld := session.GetWorld()
 			Expect(retrievedWorld.Tick).To(Equal(uint32(0)))
-			Expect(retrievedWorld.Ship.Pos.X).To(Equal(10.0))
+			Expect(retrievedWorld.Ships[0].Pos.X).To(Equal(10.0))
 		})
 
 		It("IsRunning() returns correct state", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			Expect(session.IsRunning()).To(BeFalse())
@@ -710,13 +729,14 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("Stop() stops the session", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			session.Stop()
@@ -735,7 +755,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			world1 := entities.NewWorld(ship, sun, nil)
 			world2 := entities.NewWorld(ship, sun, nil)
 
@@ -764,23 +784,24 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			final2 := session2.GetWorld()
 
 			Expect(final1.Tick).To(Equal(final2.Tick))
-			Expect(final1.Ship.Pos.X).To(BeNumerically("~", final2.Ship.Pos.X, 0.001))
-			Expect(final1.Ship.Pos.Y).To(BeNumerically("~", final2.Ship.Pos.Y, 0.001))
-			Expect(final1.Ship.Vel.X).To(BeNumerically("~", final2.Ship.Vel.X, 0.001))
-			Expect(final1.Ship.Vel.Y).To(BeNumerically("~", final2.Ship.Vel.Y, 0.001))
-			Expect(final1.Ship.Energy).To(BeNumerically("~", final2.Ship.Energy, 0.001))
+			Expect(final1.Ships[0].Pos.X).To(BeNumerically("~", final2.Ships[0].Pos.X, 0.001))
+			Expect(final1.Ships[0].Pos.Y).To(BeNumerically("~", final2.Ships[0].Pos.Y, 0.001))
+			Expect(final1.Ships[0].Vel.X).To(BeNumerically("~", final2.Ships[0].Vel.X, 0.001))
+			Expect(final1.Ships[0].Vel.Y).To(BeNumerically("~", final2.Ships[0].Vel.Y, 0.001))
+			Expect(final1.Ships[0].Energy).To(BeNumerically("~", final2.Ships[0].Energy, 0.001))
 		})
 
 		It("end-to-end command ordering with out-of-order enqueue", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Enqueue commands out of order
@@ -797,7 +818,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			final := session.GetWorld()
 			Expect(final.Tick).To(Equal(uint32(3)))
 			// Ship should have moved forward (thrust applied first two ticks)
-			Expect(final.Ship.Pos.X).To(BeNumerically(">", 10.0))
+			Expect(final.Ships[0].Pos.X).To(BeNumerically(">", 10.0))
 		})
 
 		It("end-to-end rollback and replay produces same result", func() {
@@ -808,7 +829,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			initialWorld := entities.NewWorld(ship, sun, nil)
 
 			// First run: apply commands and capture snapshot
@@ -846,16 +867,17 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 		It("end-to-end ticker queue session integration", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
-			initialPos := world.Ship.Pos
+			initialPos := world.Ships[0].Pos
 
 			// Enqueue commands
 			session.EnqueueCommand(1, 1, rules.InputCommand{Thrust: 1.0, Turn: 0.0})
@@ -874,21 +896,22 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 
 			// Verify commands were applied and world state changed
 			// (Position may change due to gravity + thrust, but should be different from initial)
-			Expect(final.Ship.Pos.X).NotTo(Equal(initialPos.X))
+			Expect(final.Ships[0].Pos.X).NotTo(Equal(initialPos.X))
 			// Energy should have decreased due to thrust commands
-			Expect(final.Ship.Energy).To(BeNumerically("<", 100.0))
+			Expect(final.Ships[0].Energy).To(BeNumerically("<", 100.0))
 		})
 
 		It("end-to-end rollback hooks with session integration", func() {
 			clock := NewFakeClock()
 			ship := entities.NewShip(
+				1,
 				entities.NewVec2(10.0, 0.0),
 				entities.NewVec2(0.0, 0.0),
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
-			world := entities.NewWorld(ship, sun, nil)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			world := entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, nil)
 			session := NewSession(clock, world, 100, 0.0, 0.0)
 
 			// Apply command and run
@@ -921,7 +944,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 
 			// Verify restored state matches
 			Expect(restored.Tick).To(Equal(uint32(1)))
-			Expect(restored.Ship.Pos.X).To(BeNumerically("~", session.GetWorld().Ship.Pos.X, 0.001))
+			Expect(restored.Ships[0].Pos.X).To(BeNumerically("~", session.GetWorld().Ships[0].Pos.X, 0.001))
 		})
 
 		It("end-to-end complex multi-tick scenario with rollback and replay", func() {
@@ -932,7 +955,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 				0.0,
 				100.0,
 			)
-			sun := entities.NewSun(entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
+			planet := entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), sunRadius, sunMass)
 			initialWorld := entities.NewWorld(ship, sun, nil)
 
 			manager := NewSnapshotManager()
@@ -964,7 +987,7 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			// Verify state matches snapshot2
 			state2 := session2.GetWorld()
 			Expect(state2.Tick).To(Equal(snapshot2.Tick))
-			Expect(state2.Ship.Pos.X).To(BeNumerically("~", snapshot2.World.Ship.Pos.X, 0.001))
+			Expect(state2.Ships[0].Pos.X).To(BeNumerically("~", snapshot2.World.Ships[0].Pos.X, 0.001))
 
 			// Continue replay
 			session2.EnqueueCommand(3, 1, rules.InputCommand{Thrust: 0.0, Turn: 0.3})
@@ -974,8 +997,8 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 
 			// Verify final states match
 			Expect(final1.Tick).To(Equal(final2.Tick))
-			Expect(final1.Ship.Pos.X).To(BeNumerically("~", final2.Ship.Pos.X, 0.001))
-			Expect(final1.Ship.Energy).To(BeNumerically("~", final2.Ship.Energy, 0.001))
+			Expect(final1.Ships[0].Pos.X).To(BeNumerically("~", final2.Ships[0].Pos.X, 0.001))
+			Expect(final1.Ships[0].Energy).To(BeNumerically("~", final2.Ships[0].Energy, 0.001))
 		})
 	})
 
@@ -1081,11 +1104,11 @@ var _ = Describe("Session Tick Loop", Label("scope:unit", "loop:g5-session", "la
 			final2 := session2.GetWorld()
 
 			Expect(final1.Tick).To(Equal(final2.Tick))
-			Expect(final1.Ship.Pos.X).To(BeNumerically("~", final2.Ship.Pos.X, 0.001))
-			Expect(final1.Ship.Pos.Y).To(BeNumerically("~", final2.Ship.Pos.Y, 0.001))
-			Expect(final1.Ship.Vel.X).To(BeNumerically("~", final2.Ship.Vel.X, 0.001))
-			Expect(final1.Ship.Vel.Y).To(BeNumerically("~", final2.Ship.Vel.Y, 0.001))
-			Expect(final1.Ship.Energy).To(BeNumerically("~", final2.Ship.Energy, 0.001))
+			Expect(final1.Ships[0].Pos.X).To(BeNumerically("~", final2.Ships[0].Pos.X, 0.001))
+			Expect(final1.Ships[0].Pos.Y).To(BeNumerically("~", final2.Ships[0].Pos.Y, 0.001))
+			Expect(final1.Ships[0].Vel.X).To(BeNumerically("~", final2.Ships[0].Vel.X, 0.001))
+			Expect(final1.Ships[0].Vel.Y).To(BeNumerically("~", final2.Ships[0].Vel.Y, 0.001))
+			Expect(final1.Ships[0].Energy).To(BeNumerically("~", final2.Ships[0].Energy, 0.001))
 		})
 
 		It("has minimal performance impact", func() {
