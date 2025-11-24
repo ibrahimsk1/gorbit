@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/gorbit/orbitalrush/internal/observability"
+	"github.com/gorbit/orbitalrush/internal/proto"
+	"github.com/gorbit/orbitalrush/internal/session"
 	"github.com/gorilla/websocket"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -890,6 +892,219 @@ var _ = Describe("Connection Registry", Label("scope:integration", "loop:g7-tran
 
 			// Should still be associated
 			Expect(registry.IsAssociated(conn)).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("Room Management Handlers", Label("scope:integration", "loop:g7-transport", "layer:transport", "dep:room,proto", "b:room-handlers", "r:high", "double:fake-io"), func() {
+	var registry *ConnectionRegistry
+	var conn *Connection
+	var roomOps RoomOperations
+	var handler *RoomHandler
+	var clock session.Clock
+
+	BeforeEach(func() {
+		registry = NewConnectionRegistry()
+		clock = session.NewFakeClock()
+
+		// Create a mock connection for testing
+		mux := http.NewServeMux()
+		var wsConn *websocket.Conn
+		mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+			var err error
+			wsConn, err = UpgradeConnection(w, r)
+			if err == nil {
+				conn = NewConnection(wsConn)
+			}
+		})
+		testServer := httptest.NewServer(mux)
+		defer testServer.Close()
+
+		dialer := websocket.Dialer{}
+		clientConn, _, _ := dialer.Dial("ws"+testServer.URL[4:]+"/ws", nil)
+		defer clientConn.Close()
+
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	Describe("HandleCreateRoom", func() {
+		It("creates room and sends roomCreated response", func() {
+			createdRoomCode := "ABC123"
+			roomOps = RoomOperations{
+				CreateRoomFunc: func() (string, error) {
+					return createdRoomCode, nil
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.CreateRoomMessage{Type: "createRoom"}
+			err := handler.HandleCreateRoom(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("returns error if CreateRoomFunc fails", func() {
+			roomOps = RoomOperations{
+				CreateRoomFunc: func() (string, error) {
+					return "", fmt.Errorf("room creation failed")
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.CreateRoomMessage{Type: "createRoom"}
+			err := handler.HandleCreateRoom(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to create room"))
+		})
+	})
+
+	Describe("HandleJoinRoom", func() {
+		It("joins room, tracks connection, and sends roomState response", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			roomData := RoomData{
+				RoomCode:     roomCode,
+				Players:      []PlayerData{{PlayerID: playerID, Name: "", Conn: conn}},
+				State:        "lobby",
+				HostPlayerID: playerID,
+			}
+
+			roomOps = RoomOperations{
+				JoinRoomFunc: func(code string, c *Connection) (RoomData, uint32, error) {
+					return roomData, playerID, nil
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.JoinRoomMessage{Type: "joinRoom", RoomCode: roomCode}
+			err := handler.HandleJoinRoom(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(registry.IsAssociated(conn)).To(BeTrue())
+			roomCodeFromReg, playerIDFromReg, err := registry.GetRoomInfo(conn)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(roomCodeFromReg).To(Equal(roomCode))
+			Expect(playerIDFromReg).To(Equal(playerID))
+		})
+
+		It("returns error if JoinRoomFunc fails", func() {
+			roomOps = RoomOperations{
+				JoinRoomFunc: func(code string, c *Connection) (RoomData, uint32, error) {
+					return RoomData{}, 0, fmt.Errorf("join failed")
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.JoinRoomMessage{Type: "joinRoom", RoomCode: "ABC123"}
+			err := handler.HandleJoinRoom(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to join room"))
+		})
+	})
+
+	Describe("HandleLeaveRoom", func() {
+		It("leaves room, untracks connection, and broadcasts playerLeft", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomData := RoomData{
+				RoomCode:     roomCode,
+				Players:      []PlayerData{},
+				State:        "lobby",
+				HostPlayerID: playerID,
+			}
+
+			roomOps = RoomOperations{
+				GetRoomFunc: func(code string) (RoomData, error) {
+					return roomData, nil
+				},
+				LeaveRoomFunc: func(code string, pid uint32) error {
+					return nil
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.LeaveRoomMessage{Type: "leaveRoom"}
+			err := handler.HandleLeaveRoom(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(registry.IsAssociated(conn)).To(BeFalse())
+		})
+
+		It("returns error if connection not in a room", func() {
+			roomOps = RoomOperations{}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.LeaveRoomMessage{Type: "leaveRoom"}
+			err := handler.HandleLeaveRoom(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("connection not in a room"))
+		})
+	})
+
+	Describe("HandleStartMatch", func() {
+		It("returns error if StartMatchFunc is nil", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomOps = RoomOperations{
+				StartMatchFunc: nil, // Not implemented
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.StartMatchMessage{Type: "startMatch"}
+			err := handler.HandleStartMatch(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("StartMatch not yet implemented"))
+		})
+
+		It("starts match and broadcasts matchStarted if StartMatchFunc is provided", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomData := RoomData{
+				RoomCode:     roomCode,
+				Players:      []PlayerData{{PlayerID: playerID, Name: "", Conn: conn}},
+				State:        "playing",
+				HostPlayerID: playerID,
+			}
+
+			roomOps = RoomOperations{
+				StartMatchFunc: func(code string, pid uint32, c session.Clock) error {
+					return nil
+				},
+				GetRoomFunc: func(code string) (RoomData, error) {
+					return roomData, nil
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.StartMatchMessage{Type: "startMatch"}
+			err := handler.HandleStartMatch(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("returns error if connection not in a room", func() {
+			roomOps = RoomOperations{
+				StartMatchFunc: func(code string, pid uint32, c session.Clock) error {
+					return nil
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.StartMatchMessage{Type: "startMatch"}
+			err := handler.HandleStartMatch(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("connection not in a room"))
 		})
 	})
 })
