@@ -155,8 +155,8 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		// Route message to session handler
-		err = RouteMessage(data, sessionHandler)
+		// Route message to session handler (room handlers will be added in step 4)
+		err = RouteMessage(data, sessionHandler, nil, nil, nil, nil)
 		if err != nil {
 			// Record error event
 			if eventsCounter := observability.GetConnectionEventsCounter(); eventsCounter != nil {

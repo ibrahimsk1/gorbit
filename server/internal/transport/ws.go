@@ -237,6 +237,26 @@ type InputMessageHandler interface {
 	HandleInput(msg *proto.InputMessage) error
 }
 
+// CreateRoomHandler handles CreateRoomMessage messages.
+type CreateRoomHandler interface {
+	HandleCreateRoom(msg *proto.CreateRoomMessage) error
+}
+
+// JoinRoomHandler handles JoinRoomMessage messages.
+type JoinRoomHandler interface {
+	HandleJoinRoom(msg *proto.JoinRoomMessage) error
+}
+
+// LeaveRoomHandler handles LeaveRoomMessage messages.
+type LeaveRoomHandler interface {
+	HandleLeaveRoom(msg *proto.LeaveRoomMessage) error
+}
+
+// StartMatchHandler handles StartMatchMessage messages.
+type StartMatchHandler interface {
+	HandleStartMatch(msg *proto.StartMatchMessage) error
+}
+
 // ParseMessage parses a JSON message and returns a typed message (InputMessage or room management messages).
 // Returns an error if the message is malformed, invalid, or of unknown type.
 func ParseMessage(data []byte) (interface{}, error) {
@@ -320,7 +340,14 @@ func ParseMessage(data []byte) (interface{}, error) {
 
 // RouteMessage parses a JSON message, validates it, and routes it to the appropriate handler.
 // Returns an error if parsing, validation, or handler execution fails.
-func RouteMessage(data []byte, inputHandler InputMessageHandler) error {
+func RouteMessage(
+	data []byte,
+	inputHandler InputMessageHandler,
+	createRoomHandler CreateRoomHandler,
+	joinRoomHandler JoinRoomHandler,
+	leaveRoomHandler LeaveRoomHandler,
+	startMatchHandler StartMatchHandler,
+) error {
 	msg, err := ParseMessage(data)
 	if err != nil {
 		return err
@@ -333,6 +360,30 @@ func RouteMessage(data []byte, inputHandler InputMessageHandler) error {
 			return fmt.Errorf("InputMessageHandler is nil")
 		}
 		return inputHandler.HandleInput(m)
+
+	case *proto.CreateRoomMessage:
+		if createRoomHandler == nil {
+			return fmt.Errorf("CreateRoomHandler is nil")
+		}
+		return createRoomHandler.HandleCreateRoom(m)
+
+	case *proto.JoinRoomMessage:
+		if joinRoomHandler == nil {
+			return fmt.Errorf("JoinRoomHandler is nil")
+		}
+		return joinRoomHandler.HandleJoinRoom(m)
+
+	case *proto.LeaveRoomMessage:
+		if leaveRoomHandler == nil {
+			return fmt.Errorf("LeaveRoomHandler is nil")
+		}
+		return leaveRoomHandler.HandleLeaveRoom(m)
+
+	case *proto.StartMatchMessage:
+		if startMatchHandler == nil {
+			return fmt.Errorf("StartMatchHandler is nil")
+		}
+		return startMatchHandler.HandleStartMatch(m)
 
 	default:
 		return fmt.Errorf("unexpected message type: %T", msg)

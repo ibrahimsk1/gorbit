@@ -387,6 +387,58 @@ func (h *mockInputHandler) HandleInput(msg *proto.InputMessage) error {
 	return nil
 }
 
+type mockCreateRoomHandler struct {
+	lastMessage *proto.CreateRoomMessage
+	shouldError bool
+}
+
+func (h *mockCreateRoomHandler) HandleCreateRoom(msg *proto.CreateRoomMessage) error {
+	h.lastMessage = msg
+	if h.shouldError {
+		return errors.New("handler error")
+	}
+	return nil
+}
+
+type mockJoinRoomHandler struct {
+	lastMessage *proto.JoinRoomMessage
+	shouldError bool
+}
+
+func (h *mockJoinRoomHandler) HandleJoinRoom(msg *proto.JoinRoomMessage) error {
+	h.lastMessage = msg
+	if h.shouldError {
+		return errors.New("handler error")
+	}
+	return nil
+}
+
+type mockLeaveRoomHandler struct {
+	lastMessage *proto.LeaveRoomMessage
+	shouldError bool
+}
+
+func (h *mockLeaveRoomHandler) HandleLeaveRoom(msg *proto.LeaveRoomMessage) error {
+	h.lastMessage = msg
+	if h.shouldError {
+		return errors.New("handler error")
+	}
+	return nil
+}
+
+type mockStartMatchHandler struct {
+	lastMessage *proto.StartMatchMessage
+	shouldError bool
+}
+
+func (h *mockStartMatchHandler) HandleStartMatch(msg *proto.StartMatchMessage) error {
+	h.lastMessage = msg
+	if h.shouldError {
+		return errors.New("handler error")
+	}
+	return nil
+}
+
 
 var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop:g5-adapter", "layer:server", "dep:ws", "b:message-routing", "r:high"), func() {
 
@@ -588,14 +640,22 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 
 	Describe("RouteMessage", func() {
 		var inputHandler *mockInputHandler
+		var createRoomHandler *mockCreateRoomHandler
+		var joinRoomHandler *mockJoinRoomHandler
+		var leaveRoomHandler *mockLeaveRoomHandler
+		var startMatchHandler *mockStartMatchHandler
 
 		BeforeEach(func() {
 			inputHandler = &mockInputHandler{}
+			createRoomHandler = &mockCreateRoomHandler{}
+			joinRoomHandler = &mockJoinRoomHandler{}
+			leaveRoomHandler = &mockLeaveRoomHandler{}
+			startMatchHandler = &mockStartMatchHandler{}
 		})
 
 		It("successfully routes valid InputMessage to InputMessageHandler", func() {
 			jsonData := []byte(`{"t":"input","seq":42,"thrust":0.75,"turn":-0.5}`)
-			err := RouteMessage(jsonData, inputHandler)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(inputHandler.lastMessage).NotTo(BeNil())
@@ -604,11 +664,123 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 			Expect(inputHandler.lastMessage.Turn).To(Equal(float32(-0.5)))
 		})
 
+		It("successfully routes valid CreateRoomMessage to CreateRoomHandler", func() {
+			jsonData := []byte(`{"t":"createRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(createRoomHandler.lastMessage).NotTo(BeNil())
+			Expect(createRoomHandler.lastMessage.Type).To(Equal("createRoom"))
+		})
+
+		It("successfully routes valid JoinRoomMessage to JoinRoomHandler", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC123"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(joinRoomHandler.lastMessage).NotTo(BeNil())
+			Expect(joinRoomHandler.lastMessage.Type).To(Equal("joinRoom"))
+			Expect(joinRoomHandler.lastMessage.RoomCode).To(Equal("ABC123"))
+		})
+
+		It("successfully routes valid LeaveRoomMessage to LeaveRoomHandler", func() {
+			jsonData := []byte(`{"t":"leaveRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(leaveRoomHandler.lastMessage).NotTo(BeNil())
+			Expect(leaveRoomHandler.lastMessage.Type).To(Equal("leaveRoom"))
+		})
+
+		It("successfully routes valid StartMatchMessage to StartMatchHandler", func() {
+			jsonData := []byte(`{"t":"startMatch"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(startMatchHandler.lastMessage).NotTo(BeNil())
+			Expect(startMatchHandler.lastMessage.Type).To(Equal("startMatch"))
+		})
+
+		It("returns error if InputMessageHandler is nil", func() {
+			jsonData := []byte(`{"t":"input","seq":1,"thrust":0.5,"turn":0.0}`)
+			err := RouteMessage(jsonData, nil, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("InputMessageHandler is nil"))
+		})
+
+		It("returns error if CreateRoomHandler is nil", func() {
+			jsonData := []byte(`{"t":"createRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, nil, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("CreateRoomHandler is nil"))
+		})
+
+		It("returns error if JoinRoomHandler is nil", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC123"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, nil, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("JoinRoomHandler is nil"))
+		})
+
+		It("returns error if LeaveRoomHandler is nil", func() {
+			jsonData := []byte(`{"t":"leaveRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, nil, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("LeaveRoomHandler is nil"))
+		})
+
+		It("returns error if StartMatchHandler is nil", func() {
+			jsonData := []byte(`{"t":"startMatch"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, nil)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("StartMatchHandler is nil"))
+		})
 
 		It("returns handler error if InputMessageHandler fails", func() {
 			inputHandler.shouldError = true
 			jsonData := []byte(`{"t":"input","seq":1,"thrust":0.5,"turn":0.0}`)
-			err := RouteMessage(jsonData, inputHandler)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("handler error"))
+		})
+
+		It("returns handler error if CreateRoomHandler fails", func() {
+			createRoomHandler.shouldError = true
+			jsonData := []byte(`{"t":"createRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("handler error"))
+		})
+
+		It("returns handler error if JoinRoomHandler fails", func() {
+			joinRoomHandler.shouldError = true
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC123"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("handler error"))
+		})
+
+		It("returns handler error if LeaveRoomHandler fails", func() {
+			leaveRoomHandler.shouldError = true
+			jsonData := []byte(`{"t":"leaveRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("handler error"))
+		})
+
+		It("returns handler error if StartMatchHandler fails", func() {
+			startMatchHandler.shouldError = true
+			jsonData := []byte(`{"t":"startMatch"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("handler error"))
@@ -616,7 +788,7 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 
 		It("returns error for malformed messages", func() {
 			jsonData := []byte(`{"t":"input","seq":invalid}`)
-			err := RouteMessage(jsonData, inputHandler)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(inputHandler.lastMessage).To(BeNil())
@@ -624,7 +796,7 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 
 		It("returns error for validation failures", func() {
 			jsonData := []byte(`{"t":"input","seq":0,"thrust":0.5,"turn":0.0}`)
-			err := RouteMessage(jsonData, inputHandler)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(inputHandler.lastMessage).To(BeNil())
@@ -632,7 +804,7 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 
 		It("returns error for unknown message types", func() {
 			jsonData := []byte(`{"t":"unknown"}`)
-			err := RouteMessage(jsonData, inputHandler)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(inputHandler.lastMessage).To(BeNil())
