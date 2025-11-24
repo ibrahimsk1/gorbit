@@ -19,6 +19,8 @@ type Session struct {
 	G            float64
 	aMax         float64
 	pickupRadius float64
+	worldWidth   float64 // World width for wraparound (2000.0 m)
+	worldHeight  float64 // World height for wraparound (2000.0 m)
 	running      bool
 	logger       logr.Logger // Optional logger for observability
 	maxQueueSize int         // Maximum queue size for threshold logging
@@ -35,6 +37,8 @@ func NewSession(clock Clock, world entities.World, maxQueueSize int) *Session {
 		G:            1.0,        // Gravitational constant
 		aMax:         100.0,      // Maximum acceleration
 		pickupRadius: 15.0,       // Pallet pickup radius (about ship length for better gameplay)
+		worldWidth:   2000.0,     // World width for wraparound
+		worldHeight:  2000.0,     // World height for wraparound
 		running:      false,
 		maxQueueSize: maxQueueSize,
 	}
@@ -103,18 +107,21 @@ func (s *Session) Run(maxTicks int) error {
 
 		// Get next command from queue (or zero command if queue is empty)
 		var input rules.InputCommand
+		var playerID uint32
 		if queuedCmd, ok := s.queue.Dequeue(); ok {
 			input = queuedCmd.Command
+			playerID = queuedCmd.PlayerID
 		} else {
-			// No command available, use zero command
+			// No command available, use zero command and playerID 0
 			input = rules.InputCommand{Thrust: 0.0, Turn: 0.0}
+			playerID = 0
 		}
 		
 		// Update queue depth metric after dequeue
 		observability.UpdateQueueDepth(s.queue.Size())
 
 		// Call rules.Step() to update world state
-		s.world = rules.Step(s.world, input, s.dt, s.G, s.aMax, s.pickupRadius)
+		s.world = rules.Step(s.world, playerID, input, s.dt, s.G, s.aMax, s.pickupRadius, s.worldWidth, s.worldHeight)
 
 		ticksProcessed++
 
