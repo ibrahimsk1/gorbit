@@ -62,6 +62,8 @@ export class AppOrchestrator {
   private scene: IScene | null = null
   private initialized: boolean = false
   private initError: Error | null = null
+  private gameLoopId: number | null = null
+  private isGameLoopRunning: boolean = false
 
   constructor(
     app: App,
@@ -181,18 +183,66 @@ export class AppOrchestrator {
 
   /**
    * Starts the render loop and game loop.
-   * Will be implemented in CU cu/render-loop-coordination.
+   * Creates and starts RenderLoop, then starts game loop that updates renderer and HUD.
+   * 
+   * @throws Error if not initialized
    */
   start(): void {
-    // Placeholder - implementation in CU cu/render-loop-coordination
+    if (!this.initialized) {
+      throw new Error('AppOrchestrator must be initialized before starting')
+    }
+
+    if (this.isGameLoopRunning) {
+      // Already running, skip
+      return
+    }
+
+    // Create and start RenderLoop
+    if (!this.renderLoop) {
+      this.renderLoop = new RenderLoop(this.app)
+    }
+    this.renderLoop.start()
+
+    // Start game loop
+    this.isGameLoopRunning = true
+    const gameLoop = () => {
+      if (!this.isGameLoopRunning) {
+        return
+      }
+
+      // Update renderer if provided
+      if (this.renderer) {
+        this.renderer.update()
+      }
+
+      // Update HUD if provided
+      if (this.hud) {
+        this.hud.update()
+      }
+
+      // Continue game loop
+      this.gameLoopId = requestAnimationFrame(gameLoop)
+    }
+
+    this.gameLoopId = requestAnimationFrame(gameLoop)
   }
 
   /**
    * Stops the render loop and game loop.
-   * Will be implemented in CU cu/subsystem-lifecycle.
+   * Basic implementation - full lifecycle management will be in CU cu/subsystem-lifecycle.
    */
   stop(): void {
-    // Placeholder - implementation in CU cu/subsystem-lifecycle
+    // Stop game loop
+    this.isGameLoopRunning = false
+    if (this.gameLoopId !== null) {
+      cancelAnimationFrame(this.gameLoopId)
+      this.gameLoopId = null
+    }
+
+    // Stop RenderLoop
+    if (this.renderLoop) {
+      this.renderLoop.stop()
+    }
   }
 
   /**

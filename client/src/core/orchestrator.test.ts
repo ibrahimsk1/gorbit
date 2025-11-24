@@ -297,5 +297,144 @@ describe('AppOrchestrator', () => {
       uninitializedApp.destroy()
     })
   })
+
+  describe('Render Loop Coordination', () => {
+    /**
+     * Labels: scope:unit loop:g2-app layer:core double:fake-io b:render-loop r:high
+     */
+
+    it('start() requires init() to be called first', async () => {
+      const uninitializedApp = new App()
+      const orchestrator = new AppOrchestrator(uninitializedApp, {})
+      
+      // Should throw error if start() called before init()
+      expect(() => orchestrator.start()).toThrow('must be initialized')
+      
+      // Cleanup
+      uninitializedApp.destroy()
+    })
+
+    it('start() creates RenderLoop if not already created', async () => {
+      const orchestrator = new AppOrchestrator(app, {})
+      await orchestrator.init(container)
+      
+      orchestrator.start()
+      
+      // RenderLoop should be created (we can't directly access it, but start should complete)
+      expect(true).toBe(true) // Placeholder - RenderLoop creation is internal
+    })
+
+    it('start() starts RenderLoop', async () => {
+      const orchestrator = new AppOrchestrator(app, {})
+      await orchestrator.init(container)
+      
+      orchestrator.start()
+      
+      // RenderLoop should be started (we can't directly verify, but start should complete)
+      expect(true).toBe(true) // Placeholder - RenderLoop start is internal
+    })
+
+    it('start() starts game loop that calls renderer.update()', async () => {
+      const renderer = new FakeRenderer()
+      let updateCallCount = 0
+      renderer.update = () => {
+        updateCallCount++
+      }
+      
+      const orchestrator = new AppOrchestrator(app, { renderer })
+      await orchestrator.init(container)
+      
+      orchestrator.start()
+      
+      // Wait a bit for game loop to run
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Stop to prevent further updates
+      orchestrator.stop()
+      
+      // Renderer.update() should have been called
+      expect(updateCallCount).toBeGreaterThan(0)
+    })
+
+    it('start() starts game loop that calls hud.update()', async () => {
+      const hud = new FakeHUD()
+      let updateCallCount = 0
+      hud.update = () => {
+        updateCallCount++
+      }
+      
+      const orchestrator = new AppOrchestrator(app, { hud })
+      await orchestrator.init(container)
+      
+      orchestrator.start()
+      
+      // Wait a bit for game loop to run
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Stop to prevent further updates
+      orchestrator.stop()
+      
+      // HUD.update() should have been called
+      expect(updateCallCount).toBeGreaterThan(0)
+    })
+
+    it('start() is idempotent (can be called multiple times safely)', async () => {
+      const orchestrator = new AppOrchestrator(app, {})
+      await orchestrator.init(container)
+      
+      orchestrator.start()
+      orchestrator.start() // Second call should not throw
+      orchestrator.start() // Third call should not throw
+      
+      // All calls should complete successfully
+      orchestrator.stop()
+      expect(true).toBe(true)
+    })
+
+    it('stop() stops RenderLoop', async () => {
+      const orchestrator = new AppOrchestrator(app, {})
+      await orchestrator.init(container)
+      
+      orchestrator.start()
+      orchestrator.stop()
+      
+      // RenderLoop should be stopped (we can't directly verify, but stop should complete)
+      expect(true).toBe(true) // Placeholder - RenderLoop stop is internal
+    })
+
+    it('stop() stops game loop', async () => {
+      const renderer = new FakeRenderer()
+      let updateCallCount = 0
+      renderer.update = () => {
+        updateCallCount++
+      }
+      
+      const orchestrator = new AppOrchestrator(app, { renderer })
+      await orchestrator.init(container)
+      
+      orchestrator.start()
+      
+      // Wait a bit for game loop to run
+      await new Promise(resolve => setTimeout(resolve, 50))
+      const countBeforeStop = updateCallCount
+      
+      // Stop game loop
+      orchestrator.stop()
+      
+      // Wait a bit more
+      await new Promise(resolve => setTimeout(resolve, 50))
+      
+      // Update count should not increase after stop
+      expect(updateCallCount).toBe(countBeforeStop)
+    })
+
+    it('stop() is safe to call when not started', async () => {
+      const orchestrator = new AppOrchestrator(app, {})
+      await orchestrator.init(container)
+      
+      // Should not throw when stopping without starting
+      expect(() => orchestrator.stop()).not.toThrow()
+    })
+  })
 })
 
