@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/gorbit/orbitalrush/internal/session"
+	"github.com/gorbit/orbitalrush/internal/transport"
 )
 
 const (
@@ -25,6 +28,8 @@ var (
 	ErrRoomNotInLobby = errors.New("room is not in lobby state")
 	// ErrRoomFull is returned when trying to join a room that has reached maximum capacity (8 players).
 	ErrRoomFull = errors.New("room is full")
+	// ErrPlayerNotFound is returned when trying to leave a room with a player ID that does not exist in the room.
+	ErrPlayerNotFound = errors.New("player not found in room")
 
 	// DefaultRoomManager is the singleton instance of RoomManager.
 	DefaultRoomManager *RoomManager
@@ -183,5 +188,64 @@ func (rm *RoomManager) JoinRoom(roomCode string, conn *transport.Connection) (*R
 	}
 
 	return room, playerID, nil
+}
+
+// LeaveRoom removes a player from a room by room code and player ID.
+// Closes the player's connection, stops the session if the room becomes empty,
+// and removes the room from the rooms map if it becomes empty.
+// Returns an error if the room or player is not found.
+func (rm *RoomManager) LeaveRoom(roomCode string, playerID uint32) error {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	// Find room
+	room, exists := rm.rooms[roomCode]
+	if !exists {
+		return ErrRoomNotFound
+	}
+
+	// Find player and get their connection before removing
+	room.mu.RLock()
+	var playerConn *transport.Connection
+	playerFound := false
+	for _, player := range room.Players {
+		if player.PlayerID == playerID {
+			playerConn = player.Conn
+			playerFound = true
+			break
+		}
+	}
+	playerCount := len(room.Players)
+	roomSession := room.Session
+	room.mu.RUnlock()
+
+	if !playerFound {
+		return ErrPlayerNotFound
+	}
+
+	// Remove player from room
+	room.RemovePlayer(playerID)
+
+	// Close player's connection
+	if playerConn != nil {
+		_ = playerConn.Close() // Ignore close errors
+	}
+
+	// Check if room is now empty
+	room.mu.RLock()
+	isEmpty := len(room.Players) == 0
+	room.mu.RUnlock()
+
+	if isEmpty {
+		// Stop session if running
+		if roomSession != nil {
+			roomSession.Stop()
+		}
+
+		// Remove room from map
+		delete(rm.rooms, roomCode)
+	}
+
+	return nil
 }
 
