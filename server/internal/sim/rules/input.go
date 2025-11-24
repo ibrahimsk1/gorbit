@@ -103,8 +103,9 @@ func CalculateThrustAcceleration(rotation float64, thrustInput float32) entities
 	return entities.NewVec2(directionX*magnitude, -directionY*magnitude)
 }
 
-// ApplyInput applies input commands to the ship, updating rotation, velocity, and energy.
+// applyInputToShip applies input commands to a single ship, updating rotation, velocity, and energy.
 // Thrust is only applied when energy > 0.
+// This is an internal helper function used by ApplyInput.
 //
 // Parameters:
 //   - ship: Current ship state
@@ -113,7 +114,7 @@ func CalculateThrustAcceleration(rotation float64, thrustInput float32) entities
 //
 // Returns:
 //   - Updated ship with new rotation, velocity, and energy
-func ApplyInput(ship entities.Ship, input InputCommand, dt float64) entities.Ship {
+func applyInputToShip(ship entities.Ship, input InputCommand, dt float64) entities.Ship {
 	// Clamp input values
 	clampedInput := ClampInput(input)
 
@@ -139,9 +140,47 @@ func ApplyInput(ship entities.Ship, input InputCommand, dt float64) entities.Shi
 
 	// Return updated ship
 	return entities.NewShip(
+		ship.ID, // Preserve ship ID
 		ship.Pos, // Position is not updated by input processing (handled by physics step)
 		newVel,
 		newRot,
 		newEnergy,
 	)
+}
+
+// ApplyInput applies input commands to a specific ship in the world, identified by playerID.
+// The input is applied to the ship with matching ID in world.Ships[] array.
+// If the playerID is not found, the world is returned unchanged (graceful handling).
+// Thrust is only applied when energy > 0.
+//
+// Parameters:
+//   - world: Current world state
+//   - playerID: Player ID to identify which ship to update
+//   - input: Input command to apply
+//   - dt: Time step in seconds
+//
+// Returns:
+//   - Updated world with the target ship's rotation, velocity, and energy updated
+func ApplyInput(world entities.World, playerID uint32, input InputCommand, dt float64) entities.World {
+	// Find ship by playerID
+	shipIndex := -1
+	for i := range world.Ships {
+		if world.Ships[i].ID == playerID {
+			shipIndex = i
+			break
+		}
+	}
+
+	// If ship not found, return unchanged world
+	if shipIndex == -1 {
+		return world
+	}
+
+	// Apply input to the found ship
+	updatedShip := applyInputToShip(world.Ships[shipIndex], input, dt)
+
+	// Update ship in world array
+	world.Ships[shipIndex] = updatedShip
+
+	return world
 }
