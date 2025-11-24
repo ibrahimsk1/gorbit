@@ -52,9 +52,19 @@ describe('HUD', () => {
       expect(hud).toBeDefined()
     })
 
-    it('initializes all components (EnergyBar, PalletCounter, GameBanner)', () => {
+    it('initializes all components (EnergyBar, PalletCounter, PlayerIndicator, GameBanner)', () => {
       const uiLayer = scene.getLayer('ui')
       expect(uiLayer.children.length).toBeGreaterThan(0)
+      
+      const energyBar = uiLayer.children.find(child => child.label === 'energy-bar')
+      const palletCounter = uiLayer.children.find(child => child.label === 'pallet-counter')
+      const playerIndicator = uiLayer.children.find(child => child.label === 'player-indicator')
+      const gameBanner = uiLayer.children.find(child => child.label === 'game-banner')
+      
+      expect(energyBar).toBeDefined()
+      expect(palletCounter).toBeDefined()
+      expect(playerIndicator).toBeDefined()
+      expect(gameBanner).toBeDefined()
     })
   })
 
@@ -63,14 +73,17 @@ describe('HUD', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: {
+        ships: [{
+          id: 1,
           pos: { x: 100, y: 100 },
           vel: { x: 0, y: 0 },
           rot: 0,
           energy: 75.0
-        },
+        }],
         planets: [],
         pallets: [],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -90,27 +103,33 @@ describe('HUD', () => {
         {
           t: 'snapshot',
           tick: 1,
-          ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 0 },
+          ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 0 }],
           planets: [],
           pallets: [],
+          worldBounds: { width: 2000, height: 2000 },
+          myShipId: 1,
           done: false,
           win: false
         },
         {
           t: 'snapshot',
           tick: 2,
-          ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 },
+          ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }],
           planets: [],
           pallets: [],
+          worldBounds: { width: 2000, height: 2000 },
+          myShipId: 1,
           done: false,
           win: false
         },
         {
           t: 'snapshot',
           tick: 3,
-          ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+          ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
           planets: [],
           pallets: [],
+          worldBounds: { width: 2000, height: 2000 },
+          myShipId: 1,
           done: false,
           win: false
         }
@@ -160,14 +179,11 @@ describe('HUD', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: {
-          pos: { x: 100, y: 100 },
-          vel: { x: 0, y: 0 },
-          rot: 0,
-          energy: 100
-        },
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [],
         pallets: [],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -280,21 +296,18 @@ describe('HUD', () => {
       hud.update()
 
       const uiLayer1 = scene.getLayer('ui')
-      const gameBanner1 = uiLayer1.children.find(child => child.name === 'game-banner')
+      const gameBanner1 = uiLayer1.children.find(child => child.label === 'game-banner')
       expect(gameBanner1?.visible).toBe(true)
 
       // Then hide banner
       const snapshot2: SnapshotMessage = {
         t: 'snapshot',
         tick: 2,
-        ship: {
-          pos: { x: 100, y: 100 },
-          vel: { x: 0, y: 0 },
-          rot: 0,
-          energy: 100
-        },
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
         planets: [],
         pallets: [],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         done: false,
         win: false
       }
@@ -303,7 +316,7 @@ describe('HUD', () => {
       hud.update()
 
       const uiLayer2 = scene.getLayer('ui')
-      const gameBanner2 = uiLayer2.children.find(child => child.name === 'game-banner')
+      const gameBanner2 = uiLayer2.children.find(child => child.label === 'game-banner')
       expect(gameBanner2?.visible).toBe(false)
     })
   })
@@ -334,10 +347,12 @@ describe('HUD', () => {
       const uiLayer = scene.getLayer('ui')
       const energyBar = uiLayer.children.find(child => child.label === 'energy-bar')
       const palletCounter = uiLayer.children.find(child => child.label === 'pallet-counter')
+      const playerIndicator = uiLayer.children.find(child => child.label === 'player-indicator')
       const gameBanner = uiLayer.children.find(child => child.label === 'game-banner')
 
       expect(energyBar).toBeDefined()
       expect(palletCounter).toBeDefined()
+      expect(playerIndicator).toBeDefined()
       expect(gameBanner).toBeDefined()
     })
   })
@@ -350,6 +365,35 @@ describe('HUD', () => {
       hud.destroy()
 
       expect(uiLayer.children.length).toBeLessThan(initialChildCount)
+    })
+  })
+
+  describe('Player Indicator Updates', () => {
+    it('updates PlayerIndicator with player ship ID', () => {
+      const snapshot: SnapshotMessage = {
+        t: 'snapshot',
+        tick: 1,
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        planets: [],
+        pallets: [],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
+        done: false,
+        win: false
+      }
+
+      stateManager.updateAuthoritative(snapshot)
+      hud.update()
+
+      const uiLayer = scene.getLayer('ui')
+      const playerIndicator = uiLayer.children.find(child => child.label === 'player-indicator')
+      expect(playerIndicator).toBeDefined()
+      
+      const indicatorText = playerIndicator?.children.find(child => child.label === 'player-indicator-text')
+      expect(indicatorText).toBeDefined()
+      if (indicatorText && 'text' in indicatorText) {
+        expect(indicatorText.text).toContain('1')
+      }
     })
   })
 

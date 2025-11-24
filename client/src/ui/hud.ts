@@ -9,6 +9,7 @@ import { StateManager } from '../sim/state-manager'
 import { EnergyBar } from './components/energy-bar'
 import { PalletCounter } from './components/pallet-counter'
 import { GameBanner } from './components/game-banner'
+import { PlayerIndicator } from './components/player-indicator'
 
 /**
  * HUD coordinator that manages all UI components and updates them from game state.
@@ -19,6 +20,7 @@ export class HUD {
   private energyBar: EnergyBar
   private palletCounter: PalletCounter
   private gameBanner: GameBanner
+  private playerIndicator: PlayerIndicator
   private maxEnergy: number = 100.0
 
   constructor(scene: Scene, stateManager: StateManager) {
@@ -41,6 +43,11 @@ export class HUD {
       y: 50
     })
 
+    this.playerIndicator = new PlayerIndicator(uiLayer, {
+      x: 20,
+      y: 80
+    })
+
     this.gameBanner = new GameBanner(uiLayer)
   }
 
@@ -51,14 +58,30 @@ export class HUD {
   update(): void {
     const state = this.stateManager.getRenderState()
 
+    // Get player's ship from ships array (v1 multiplayer format)
+    // Handle both v0 (single ship) and v1 (ships array) formats for backward compatibility
+    let energy = 0
+    if (state.ships && Array.isArray(state.ships)) {
+      // v1 format: ships array
+      const playerShip = state.ships.find(ship => ship.id === state.myShipId)
+      energy = playerShip?.energy ?? 0
+    } else if ((state as any).ship) {
+      // v0 format: single ship (backward compatibility)
+      energy = (state as any).ship.energy ?? 0
+    }
+
     // Update energy bar
-    const energy = state.ship.energy
     this.energyBar.update(energy, this.maxEnergy)
 
     // Update pallet counter (count active pallets)
     const activePallets = state.pallets.filter(p => p.active).length
     const totalPallets = state.pallets.length
     this.palletCounter.update(activePallets, totalPallets)
+
+    // Update player indicator with player's ship ID
+    // Handle both v0 and v1 formats
+    const myShipId = state.myShipId ?? ((state as any).ship?.id ?? 0)
+    this.playerIndicator.update(myShipId)
 
     // Update game banner based on done/win flags
     if (state.done) {
@@ -87,6 +110,7 @@ export class HUD {
   destroy(): void {
     this.energyBar.destroy()
     this.palletCounter.destroy()
+    this.playerIndicator.destroy()
     this.gameBanner.destroy()
   }
 }
