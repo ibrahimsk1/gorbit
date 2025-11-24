@@ -56,12 +56,16 @@ func ValidateSnapshotMessage(msg *SnapshotMessage) error {
 		return fmt.Errorf("invalid type: expected 'snapshot', got '%s'", msg.Type)
 	}
 
-	if err := ValidateShipSnapshot(&msg.Ship); err != nil {
-		return fmt.Errorf("invalid ship: %w", err)
+	for i, ship := range msg.Ships {
+		if err := ValidateShipSnapshot(&ship); err != nil {
+			return fmt.Errorf("invalid ship at index %d: %w", i, err)
+		}
 	}
 
-	if err := ValidateSunSnapshot(&msg.Sun); err != nil {
-		return fmt.Errorf("invalid sun: %w", err)
+	for i, planet := range msg.Planets {
+		if err := ValidatePlanetSnapshot(&planet); err != nil {
+			return fmt.Errorf("invalid planet at index %d: %w", i, err)
+		}
 	}
 
 	for i, pallet := range msg.Pallets {
@@ -108,6 +112,28 @@ func ValidateSunSnapshot(sun *SunSnapshot) error {
 
 	if sun.Radius <= 0.0 {
 		return fmt.Errorf("invalid radius: must be > 0.0, got %f", sun.Radius)
+	}
+
+	return nil
+}
+
+// ValidatePlanetSnapshot validates a PlanetSnapshot.
+// Returns an error if the snapshot is invalid.
+func ValidatePlanetSnapshot(planet *PlanetSnapshot) error {
+	if planet == nil {
+		return fmt.Errorf("planet snapshot is nil")
+	}
+
+	if planet.ID == 0 {
+		return fmt.Errorf("invalid id: must be greater than 0")
+	}
+
+	if err := ValidateVec2Snapshot(&planet.Pos); err != nil {
+		return fmt.Errorf("invalid pos: %w", err)
+	}
+
+	if planet.Radius <= 0.0 {
+		return fmt.Errorf("invalid radius: must be > 0.0, got %f", planet.Radius)
 	}
 
 	return nil
