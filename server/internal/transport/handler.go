@@ -10,6 +10,7 @@ import (
 	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorbit/orbitalrush/internal/proto"
 	"github.com/gorbit/orbitalrush/internal/session"
+	"github.com/gorbit/orbitalrush/internal/sim/rules"
 )
 
 // connectionInfo stores room association information for a connection.
@@ -78,11 +79,12 @@ func (cr *ConnectionRegistry) IsAssociated(conn *Connection) bool {
 // RoomOperations defines callback functions for room operations.
 // This avoids circular dependencies by using function callbacks instead of importing room package.
 type RoomOperations struct {
-	CreateRoomFunc func() (string, error)
-	JoinRoomFunc   func(roomCode string, conn *Connection) (RoomData, uint32, error)
-	LeaveRoomFunc  func(roomCode string, playerID uint32) error
-	GetRoomFunc    func(roomCode string) (RoomData, error)
-	StartMatchFunc func(roomCode string, hostPlayerID uint32, clock session.Clock) error // May be nil if not implemented
+	CreateRoomFunc         func() (string, error)
+	JoinRoomFunc          func(roomCode string, conn *Connection) (RoomData, uint32, error)
+	LeaveRoomFunc         func(roomCode string, playerID uint32) error
+	GetRoomFunc           func(roomCode string) (RoomData, error)
+	StartMatchFunc        func(roomCode string, hostPlayerID uint32, clock session.Clock) error // May be nil if not implemented
+	EnqueueCommandToRoomFunc func(roomCode string, playerID uint32, seq uint32, cmd rules.InputCommand) error
 }
 
 // RoomData represents room data needed by transport layer.
@@ -300,6 +302,49 @@ func broadcastToRoom(r RoomData, excludeConn *Connection, data []byte) {
 	}
 }
 
+// RoomInputHandler handles InputMessage messages by routing them to the room's session.
+type RoomInputHandler struct {
+	registry *ConnectionRegistry
+	ops      RoomOperations
+	conn     *Connection
+}
+
+// NewRoomInputHandler creates a new RoomInputHandler.
+func NewRoomInputHandler(registry *ConnectionRegistry, ops RoomOperations, conn *Connection) *RoomInputHandler {
+	return &RoomInputHandler{
+		registry: registry,
+		ops:      ops,
+		conn:     conn,
+	}
+}
+
+// HandleInput handles InputMessage by routing it to the room's session.
+func (h *RoomInputHandler) HandleInput(msg *proto.InputMessage) error {
+	// Look up connection's room code and player ID from registry
+	roomCode, playerID, err := h.registry.GetRoomInfo(h.conn)
+	if err != nil {
+		return fmt.Errorf("connection not associated with any room: %w", err)
+	}
+
+	// Convert InputMessage to InputCommand
+	cmd := rules.InputCommand{
+		Thrust: msg.Thrust,
+		Turn:   msg.Turn,
+	}
+
+	// Call RoomOperations.EnqueueCommandToRoomFunc
+	if h.ops.EnqueueCommandToRoomFunc == nil {
+		return fmt.Errorf("EnqueueCommandToRoomFunc not provided")
+	}
+
+	err = h.ops.EnqueueCommandToRoomFunc(roomCode, playerID, msg.Seq, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to enqueue command to room: %w", err)
+	}
+
+	return nil
+}
+
 // WebSocketHandler handles WebSocket upgrade requests at the /ws endpoint.
 // It upgrades the HTTP connection to WebSocket, creates a session handler,
 // and manages the connection lifecycle.
@@ -357,6 +402,9 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		activeGauge.Inc()
 	}
 	
+	// Create connection registry (will be made global in step 8)
+	registry := NewConnectionRegistry()
+	
 	// Create session handler with real clock and initial world
 	clock := session.NewRealClock()
 	initialWorld := NewInitialWorld()
@@ -364,9 +412,17 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	sessionLogger := connLogger.WithValues("component", "session")
 	sessionHandler := NewSessionHandler(wsConn, clock, initialWorld, sessionLogger)
 
+	// Create room input handler (will be wired to RoomManager in step 8)
+	// For now, EnqueueCommandToRoomFunc is nil, so input routing will fail until step 8
+	roomOps := RoomOperations{
+		EnqueueCommandToRoomFunc: nil, // Will be wired in step 8
+	}
+	roomInputHandler := NewRoomInputHandler(registry, roomOps, wsConn)
+
 	connLogger.Info("WebSocket connection established", "message_type", "connect", "remote_addr", r.RemoteAddr)
 
 	// Start session handler (runs session loop and snapshot broadcasting)
+	// NOTE: This will be removed in step 6 when we remove per-connection sessions
 	sessionHandler.Start()
 	defer sessionHandler.Stop()
 
@@ -381,8 +437,9 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		// Route message to session handler (room handlers will be added in step 4)
-		err = RouteMessage(data, sessionHandler, nil, nil, nil, nil)
+		// Route message: input messages go to room input handler, room management messages still nil (will be wired in step 8)
+		// NOTE: roomInputHandler will fail until EnqueueCommandToRoomFunc is wired in step 8
+		err = RouteMessage(data, roomInputHandler, nil, nil, nil, nil)
 		if err != nil {
 			// Record error event
 			if eventsCounter := observability.GetConnectionEventsCounter(); eventsCounter != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorbit/orbitalrush/internal/proto"
 	"github.com/gorbit/orbitalrush/internal/session"
+	"github.com/gorbit/orbitalrush/internal/sim/rules"
 	"github.com/gorilla/websocket"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -1105,6 +1106,192 @@ var _ = Describe("Room Management Handlers", Label("scope:integration", "loop:g7
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("connection not in a room"))
+		})
+	})
+})
+
+var _ = Describe("Room Input Handler", Label("scope:integration", "loop:g7-transport", "layer:transport", "dep:room", "b:input-routing", "r:high", "double:fake-io"), func() {
+	var registry *ConnectionRegistry
+	var conn *Connection
+	var roomOps RoomOperations
+	var handler *RoomInputHandler
+
+	BeforeEach(func() {
+		registry = NewConnectionRegistry()
+
+		// Create a mock connection for testing
+		mux := http.NewServeMux()
+		var wsConn *websocket.Conn
+		mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+			var err error
+			wsConn, err = UpgradeConnection(w, r)
+			if err == nil {
+				conn = NewConnection(wsConn)
+			}
+		})
+		testServer := httptest.NewServer(mux)
+		defer testServer.Close()
+
+		dialer := websocket.Dialer{}
+		clientConn, _, _ := dialer.Dial("ws"+testServer.URL[4:]+"/ws", nil)
+		defer clientConn.Close()
+
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	Describe("HandleInput", func() {
+		It("routes command to room session successfully", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			var enqueuedRoomCode string
+			var enqueuedPlayerID uint32
+			var enqueuedSeq uint32
+			var enqueuedCmd rules.InputCommand
+
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: func(code string, pid uint32, seq uint32, cmd rules.InputCommand) error {
+					enqueuedRoomCode = code
+					enqueuedPlayerID = pid
+					enqueuedSeq = seq
+					enqueuedCmd = cmd
+					return nil
+				},
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    42,
+				Thrust: 0.75,
+				Turn:   -0.5,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(enqueuedRoomCode).To(Equal(roomCode))
+			Expect(enqueuedPlayerID).To(Equal(playerID))
+			Expect(enqueuedSeq).To(Equal(uint32(42)))
+			Expect(enqueuedCmd.Thrust).To(Equal(float32(0.75)))
+			Expect(enqueuedCmd.Turn).To(Equal(float32(-0.5)))
+		})
+
+		It("returns error if connection not associated with room", func() {
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: func(code string, pid uint32, seq uint32, cmd rules.InputCommand) error {
+					return nil
+				},
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    1,
+				Thrust: 0.5,
+				Turn:   0.0,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("connection not associated with any room"))
+		})
+
+		It("returns error if EnqueueCommandToRoomFunc fails (room not found)", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: func(code string, pid uint32, seq uint32, cmd rules.InputCommand) error {
+					return fmt.Errorf("room not found")
+				},
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    1,
+				Thrust: 0.5,
+				Turn:   0.0,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to enqueue command to room"))
+		})
+
+		It("returns error if EnqueueCommandToRoomFunc fails (session not found)", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: func(code string, pid uint32, seq uint32, cmd rules.InputCommand) error {
+					return fmt.Errorf("session not found")
+				},
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    1,
+				Thrust: 0.5,
+				Turn:   0.0,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to enqueue command to room"))
+		})
+
+		It("returns error if EnqueueCommandToRoomFunc is nil", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: nil,
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    1,
+				Thrust: 0.5,
+				Turn:   0.0,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("EnqueueCommandToRoomFunc not provided"))
+		})
+
+		It("correctly uses player ID from registry", func() {
+			roomCode := "ABC123"
+			playerID := uint32(42) // Different player ID
+			registry.Associate(conn, roomCode, playerID)
+
+			var enqueuedPlayerID uint32
+
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: func(code string, pid uint32, seq uint32, cmd rules.InputCommand) error {
+					enqueuedPlayerID = pid
+					return nil
+				},
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    1,
+				Thrust: 0.5,
+				Turn:   0.0,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(enqueuedPlayerID).To(Equal(uint32(42)))
 		})
 	})
 })
