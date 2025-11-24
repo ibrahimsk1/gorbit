@@ -30,16 +30,38 @@ func CheckWinCondition(world entities.World) bool {
 	return true
 }
 
-// CheckLoseCondition checks if the lose condition is met.
-// Lose condition: ship collides with sun (using ShipSunCollision).
+// CheckLoseCondition checks if the lose condition is met for a specific ship.
+// Lose condition: ship collides with any planet (using CheckShipPlanetCollisions).
 //
 // Parameters:
 //   - world: Current world state
+//   - shipID: ID of the ship to check
 //
 // Returns:
-//   - true if ship collides with sun, false otherwise
-func CheckLoseCondition(world entities.World) bool {
-	return physics.ShipSunCollision(world.Ship.Pos, world.Sun.Pos, world.Sun.Radius)
+//   - true if ship collides with any planet, false otherwise (including if shipID not found)
+func CheckLoseCondition(world entities.World, shipID uint32) bool {
+	// Find ship by shipID
+	var ship *entities.Ship
+	for i := range world.Ships {
+		if world.Ships[i].ID == shipID {
+			ship = &world.Ships[i]
+			break
+		}
+	}
+
+	// If ship not found, return false (graceful handling)
+	if ship == nil {
+		return false
+	}
+
+	// If no planets, return false
+	if len(world.Planets) == 0 {
+		return false
+	}
+
+	// Check ship against all planets using CheckShipPlanetCollisions
+	collides, _ := physics.CheckShipPlanetCollisions(ship.Pos, world.Planets)
+	return collides
 }
 
 // EvaluateGameState evaluates win/lose conditions and updates World.Done and World.Win flags.
@@ -66,10 +88,14 @@ func EvaluateGameState(world entities.World) entities.World {
 	}
 
 	// Check lose condition
-	if CheckLoseCondition(world) {
-		world.Done = true
-		world.Win = false
-		return world
+	// Check all ships against all planets
+	// If any ship collides with a planet, game ends with lose
+	for _, ship := range world.Ships {
+		if CheckLoseCondition(world, ship.ID) {
+			world.Done = true
+			world.Win = false
+			return world
+		}
 	}
 
 	// Neither condition met, leave Done and Win unchanged
