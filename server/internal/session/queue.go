@@ -32,14 +32,14 @@ func NewCommandQueue(maxSize int) *CommandQueue {
 	}
 }
 
-// Enqueue adds a command to the queue with the specified sequence number.
+// Enqueue adds a command to the queue with the specified sequence number and player ID.
 // Returns false if:
 //   - The sequence number already exists (duplicate)
 //   - The sequence number is less than nextSequence (already processed)
 //   - The queue is full
 //
 // Returns true on success.
-func (q *CommandQueue) Enqueue(seq uint32, cmd rules.InputCommand) bool {
+func (q *CommandQueue) Enqueue(seq uint32, playerID uint32, cmd rules.InputCommand) bool {
 	// Reject if sequence is less than nextSequence (already processed)
 	if seq < q.nextSequence {
 		return false
@@ -59,7 +59,7 @@ func (q *CommandQueue) Enqueue(seq uint32, cmd rules.InputCommand) bool {
 	queuedCmd := &QueuedCommand{
 		Sequence: seq,
 		Command:  cmd,
-		PlayerID: 0, // Will be set by Enqueue in next CU (cu/command-queue-multiplayer)
+		PlayerID: playerID,
 	}
 	q.commands[seq] = queuedCmd
 
