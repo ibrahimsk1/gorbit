@@ -1,12 +1,15 @@
 package room
 
 import (
-	"crypto/rand"
+	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
+	"math"
+	"math/rand"
 	"sync"
 
 	"github.com/gorbit/orbitalrush/internal/session"
+	"github.com/gorbit/orbitalrush/internal/sim/entities"
 	"github.com/gorbit/orbitalrush/internal/transport"
 )
 
@@ -30,6 +33,10 @@ var (
 	ErrRoomFull = errors.New("room is full")
 	// ErrPlayerNotFound is returned when trying to leave a room with a player ID that does not exist in the room.
 	ErrPlayerNotFound = errors.New("player not found in room")
+	// ErrNotHost is returned when trying to start a match with a player ID that is not the room host.
+	ErrNotHost = errors.New("player is not the room host")
+	// ErrNotEnoughPlayers is returned when trying to start a match with less than 2 players.
+	ErrNotEnoughPlayers = errors.New("room must have at least 2 players to start match")
 
 	// DefaultRoomManager is the singleton instance of RoomManager.
 	DefaultRoomManager *RoomManager
@@ -65,7 +72,7 @@ func GenerateRoomCode(rooms map[string]*Room) (string, error) {
 // generateRandomCode generates a single 6-character alphanumeric code using crypto/rand.
 func generateRandomCode() (string, error) {
 	bytes := make([]byte, roomCodeLength)
-	if _, err := rand.Read(bytes); err != nil {
+	if _, err := cryptorand.Read(bytes); err != nil {
 		return "", err
 	}
 

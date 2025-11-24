@@ -3,6 +3,7 @@ package room
 import (
 	"errors"
 
+	"github.com/gorbit/orbitalrush/internal/session"
 	"github.com/gorbit/orbitalrush/internal/transport"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -375,6 +376,112 @@ var _ = Describe("Room Code Generation", Label("scope:unit", "loop:g6-room", "la
 
 			Expect(err).NotTo(BeNil())
 			Expect(errors.Is(err, ErrPlayerNotFound)).To(BeTrue())
+		})
+	})
+
+	Describe("StartMatch", Label("scope:unit", "loop:g6-room", "layer:room", "b:match-start", "r:high", "double:fake-io", "dep:none"), func() {
+		It("starts match successfully", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn1 := &transport.Connection{}
+			conn2 := &transport.Connection{}
+			manager.JoinRoom(code, conn1)
+			manager.JoinRoom(code, conn2)
+			clock := session.NewRealClock()
+
+			err := manager.StartMatch(code, 1, clock)
+
+			Expect(err).To(BeNil())
+			room, _ := manager.GetRoom(code)
+			Expect(room.GetState()).To(Equal(RoomStatePlaying))
+			Expect(room.GetSession()).NotTo(BeNil())
+		})
+
+		It("returns error when player is not host", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn1 := &transport.Connection{}
+			conn2 := &transport.Connection{}
+			manager.JoinRoom(code, conn1)
+			manager.JoinRoom(code, conn2)
+			clock := session.NewRealClock()
+
+			err := manager.StartMatch(code, 2, clock) // Player 2 is not host
+
+			Expect(err).NotTo(BeNil())
+			Expect(errors.Is(err, ErrNotHost)).To(BeTrue())
+		})
+
+		It("returns error when room has less than 2 players", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn := &transport.Connection{}
+			manager.JoinRoom(code, conn)
+			clock := session.NewRealClock()
+
+			err := manager.StartMatch(code, 1, clock)
+
+			Expect(err).NotTo(BeNil())
+			Expect(errors.Is(err, ErrNotEnoughPlayers)).To(BeTrue())
+		})
+
+		It("returns error when room is not in lobby state", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn1 := &transport.Connection{}
+			conn2 := &transport.Connection{}
+			manager.JoinRoom(code, conn1)
+			manager.JoinRoom(code, conn2)
+			room, _ := manager.GetRoom(code)
+			room.SetState(RoomStatePlaying)
+			clock := session.NewRealClock()
+
+			err := manager.StartMatch(code, 1, clock)
+
+			Expect(err).NotTo(BeNil())
+			Expect(errors.Is(err, ErrRoomNotInLobby)).To(BeTrue())
+		})
+
+		It("creates world with planets, ships, and pallets", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn1 := &transport.Connection{}
+			conn2 := &transport.Connection{}
+			manager.JoinRoom(code, conn1)
+			manager.JoinRoom(code, conn2)
+			clock := session.NewRealClock()
+
+			err := manager.StartMatch(code, 1, clock)
+
+			Expect(err).To(BeNil())
+			room, _ := manager.GetRoom(code)
+			sess := room.GetSession()
+			Expect(sess).NotTo(BeNil())
+			world := sess.GetWorld()
+			Expect(world.Planets).To(HaveLen(BeNumerically(">=", 3)))
+			Expect(world.Planets).To(HaveLen(BeNumerically("<=", 5)))
+			Expect(world.Ships).To(HaveLen(2)) // One ship per player
+			Expect(world.Pallets).To(HaveLen(BeNumerically(">=", 8)))
+			Expect(world.Pallets).To(HaveLen(BeNumerically("<=", 12)))
+		})
+
+		It("starts session in goroutine", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn1 := &transport.Connection{}
+			conn2 := &transport.Connection{}
+			manager.JoinRoom(code, conn1)
+			manager.JoinRoom(code, conn2)
+			clock := session.NewRealClock()
+
+			err := manager.StartMatch(code, 1, clock)
+
+			Expect(err).To(BeNil())
+			room, _ := manager.GetRoom(code)
+			sess := room.GetSession()
+			Expect(sess).NotTo(BeNil())
+			// Session should be running (started in goroutine)
+			// We can't easily verify goroutine execution without waiting, but we can check session exists
 		})
 	})
 })
