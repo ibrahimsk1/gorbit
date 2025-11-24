@@ -1,13 +1,14 @@
 /**
  * Renderer system for updating Pixi sprites from game state.
  * 
- * Labels: scope:integration loop:g6-client layer:client dep:pixi
+ * Labels: scope:integration loop:g6-rendering layer:gfx dep:state
  */
 
 import { Graphics } from 'pixi.js'
 import { StateManager, type GameState } from '../sim/state-manager'
 import { Scene } from './scene'
 import { App } from '../core/app'
+import { Camera } from './camera'
 import { ShipSpriteFactory } from './sprites/ship-sprite'
 import { PlanetSpriteFactory } from './sprites/planet-sprite'
 import { PalletSpriteFactory } from './sprites/pallet-sprite'
@@ -20,38 +21,59 @@ export class Renderer {
   private stateManager: StateManager
   private scene: Scene
   private app: App
+  private camera: Camera
   private shipSprite: Graphics | null = null
   private planetSprites: Map<number, Graphics> = new Map()
   private palletSprites: Map<number, Graphics> = new Map()
+
+  // World bounds constants (2000 m × 2000 m)
+  private readonly WORLD_WIDTH = 2000
+  private readonly WORLD_HEIGHT = 2000
 
   constructor(stateManager: StateManager, scene: Scene, app: App) {
     this.stateManager = stateManager
     this.scene = scene
     this.app = app
+    
+    // Create Camera with world bounds and viewport from app
+    const pixiApp = app.getApplication()
+    this.camera = new Camera(
+      this.WORLD_WIDTH,
+      this.WORLD_HEIGHT,
+      pixiApp.screen.width,
+      pixiApp.screen.height,
+      0.1 // Default lerp factor
+    )
   }
 
   /**
-   * Transforms world coordinates to screen coordinates.
-   * World (0,0) maps to screen center.
+   * Transforms world coordinates to screen coordinates using camera position.
+   * World (0,0) maps to screen center adjusted by camera position.
    * Y-axis is flipped because screen Y increases downward, while world Y increases upward.
+   * Formula: screenX = worldX - cameraX + screenWidth/2, screenY = -(worldY - cameraY) + screenHeight/2
    */
   private worldToScreen(worldX: number, worldY: number): { x: number, y: number } {
     const pixiApp = this.app.getApplication()
     const screenWidth = pixiApp.screen.width
     const screenHeight = pixiApp.screen.height
+    const cameraPos = this.camera.getPosition()
     
     return {
-      x: worldX + screenWidth / 2,
-      y: -worldY + screenHeight / 2  // Flip Y-axis
+      x: worldX - cameraPos.x + screenWidth / 2,
+      y: -(worldY - cameraPos.y) + screenHeight / 2  // Flip Y-axis with camera offset
     }
   }
 
   /**
    * Updates all sprites from current game state.
+   * Camera is updated first to follow player's ship, then sprites are rendered.
    */
   update(): void {
     const state = this.stateManager.getRenderState()
     const gameLayer = this.scene.getLayer('game')
+
+    // Update camera to follow player's ship (call before rendering)
+    this.camera.update(state.ship.pos)
 
     // Update ship sprite
     this.updateShipSprite(state.ship, gameLayer)
