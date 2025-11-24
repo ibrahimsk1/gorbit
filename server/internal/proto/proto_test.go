@@ -1587,6 +1587,506 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				Expect(err.Error()).To(ContainSubstring("y"))
 			})
 		})
+
+		Describe("Room Message Validation", Label("scope:contract", "loop:g4-proto", "layer:contract", "b:validation", "r:high"), func() {
+			Describe("ValidatePlayerInfo", func() {
+				It("accepts valid player info", func() {
+					player := &PlayerInfo{
+						ID:   1,
+						Name: "Player1",
+					}
+					err := ValidatePlayerInfo(player)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects ID = 0", func() {
+					player := &PlayerInfo{
+						ID:   0,
+						Name: "Player1",
+					}
+					err := ValidatePlayerInfo(player)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("id"))
+				})
+
+				It("rejects empty name", func() {
+					player := &PlayerInfo{
+						ID:   1,
+						Name: "",
+					}
+					err := ValidatePlayerInfo(player)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("name"))
+				})
+
+				It("rejects nil player", func() {
+					err := ValidatePlayerInfo(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+			})
+
+			Describe("ValidateCreateRoomMessage", func() {
+				It("accepts valid messages", func() {
+					msg := &CreateRoomMessage{
+						Type: "createRoom",
+					}
+					err := ValidateCreateRoomMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects nil message", func() {
+					err := ValidateCreateRoomMessage(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+
+				It("rejects invalid type", func() {
+					msg := &CreateRoomMessage{
+						Type: "invalid",
+					}
+					err := ValidateCreateRoomMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("type"))
+				})
+			})
+
+			Describe("ValidateJoinRoomMessage", func() {
+				It("accepts valid messages", func() {
+					msg := &JoinRoomMessage{
+						Type:     "joinRoom",
+						RoomCode: "ABC123",
+					}
+					err := ValidateJoinRoomMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects nil message", func() {
+					err := ValidateJoinRoomMessage(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+
+				It("rejects invalid type", func() {
+					msg := &JoinRoomMessage{
+						Type:     "invalid",
+						RoomCode: "ABC123",
+					}
+					err := ValidateJoinRoomMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("type"))
+				})
+
+				It("rejects roomCode with wrong length", func() {
+					msg := &JoinRoomMessage{
+						Type:     "joinRoom",
+						RoomCode: "ABC12", // 5 characters
+					}
+					err := ValidateJoinRoomMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("roomCode"))
+
+					msg2 := &JoinRoomMessage{
+						Type:     "joinRoom",
+						RoomCode: "ABC1234", // 7 characters
+					}
+					err2 := ValidateJoinRoomMessage(msg2)
+					Expect(err2).To(HaveOccurred())
+					Expect(err2.Error()).To(ContainSubstring("roomCode"))
+				})
+
+				It("rejects roomCode with non-alphanumeric characters", func() {
+					msg := &JoinRoomMessage{
+						Type:     "joinRoom",
+						RoomCode: "ABC-12", // Contains dash
+					}
+					err := ValidateJoinRoomMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("roomCode"))
+
+					msg2 := &JoinRoomMessage{
+						Type:     "joinRoom",
+						RoomCode: "ABC 12", // Contains space
+					}
+					err2 := ValidateJoinRoomMessage(msg2)
+					Expect(err2).To(HaveOccurred())
+					Expect(err2.Error()).To(ContainSubstring("roomCode"))
+				})
+
+				It("accepts alphanumeric roomCode", func() {
+					msg := &JoinRoomMessage{
+						Type:     "joinRoom",
+						RoomCode: "ABC123",
+					}
+					err := ValidateJoinRoomMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+
+					msg2 := &JoinRoomMessage{
+						Type:     "joinRoom",
+						RoomCode: "xyz789",
+					}
+					err2 := ValidateJoinRoomMessage(msg2)
+					Expect(err2).NotTo(HaveOccurred())
+
+					msg3 := &JoinRoomMessage{
+						Type:     "joinRoom",
+						RoomCode: "A1B2C3",
+					}
+					err3 := ValidateJoinRoomMessage(msg3)
+					Expect(err3).NotTo(HaveOccurred())
+				})
+			})
+
+			Describe("ValidateLeaveRoomMessage", func() {
+				It("accepts valid messages", func() {
+					msg := &LeaveRoomMessage{
+						Type: "leaveRoom",
+					}
+					err := ValidateLeaveRoomMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects nil message", func() {
+					err := ValidateLeaveRoomMessage(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+
+				It("rejects invalid type", func() {
+					msg := &LeaveRoomMessage{
+						Type: "invalid",
+					}
+					err := ValidateLeaveRoomMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("type"))
+				})
+			})
+
+			Describe("ValidateStartMatchMessage", func() {
+				It("accepts valid messages", func() {
+					msg := &StartMatchMessage{
+						Type: "startMatch",
+					}
+					err := ValidateStartMatchMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects nil message", func() {
+					err := ValidateStartMatchMessage(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+
+				It("rejects invalid type", func() {
+					msg := &StartMatchMessage{
+						Type: "invalid",
+					}
+					err := ValidateStartMatchMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("type"))
+				})
+			})
+
+			Describe("ValidateRoomCreatedMessage", func() {
+				It("accepts valid messages", func() {
+					msg := &RoomCreatedMessage{
+						Type:     "roomCreated",
+						RoomCode: "ABC123",
+					}
+					err := ValidateRoomCreatedMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects nil message", func() {
+					err := ValidateRoomCreatedMessage(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+
+				It("rejects invalid type", func() {
+					msg := &RoomCreatedMessage{
+						Type:     "invalid",
+						RoomCode: "ABC123",
+					}
+					err := ValidateRoomCreatedMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("type"))
+				})
+
+				It("rejects roomCode with wrong length", func() {
+					msg := &RoomCreatedMessage{
+						Type:     "roomCreated",
+						RoomCode: "ABC12",
+					}
+					err := ValidateRoomCreatedMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("roomCode"))
+				})
+
+				It("rejects roomCode with non-alphanumeric characters", func() {
+					msg := &RoomCreatedMessage{
+						Type:     "roomCreated",
+						RoomCode: "ABC-12",
+					}
+					err := ValidateRoomCreatedMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("roomCode"))
+				})
+			})
+
+			Describe("ValidateRoomStateMessage", func() {
+				It("accepts valid messages", func() {
+					msg := &RoomStateMessage{
+						Type:     "roomState",
+						RoomCode: "ABC123",
+						Players: []PlayerInfo{
+							{ID: 1, Name: "Player1"},
+							{ID: 2, Name: "Player2"},
+						},
+						State:  "lobby",
+						HostID: 1,
+					}
+					err := ValidateRoomStateMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects nil message", func() {
+					err := ValidateRoomStateMessage(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+
+				It("rejects invalid type", func() {
+					msg := &RoomStateMessage{
+						Type:     "invalid",
+						RoomCode: "ABC123",
+						Players:  []PlayerInfo{},
+						State:    "lobby",
+						HostID:   1,
+					}
+					err := ValidateRoomStateMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("type"))
+				})
+
+				It("rejects invalid roomCode", func() {
+					msg := &RoomStateMessage{
+						Type:     "roomState",
+						RoomCode: "ABC12",
+						Players:  []PlayerInfo{},
+						State:    "lobby",
+						HostID:   1,
+					}
+					err := ValidateRoomStateMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("roomCode"))
+				})
+
+				It("rejects invalid state", func() {
+					msg := &RoomStateMessage{
+						Type:     "roomState",
+						RoomCode: "ABC123",
+						Players:  []PlayerInfo{},
+						State:    "invalid",
+						HostID:   1,
+					}
+					err := ValidateRoomStateMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("state"))
+				})
+
+				It("accepts state 'lobby'", func() {
+					msg := &RoomStateMessage{
+						Type:     "roomState",
+						RoomCode: "ABC123",
+						Players:  []PlayerInfo{},
+						State:    "lobby",
+						HostID:   1,
+					}
+					err := ValidateRoomStateMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("accepts state 'playing'", func() {
+					msg := &RoomStateMessage{
+						Type:     "roomState",
+						RoomCode: "ABC123",
+						Players:  []PlayerInfo{},
+						State:    "playing",
+						HostID:   1,
+					}
+					err := ValidateRoomStateMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects hostId = 0", func() {
+					msg := &RoomStateMessage{
+						Type:     "roomState",
+						RoomCode: "ABC123",
+						Players:  []PlayerInfo{},
+						State:    "lobby",
+						HostID:   0,
+					}
+					err := ValidateRoomStateMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("hostId"))
+				})
+
+				It("validates players array", func() {
+					msg := &RoomStateMessage{
+						Type:     "roomState",
+						RoomCode: "ABC123",
+						Players: []PlayerInfo{
+							{ID: 0, Name: "Player1"}, // Invalid: ID = 0
+						},
+						State:  "lobby",
+						HostID: 1,
+					}
+					err := ValidateRoomStateMessage(msg)
+					Expect(err).To(HaveOccurred())
+				})
+			})
+
+			Describe("ValidatePlayerJoinedMessage", func() {
+				It("accepts valid messages", func() {
+					msg := &PlayerJoinedMessage{
+						Type: "playerJoined",
+						Player: PlayerInfo{
+							ID:   1,
+							Name: "Player1",
+						},
+					}
+					err := ValidatePlayerJoinedMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects nil message", func() {
+					err := ValidatePlayerJoinedMessage(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+
+				It("rejects invalid type", func() {
+					msg := &PlayerJoinedMessage{
+						Type:   "invalid",
+						Player: PlayerInfo{ID: 1, Name: "Player1"},
+					}
+					err := ValidatePlayerJoinedMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("type"))
+				})
+
+				It("validates nested player structure", func() {
+					msg := &PlayerJoinedMessage{
+						Type: "playerJoined",
+						Player: PlayerInfo{
+							ID:   0, // Invalid
+							Name: "Player1",
+						},
+					}
+					err := ValidatePlayerJoinedMessage(msg)
+					Expect(err).To(HaveOccurred())
+				})
+			})
+
+			Describe("ValidatePlayerLeftMessage", func() {
+				It("accepts valid messages", func() {
+					msg := &PlayerLeftMessage{
+						Type:     "playerLeft",
+						PlayerID: 1,
+					}
+					err := ValidatePlayerLeftMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects nil message", func() {
+					err := ValidatePlayerLeftMessage(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+
+				It("rejects invalid type", func() {
+					msg := &PlayerLeftMessage{
+						Type:     "invalid",
+						PlayerID: 1,
+					}
+					err := ValidatePlayerLeftMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("type"))
+				})
+
+				It("rejects playerId = 0", func() {
+					msg := &PlayerLeftMessage{
+						Type:     "playerLeft",
+						PlayerID: 0,
+					}
+					err := ValidatePlayerLeftMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("playerId"))
+				})
+			})
+
+			Describe("ValidateMatchStartedMessage", func() {
+				It("accepts valid messages", func() {
+					msg := &MatchStartedMessage{
+						Type: "matchStarted",
+					}
+					err := ValidateMatchStartedMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects nil message", func() {
+					err := ValidateMatchStartedMessage(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+
+				It("rejects invalid type", func() {
+					msg := &MatchStartedMessage{
+						Type: "invalid",
+					}
+					err := ValidateMatchStartedMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("type"))
+				})
+			})
+
+			Describe("ValidateMatchEndedMessage", func() {
+				It("accepts valid messages with winnerId", func() {
+					msg := &MatchEndedMessage{
+						Type:     "matchEnded",
+						WinnerID: 1,
+					}
+					err := ValidateMatchEndedMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("accepts valid messages with zero winnerId", func() {
+					msg := &MatchEndedMessage{
+						Type:     "matchEnded",
+						WinnerID: 0, // Valid: represents draw/no winner
+					}
+					err := ValidateMatchEndedMessage(msg)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("rejects nil message", func() {
+					err := ValidateMatchEndedMessage(nil)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("nil"))
+				})
+
+				It("rejects invalid type", func() {
+					msg := &MatchEndedMessage{
+						Type:     "invalid",
+						WinnerID: 1,
+					}
+					err := ValidateMatchEndedMessage(msg)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("type"))
+				})
+			})
+		})
 	})
 
 	Describe("Protocol Versioning", Label("scope:contract", "loop:g4-proto", "layer:contract", "net:proto:v1"), func() {
