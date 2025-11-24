@@ -485,6 +485,52 @@ func (sb *SnapshotBroadcaster) broadcastLoop(roomCode string, done chan struct{}
 	}
 }
 
+// Global connection registry and snapshot broadcaster (initialized on first use)
+var (
+	globalRegistry   *ConnectionRegistry
+	globalBroadcaster *SnapshotBroadcaster
+	initOnce         sync.Once
+)
+
+// getGlobalRegistry returns the global connection registry (initialized on first call).
+func getGlobalRegistry() *ConnectionRegistry {
+	initOnce.Do(func() {
+		globalRegistry = NewConnectionRegistry()
+	})
+	return globalRegistry
+}
+
+// getGlobalBroadcaster returns the global snapshot broadcaster (initialized on first call).
+func getGlobalBroadcaster() *SnapshotBroadcaster {
+	initOnce.Do(func() {
+		// Create RoomOperations with adapter functions
+		// NOTE: SetRoomOperationsAdapter must be called from main.go to wire RoomManager
+		roomOps := createRoomOperations()
+		globalBroadcaster = NewSnapshotBroadcaster(roomOps)
+	})
+	return globalBroadcaster
+}
+
+// createRoomOperations creates RoomOperations with adapter functions.
+// NOTE: The actual adapter functions that call RoomManager will be set by SetRoomOperationsAdapter
+// to avoid circular dependency (room package imports transport).
+var roomOperationsAdapter func() RoomOperations
+
+// SetRoomOperationsAdapter sets the function that creates RoomOperations with adapter functions.
+// This should be called from main.go or an adapter package to wire RoomManager to RoomOperations.
+func SetRoomOperationsAdapter(adapter func() RoomOperations) {
+	roomOperationsAdapter = adapter
+}
+
+// createRoomOperations creates RoomOperations using the adapter function if set.
+func createRoomOperations() RoomOperations {
+	if roomOperationsAdapter != nil {
+		return roomOperationsAdapter()
+	}
+	// Return empty operations if adapter not set (for testing)
+	return RoomOperations{}
+}
+
 // WebSocketHandler handles WebSocket upgrade requests at the /ws endpoint.
 // It upgrades the HTTP connection to WebSocket, creates a session handler,
 // and manages the connection lifecycle.
@@ -542,19 +588,18 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		activeGauge.Inc()
 	}
 	
-	// Create connection registry (will be made global in step 8)
-	registry := NewConnectionRegistry()
+	// Get global connection registry and create room operations
+	registry := getGlobalRegistry()
+	roomOps := createRoomOperations()
+	broadcaster := getGlobalBroadcaster()
 
-	// Create room input handler (will be wired to RoomManager in step 8)
-	// For now, EnqueueCommandToRoomFunc is nil, so input routing will fail until step 8
-	roomOps := RoomOperations{
-		EnqueueCommandToRoomFunc: nil, // Will be wired in step 8
-	}
+	// Create room handler and input handler with wired operations
+	clock := session.NewRealClock()
+	roomHandler := NewRoomHandler(registry, roomOps, wsConn, clock)
+	roomHandler.SetBroadcaster(broadcaster)
 	roomInputHandler := NewRoomInputHandler(registry, roomOps, wsConn)
 
 	connLogger.Info("WebSocket connection established", "message_type", "connect", "remote_addr", r.RemoteAddr)
-
-	// NOTE: Per-connection sessions removed. Room-based sessions will be created when match starts (step 7).
 
 	// Handle incoming messages in a loop
 	for {
@@ -563,13 +608,22 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			// Connection closed or error reading
 			// This is normal when client disconnects
+			// Handle disconnection by calling LeaveRoom if in room
+			if registry.IsAssociated(wsConn) {
+				roomCode, playerID, err := registry.GetRoomInfo(wsConn)
+				if err == nil {
+					// Call LeaveRoom to handle cleanup
+					_ = roomOps.LeaveRoomFunc(roomCode, playerID)
+				}
+			}
+			// Cleanup connection tracking
+			registry.Disassociate(wsConn)
 			// Note: defer will handle disconnect metrics and logging
 			break
 		}
 
-		// Route message: input messages go to room input handler, room management messages still nil (will be wired in step 8)
-		// NOTE: roomInputHandler will fail until EnqueueCommandToRoomFunc is wired in step 8
-		err = RouteMessage(data, roomInputHandler, nil, nil, nil, nil)
+		// Route message: input messages go to room input handler, room management messages go to room handler
+		err = RouteMessage(data, roomInputHandler, roomHandler, roomHandler, roomHandler, roomHandler)
 		if err != nil {
 			// Record error event
 			if eventsCounter := observability.GetConnectionEventsCounter(); eventsCounter != nil {
