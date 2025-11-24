@@ -74,6 +74,26 @@ func ValidateSnapshotMessage(msg *SnapshotMessage) error {
 		}
 	}
 
+	if err := ValidateWorldBounds(&msg.WorldBounds); err != nil {
+		return fmt.Errorf("invalid world bounds: %w", err)
+	}
+
+	if msg.MyShipId == 0 {
+		return fmt.Errorf("invalid myShipId: must be greater than 0")
+	}
+
+	// Validate that MyShipId exists in Ships array
+	found := false
+	for _, ship := range msg.Ships {
+		if ship.ID == msg.MyShipId {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("invalid myShipId: ship with id %d not found in ships array", msg.MyShipId)
+	}
+
 	return nil
 }
 
@@ -82,6 +102,10 @@ func ValidateSnapshotMessage(msg *SnapshotMessage) error {
 func ValidateShipSnapshot(ship *ShipSnapshot) error {
 	if ship == nil {
 		return fmt.Errorf("ship snapshot is nil")
+	}
+
+	if ship.ID == 0 {
+		return fmt.Errorf("invalid id: must be greater than 0")
 	}
 
 	if err := ValidateVec2Snapshot(&ship.Pos); err != nil {
@@ -94,24 +118,6 @@ func ValidateShipSnapshot(ship *ShipSnapshot) error {
 
 	if ship.Energy < 0.0 {
 		return fmt.Errorf("invalid energy: must be >= 0.0, got %f", ship.Energy)
-	}
-
-	return nil
-}
-
-// ValidateSunSnapshot validates a SunSnapshot.
-// Returns an error if the snapshot is invalid.
-func ValidateSunSnapshot(sun *SunSnapshot) error {
-	if sun == nil {
-		return fmt.Errorf("sun snapshot is nil")
-	}
-
-	if err := ValidateVec2Snapshot(&sun.Pos); err != nil {
-		return fmt.Errorf("invalid pos: %w", err)
-	}
-
-	if sun.Radius <= 0.0 {
-		return fmt.Errorf("invalid radius: must be > 0.0, got %f", sun.Radius)
 	}
 
 	return nil
@@ -180,6 +186,21 @@ func ValidateVec2Snapshot(vec *Vec2Snapshot) error {
 		return fmt.Errorf("invalid y: must be finite, got Inf")
 	}
 
+	return nil
+}
+
+// ValidateWorldBounds validates a WorldBounds.
+// Returns an error if the bounds are invalid.
+func ValidateWorldBounds(bounds *WorldBounds) error {
+	if bounds == nil {
+		return fmt.Errorf("world bounds are nil")
+	}
+	if bounds.Width <= 0.0 {
+		return fmt.Errorf("invalid width: must be > 0.0, got %f", bounds.Width)
+	}
+	if bounds.Height <= 0.0 {
+		return fmt.Errorf("invalid height: must be > 0.0, got %f", bounds.Height)
+	}
 	return nil
 }
 

@@ -1384,7 +1384,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 					Type: "snapshot",
 					Tick:  1,
 					Ships: []ShipSnapshot{
-						{Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Vel: Vec2Snapshot{X: 0.0, Y: 0.0}, Rot: 0.0, Energy: 100.0},
+						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Vel: Vec2Snapshot{X: 0.0, Y: 0.0}, Rot: 0.0, Energy: 100.0},
 					},
 					Planets: []PlanetSnapshot{
 						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Radius: 5.0},
@@ -1397,6 +1397,82 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				}
 				err := ValidateSnapshotMessage(msg)
 				Expect(err).To(HaveOccurred())
+			})
+
+			It("rejects invalid WorldBounds width (<= 0)", func() {
+				msg := &SnapshotMessage{
+					Type: "snapshot",
+					Tick:  1,
+					Ships: []ShipSnapshot{
+						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Vel: Vec2Snapshot{X: 0.0, Y: 0.0}, Rot: 0.0, Energy: 100.0},
+					},
+					Planets: []PlanetSnapshot{
+						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Radius: 5.0},
+					},
+					Pallets:     []PalletSnapshot{},
+					WorldBounds: WorldBounds{Width: 0.0, Height: 1000.0},
+					MyShipId:    1,
+				}
+				err := ValidateSnapshotMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("world bounds"))
+			})
+
+			It("rejects invalid WorldBounds height (<= 0)", func() {
+				msg := &SnapshotMessage{
+					Type: "snapshot",
+					Tick:  1,
+					Ships: []ShipSnapshot{
+						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Vel: Vec2Snapshot{X: 0.0, Y: 0.0}, Rot: 0.0, Energy: 100.0},
+					},
+					Planets: []PlanetSnapshot{
+						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Radius: 5.0},
+					},
+					Pallets:     []PalletSnapshot{},
+					WorldBounds: WorldBounds{Width: 1000.0, Height: -1.0},
+					MyShipId:    1,
+				}
+				err := ValidateSnapshotMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("world bounds"))
+			})
+
+			It("rejects MyShipId = 0", func() {
+				msg := &SnapshotMessage{
+					Type: "snapshot",
+					Tick:  1,
+					Ships: []ShipSnapshot{
+						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Vel: Vec2Snapshot{X: 0.0, Y: 0.0}, Rot: 0.0, Energy: 100.0},
+					},
+					Planets: []PlanetSnapshot{
+						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Radius: 5.0},
+					},
+					Pallets:     []PalletSnapshot{},
+					WorldBounds: WorldBounds{Width: 1000.0, Height: 1000.0},
+					MyShipId:    0,
+				}
+				err := ValidateSnapshotMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("myShipId"))
+			})
+
+			It("rejects MyShipId not in Ships array", func() {
+				msg := &SnapshotMessage{
+					Type: "snapshot",
+					Tick:  1,
+					Ships: []ShipSnapshot{
+						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Vel: Vec2Snapshot{X: 0.0, Y: 0.0}, Rot: 0.0, Energy: 100.0},
+					},
+					Planets: []PlanetSnapshot{
+						{ID: 1, Pos: Vec2Snapshot{X: 0.0, Y: 0.0}, Radius: 5.0},
+					},
+					Pallets:     []PalletSnapshot{},
+					WorldBounds: WorldBounds{Width: 1000.0, Height: 1000.0},
+					MyShipId:    999, // Not in Ships array
+				}
+				err := ValidateSnapshotMessage(msg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("myShipId"))
 			})
 		})
 
@@ -1452,7 +1528,7 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 
 			It("accepts zero energy", func() {
 				ship := &ShipSnapshot{
-				ID:     1,
+					ID:     1,
 					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
 					Vel:    Vec2Snapshot{X: 1.0, Y: -1.0},
 					Rot:    1.57,
@@ -1461,43 +1537,71 @@ var _ = Describe("Protocol Messages", Label("scope:contract", "loop:g4-proto", "
 				err := ValidateShipSnapshot(ship)
 				Expect(err).NotTo(HaveOccurred())
 			})
+
+			It("rejects ID = 0", func() {
+				ship := &ShipSnapshot{
+					ID:     0,
+					Pos:    Vec2Snapshot{X: 10.0, Y: 20.0},
+					Vel:    Vec2Snapshot{X: 1.0, Y: -1.0},
+					Rot:    1.57,
+					Energy: 75.5,
+				}
+				err := ValidateShipSnapshot(ship)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("id"))
+			})
 		})
 
-		Describe("ValidateSunSnapshot", func() {
-			It("accepts valid sun snapshots", func() {
-				sun := &SunSnapshot{
+		Describe("ValidatePlanetSnapshot", func() {
+			It("accepts valid planet snapshots", func() {
+				planet := &PlanetSnapshot{
+					ID:     1,
 					Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
 					Radius: 5.0,
 				}
-				err := ValidateSunSnapshot(sun)
+				err := ValidatePlanetSnapshot(planet)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
+			It("rejects ID = 0", func() {
+				planet := &PlanetSnapshot{
+					ID:     0,
+					Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
+					Radius: 5.0,
+				}
+				err := ValidatePlanetSnapshot(planet)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("id"))
+			})
+
 			It("rejects invalid position (NaN)", func() {
-				sun := &SunSnapshot{
+				planet := &PlanetSnapshot{
+					ID:     1,
 					Pos:    Vec2Snapshot{X: math.NaN(), Y: 0.0},
 					Radius: 5.0,
 				}
-				err := ValidateSunSnapshot(sun)
+				err := ValidatePlanetSnapshot(planet)
 				Expect(err).To(HaveOccurred())
 			})
 
 			It("rejects zero radius", func() {
-				sun := &SunSnapshot{
+				planet := &PlanetSnapshot{
+					ID:     1,
 					Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
 					Radius: 0.0,
 				}
-				err := ValidateSunSnapshot(sun)
+				err := ValidatePlanetSnapshot(planet)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("radius"))
 			})
 
 			It("rejects negative radius", func() {
-				sun := &SunSnapshot{
+				planet := &PlanetSnapshot{
+					ID:     1,
 					Pos:    Vec2Snapshot{X: 0.0, Y: 0.0},
 					Radius: -1.0,
 				}
-				err := ValidateSunSnapshot(sun)
+				err := ValidatePlanetSnapshot(planet)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("radius"))
 			})
