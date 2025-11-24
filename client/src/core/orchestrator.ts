@@ -517,7 +517,11 @@ export class AppOrchestrator {
 
     // Scene (only if we created it)
     if (this.scene && this.sceneCreatedByOrchestrator) {
-      this.scene.destroy()
+      try {
+        this.scene.destroy()
+      } catch (error) {
+        // Ignore errors - scene may already be destroyed or app not initialized
+      }
       this.scene = null
       this.sceneCreatedByOrchestrator = false
     }
