@@ -40,10 +40,10 @@ func NewSession(clock Clock, world entities.World, maxQueueSize int) *Session {
 	}
 }
 
-// EnqueueCommand adds a command to the queue with the specified sequence number.
+// EnqueueCommand adds a command to the queue with the specified sequence number and player ID.
 // Returns true if the command was successfully enqueued, false otherwise.
-func (s *Session) EnqueueCommand(seq uint32, cmd rules.InputCommand) bool {
-	success := s.queue.Enqueue(seq, cmd)
+func (s *Session) EnqueueCommand(seq uint32, playerID uint32, cmd rules.InputCommand) bool {
+	success := s.queue.Enqueue(seq, playerID, cmd)
 	
 	// Update queue depth metric
 	queueSize := s.queue.Size()
