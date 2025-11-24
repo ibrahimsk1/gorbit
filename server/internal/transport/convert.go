@@ -16,6 +16,7 @@ func Vec2ToSnapshot(v entities.Vec2) proto.Vec2Snapshot {
 // ShipToSnapshot converts an entities.Ship to a proto.ShipSnapshot.
 func ShipToSnapshot(s entities.Ship) proto.ShipSnapshot {
 	return proto.ShipSnapshot{
+		ID:     s.ID,
 		Pos:    Vec2ToSnapshot(s.Pos),
 		Vel:    Vec2ToSnapshot(s.Vel),
 		Rot:    s.Rot,
@@ -23,13 +24,14 @@ func ShipToSnapshot(s entities.Ship) proto.ShipSnapshot {
 	}
 }
 
-// SunToSnapshot converts an entities.Sun to a proto.SunSnapshot.
-// Note: The Mass field from entities.Sun is not included in proto.SunSnapshot
+// PlanetToSnapshot converts an entities.Planet to a proto.PlanetSnapshot.
+// Note: The Mass field from entities.Planet is not included in proto.PlanetSnapshot
 // as it is only used for simulation calculations.
-func SunToSnapshot(s entities.Sun) proto.SunSnapshot {
-	return proto.SunSnapshot{
-		Pos:    Vec2ToSnapshot(s.Pos),
-		Radius: s.Radius,
+func PlanetToSnapshot(p entities.Planet) proto.PlanetSnapshot {
+	return proto.PlanetSnapshot{
+		ID:     p.ID,
+		Pos:    Vec2ToSnapshot(p.Pos),
+		Radius: p.Radius,
 	}
 }
 
@@ -45,7 +47,20 @@ func PalletToSnapshot(p entities.Pallet) proto.PalletSnapshot {
 // WorldToSnapshot converts an entities.World to a proto.SnapshotMessage.
 // This function bridges the simulation layer with the protocol layer,
 // enabling the server to broadcast game state to clients.
-func WorldToSnapshot(w entities.World) proto.SnapshotMessage {
+// playerID is used to set myShipId in the snapshot (identifies which ship belongs to this player).
+func WorldToSnapshot(w entities.World, playerID uint32) proto.SnapshotMessage {
+	// Convert ships slice, ensuring empty slice produces empty array (not nil)
+	ships := make([]proto.ShipSnapshot, len(w.Ships))
+	for i, ship := range w.Ships {
+		ships[i] = ShipToSnapshot(ship)
+	}
+
+	// Convert planets slice, ensuring empty slice produces empty array (not nil)
+	planets := make([]proto.PlanetSnapshot, len(w.Planets))
+	for i, planet := range w.Planets {
+		planets[i] = PlanetToSnapshot(planet)
+	}
+
 	// Convert pallets slice, ensuring empty slice produces empty array (not nil)
 	pallets := make([]proto.PalletSnapshot, len(w.Pallets))
 	for i, pallet := range w.Pallets {
@@ -53,13 +68,16 @@ func WorldToSnapshot(w entities.World) proto.SnapshotMessage {
 	}
 
 	return proto.SnapshotMessage{
-		Type:    "snapshot",
-		Tick:    w.Tick,
-		Ship:    ShipToSnapshot(w.Ship),
-		Sun:     SunToSnapshot(w.Sun),
-		Pallets: pallets,
-		Done:    w.Done,
-		Win:     w.Win,
+		Type:        "snapshot",
+		Tick:        w.Tick,
+		Ships:       ships,
+		Planets:     planets,
+		Pallets:     pallets,
+		WorldBounds: proto.WorldBounds{
+			Width:  entities.WORLD_WIDTH,
+			Height: entities.WORLD_HEIGHT,
+		},
+		MyShipId: playerID,
 	}
 }
 

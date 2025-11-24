@@ -463,20 +463,20 @@ func (sb *SnapshotBroadcaster) broadcastLoop(roomCode string, done chan struct{}
 				continue
 			}
 
-			// Convert world to snapshot
-			// NOTE: WorldToSnapshot will be updated for multiplayer format in step 9
-			snapshot := WorldToSnapshot(world)
-
-			// Serialize snapshot
-			data, err := json.Marshal(snapshot)
-			if err != nil {
-				// Log error but continue
-				continue
-			}
-
 			// Broadcast to all players in room
+			// Each player gets a snapshot with their own myShipId
 			for _, player := range roomData.Players {
 				if player.Conn != nil {
+					// Convert world to snapshot with this player's ID as myShipId
+					snapshot := WorldToSnapshot(world, player.PlayerID)
+
+					// Serialize snapshot
+					data, err := json.Marshal(snapshot)
+					if err != nil {
+						// Log error but continue
+						continue
+					}
+
 					// Send snapshot (ignore errors - connection might be closed)
 					_ = player.Conn.WriteMessage(data)
 				}

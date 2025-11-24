@@ -519,8 +519,10 @@ func (h *SessionHandler) Start() {
 				return
 			case <-h.snapshotTicker.C:
 				// Get world state and broadcast snapshot
+				// NOTE: This is legacy code for per-connection sessions (removed in step 6)
+				// Using playerID 1 as default for legacy single-player sessions
 				world := h.session.GetWorld()
-				snapshot := WorldToSnapshot(world)
+				snapshot := WorldToSnapshot(world, 1)
 
 				// Serialize and send snapshot
 				data, err := json.Marshal(snapshot)
