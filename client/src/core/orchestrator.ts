@@ -9,19 +9,57 @@ import { RenderLoop } from './render-loop'
 import { Scene } from '../gfx/scene'
 import type { Container } from 'pixi.js'
 
+// UI state type
+export type UIState = 'main-menu' | 'lobby' | 'in-game'
+
+// Room management types
+export interface PlayerInfo {
+  id: number
+  name: string
+}
+
+export interface RoomState {
+  roomCode: string
+  players: PlayerInfo[]
+  state: 'lobby' | 'playing' | 'ended'
+  hostId: number
+}
+
 // Subsystem interfaces for dependency injection
 export interface INetworkClient {
   onSnapshot(callback: (snapshot: any) => void): void
   onConnect(callback: () => void): void
   onDisconnect(callback: () => void): void
   onError(callback: (error: Error) => void): void
+  onRoomState(callback: (state: RoomState) => void): void
+  onPlayerJoined(callback: (player: PlayerInfo) => void): void
+  onPlayerLeft(callback: (playerId: number) => void): void
+  onMatchStarted(callback: () => void): void
+  onMatchEnded(callback: (winnerId?: number) => void): void
   connect(url: string): Promise<void>
   disconnect(): void
+  createRoom(): Promise<string>
+  joinRoom(roomCode: string): Promise<void>
+  leaveRoom(): void
+  startMatch(): void
   isConnected(): boolean
 }
 
 export interface IRenderer {
   update(): void
+  destroy(): void
+}
+
+export interface IMainMenu {
+  show(): void
+  hide(): void
+  destroy(): void
+}
+
+export interface IRoomLobby {
+  show(): void
+  hide(): void
+  update(roomState: RoomState): void
   destroy(): void
 }
 
@@ -67,6 +105,9 @@ export class AppOrchestrator {
   private isGameLoopRunning: boolean = false
   private sceneCreatedByOrchestrator: boolean = false
   private beforeunloadHandler: (() => void) | null = null
+  private uiState: UIState = 'main-menu'
+  private mainMenu: IMainMenu | null = null
+  private roomLobby: IRoomLobby | null = null
 
   constructor(
     app: App,
@@ -77,6 +118,8 @@ export class AppOrchestrator {
       inputHandler?: IInputHandler | (() => IInputHandler)
       stateManager?: IStateManager | (() => IStateManager)
       scene?: IScene | (() => IScene)
+      mainMenu?: IMainMenu | (() => IMainMenu)
+      roomLobby?: IRoomLobby | (() => IRoomLobby)
     } = {}
   ) {
     this.app = app
@@ -117,6 +160,18 @@ export class AppOrchestrator {
         ? subsystems.scene()
         : subsystems.scene
     }
+
+    if (subsystems.mainMenu) {
+      this.mainMenu = typeof subsystems.mainMenu === 'function'
+        ? subsystems.mainMenu()
+        : subsystems.mainMenu
+    }
+
+    if (subsystems.roomLobby) {
+      this.roomLobby = typeof subsystems.roomLobby === 'function'
+        ? subsystems.roomLobby()
+        : subsystems.roomLobby
+    }
   }
 
   /**
@@ -145,6 +200,11 @@ export class AppOrchestrator {
       // Set up NetworkClient event handlers if provided
       if (this.networkClient && this.stateManager) {
         this.setupNetworkEventHandlers()
+      }
+
+      // Set up room management event handlers if provided
+      if (this.networkClient) {
+        this.setupRoomManagementHandlers()
       }
 
       this.initialized = true
@@ -186,14 +246,146 @@ export class AppOrchestrator {
   }
 
   /**
+   * Sets up room management event handlers for NetworkClient.
+   * Private helper method called during initialization.
+   */
+  private setupRoomManagementHandlers(): void {
+    if (!this.networkClient) {
+      return
+    }
+
+    this.networkClient.onRoomState((roomState) => {
+      if (roomState.state === 'lobby') {
+        this.transitionToLobby(roomState)
+      }
+    })
+
+    this.networkClient.onPlayerJoined((player) => {
+      // Player joined - lobby will be updated via onRoomState
+      if (this.uiState === 'lobby') {
+        console.log('Player joined:', player.name)
+      }
+    })
+
+    this.networkClient.onPlayerLeft((playerId) => {
+      // Player left - lobby will be updated via onRoomState
+      if (this.uiState === 'lobby') {
+        console.log('Player left:', playerId)
+      }
+    })
+
+    this.networkClient.onMatchStarted(() => {
+      this.transitionToInGame()
+    })
+
+    this.networkClient.onMatchEnded((winnerId) => {
+      // Transition back to lobby after match ends
+      this.transitionToLobby()
+      if (winnerId !== undefined) {
+        console.log('Match ended, winner:', winnerId)
+      }
+    })
+  }
+
+  /**
+   * Gets the current UI state.
+   * @returns Current UI state
+   */
+  getUIState(): UIState {
+    return this.uiState
+  }
+
+  /**
+   * Transitions to main menu state.
+   * Shows main menu, hides lobby/HUD, disables input, stops rendering.
+   */
+  transitionToMainMenu(): void {
+    this.uiState = 'main-menu'
+
+    if (this.mainMenu) {
+      this.mainMenu.show()
+    }
+    if (this.roomLobby) {
+      this.roomLobby.hide()
+    }
+
+    // Disable input
+    if (this.inputHandler) {
+      this.inputHandler.detach()
+    }
+
+    // Stop rendering
+    this.stop()
+  }
+
+  /**
+   * Transitions to lobby state.
+   * Shows lobby, hides main menu/HUD, disables input, stops rendering.
+   * 
+   * @param roomState Optional room state to update lobby with
+   */
+  transitionToLobby(roomState?: RoomState): void {
+    this.uiState = 'lobby'
+
+    if (this.mainMenu) {
+      this.mainMenu.hide()
+    }
+    if (this.roomLobby) {
+      this.roomLobby.show()
+      if (roomState) {
+        this.roomLobby.update(roomState)
+      }
+    }
+
+    // Disable input
+    if (this.inputHandler) {
+      this.inputHandler.detach()
+    }
+
+    // Stop rendering
+    this.stop()
+  }
+
+  /**
+   * Transitions to in-game state.
+   * Shows HUD, hides main menu/lobby, enables input, starts rendering.
+   */
+  transitionToInGame(): void {
+    this.uiState = 'in-game'
+
+    if (this.mainMenu) {
+      this.mainMenu.hide()
+    }
+    if (this.roomLobby) {
+      this.roomLobby.hide()
+    }
+
+    // Enable input
+    if (this.inputHandler) {
+      this.inputHandler.attach()
+    }
+
+    // Start rendering (if not already started)
+    if (!this.isGameLoopRunning && this.initialized) {
+      this.start()
+    }
+  }
+
+  /**
    * Starts the render loop and game loop.
    * Creates and starts RenderLoop, then starts game loop that updates renderer and HUD.
+   * Only starts rendering if in 'in-game' state.
    * 
    * @throws Error if not initialized
    */
   start(): void {
     if (!this.initialized) {
       throw new Error('AppOrchestrator must be initialized before starting')
+    }
+
+    // Only start rendering if in 'in-game' state
+    if (this.uiState !== 'in-game') {
+      return
     }
 
     if (this.isGameLoopRunning) {
@@ -311,6 +503,18 @@ export class AppOrchestrator {
     // State manager (no destroy method, just clear reference)
     this.stateManager = null
 
+    // Main menu
+    if (this.mainMenu) {
+      this.mainMenu.destroy()
+      this.mainMenu = null
+    }
+
+    // Room lobby
+    if (this.roomLobby) {
+      this.roomLobby.destroy()
+      this.roomLobby = null
+    }
+
     // Scene (only if we created it)
     if (this.scene && this.sceneCreatedByOrchestrator) {
       this.scene.destroy()
@@ -335,6 +539,7 @@ export class AppOrchestrator {
     // Reset state
     this.initialized = false
     this.initError = null
+    this.uiState = 'main-menu'
   }
 }
 

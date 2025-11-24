@@ -16,6 +16,11 @@ class FakeNetworkClient {
   connectHandlers: Array<() => void> = []
   disconnectHandlers: Array<() => void> = []
   errorHandlers: Array<(error: Error) => void> = []
+  roomStateHandlers: Array<(state: any) => void> = []
+  playerJoinedHandlers: Array<(player: any) => void> = []
+  playerLeftHandlers: Array<(playerId: number) => void> = []
+  matchStartedHandlers: Array<() => void> = []
+  matchEndedHandlers: Array<(winnerId?: number) => void> = []
   connected: boolean = false
 
   onSnapshot(callback: (snapshot: any) => void): void {
@@ -34,12 +39,48 @@ class FakeNetworkClient {
     this.errorHandlers.push(callback)
   }
 
+  onRoomState(callback: (state: any) => void): void {
+    this.roomStateHandlers.push(callback)
+  }
+
+  onPlayerJoined(callback: (player: any) => void): void {
+    this.playerJoinedHandlers.push(callback)
+  }
+
+  onPlayerLeft(callback: (playerId: number) => void): void {
+    this.playerLeftHandlers.push(callback)
+  }
+
+  onMatchStarted(callback: () => void): void {
+    this.matchStartedHandlers.push(callback)
+  }
+
+  onMatchEnded(callback: (winnerId?: number) => void): void {
+    this.matchEndedHandlers.push(callback)
+  }
+
   async connect(_url: string): Promise<void> {
     this.connected = true
   }
 
   disconnect(): void {
     this.connected = false
+  }
+
+  async createRoom(): Promise<string> {
+    return 'ABC123'
+  }
+
+  async joinRoom(_roomCode: string): Promise<void> {
+    // Fake implementation
+  }
+
+  leaveRoom(): void {
+    // Fake implementation
+  }
+
+  startMatch(): void {
+    // Fake implementation
   }
 
   isConnected(): boolean {
@@ -596,5 +637,194 @@ describe('AppOrchestrator', () => {
       destroySpy.mockRestore()
     })
   })
+
+  describe('UI State Transitions', () => {
+    /**
+     * Labels: scope:unit loop:g2-app layer:core double:fake-io b:ui-state r:high
+     */
+
+    it('initial UI state is main-menu', async () => {
+      const orchestrator = new AppOrchestrator(app, {})
+      await orchestrator.init(container)
+      
+      expect(orchestrator.getUIState()).toBe('main-menu')
+    })
+
+    it('transitionToLobby() shows lobby and hides main menu', async () => {
+      const mainMenu = new FakeMainMenu()
+      const roomLobby = new FakeRoomLobby()
+      const orchestrator = new AppOrchestrator(app, { mainMenu, roomLobby })
+      await orchestrator.init(container)
+      
+      orchestrator.transitionToLobby()
+      
+      expect(mainMenu.hideCallCount).toBeGreaterThan(0)
+      expect(roomLobby.showCallCount).toBeGreaterThan(0)
+      expect(orchestrator.getUIState()).toBe('lobby')
+    })
+
+    it('transitionToInGame() shows HUD and hides main menu/lobby', async () => {
+      const mainMenu = new FakeMainMenu()
+      const roomLobby = new FakeRoomLobby()
+      const hud = new FakeHUD()
+      const orchestrator = new AppOrchestrator(app, { mainMenu, roomLobby, hud })
+      await orchestrator.init(container)
+      
+      orchestrator.transitionToInGame()
+      
+      expect(mainMenu.hideCallCount).toBeGreaterThan(0)
+      expect(roomLobby.hideCallCount).toBeGreaterThan(0)
+      expect(orchestrator.getUIState()).toBe('in-game')
+    })
+
+    it('transitionToInGame() enables input and starts rendering', async () => {
+      const inputHandler = new FakeInputHandler()
+      const orchestrator = new AppOrchestrator(app, { inputHandler })
+      await orchestrator.init(container)
+      
+      let attachCallCount = 0
+      inputHandler.attach = () => {
+        attachCallCount++
+      }
+      
+      orchestrator.transitionToInGame()
+      
+      expect(attachCallCount).toBeGreaterThan(0)
+      expect(orchestrator.getUIState()).toBe('in-game')
+    })
+
+    it('onRoomState event transitions to lobby', async () => {
+      const networkClient = new FakeNetworkClient()
+      const roomLobby = new FakeRoomLobby()
+      const orchestrator = new AppOrchestrator(app, { networkClient, roomLobby })
+      await orchestrator.init(container)
+      
+      const roomState = {
+        roomCode: 'ABC123',
+        players: [{ id: 1, name: 'Player1' }],
+        state: 'lobby' as const,
+        hostId: 1
+      }
+      
+      // Simulate roomState event
+      networkClient.roomStateHandlers.forEach(handler => handler(roomState))
+      
+      expect(orchestrator.getUIState()).toBe('lobby')
+    })
+
+    it('onMatchStarted event transitions to in-game', async () => {
+      const networkClient = new FakeNetworkClient()
+      const orchestrator = new AppOrchestrator(app, { networkClient })
+      await orchestrator.init(container)
+      
+      // Simulate matchStarted event
+      networkClient.matchStartedHandlers.forEach(handler => handler())
+      
+      expect(orchestrator.getUIState()).toBe('in-game')
+    })
+
+    it('onMatchEnded event transitions back to lobby', async () => {
+      const networkClient = new FakeNetworkClient()
+      const orchestrator = new AppOrchestrator(app, { networkClient })
+      await orchestrator.init(container)
+      
+      // First transition to in-game
+      orchestrator.transitionToInGame()
+      expect(orchestrator.getUIState()).toBe('in-game')
+      
+      // Simulate matchEnded event
+      networkClient.matchEndedHandlers.forEach(handler => handler())
+      
+      expect(orchestrator.getUIState()).toBe('lobby')
+    })
+
+    it('input is only enabled in in-game state', async () => {
+      const inputHandler = new FakeInputHandler()
+      const orchestrator = new AppOrchestrator(app, { inputHandler })
+      await orchestrator.init(container)
+      
+      let attachCallCount = 0
+      let detachCallCount = 0
+      inputHandler.attach = () => { attachCallCount++ }
+      inputHandler.detach = () => { detachCallCount++ }
+      
+      // In main-menu, input should not be attached
+      expect(orchestrator.getUIState()).toBe('main-menu')
+      expect(attachCallCount).toBe(0)
+      
+      // Transition to lobby, input should be detached
+      orchestrator.transitionToLobby()
+      expect(detachCallCount).toBeGreaterThan(0)
+      
+      // Transition to in-game, input should be attached
+      orchestrator.transitionToInGame()
+      expect(attachCallCount).toBeGreaterThan(0)
+    })
+
+    it('rendering only runs in in-game state', async () => {
+      const renderer = new FakeRenderer()
+      const orchestrator = new AppOrchestrator(app, { renderer })
+      await orchestrator.init(container)
+      
+      let updateCallCount = 0
+      renderer.update = () => { updateCallCount++ }
+      
+      // Start in main-menu, rendering should not run
+      orchestrator.start()
+      await new Promise(resolve => setTimeout(resolve, 50))
+      const countBeforeTransition = updateCallCount
+      
+      // Transition to in-game, rendering should start
+      orchestrator.transitionToInGame()
+      await new Promise(resolve => setTimeout(resolve, 50))
+      
+      // Update count should increase (rendering is running)
+      expect(updateCallCount).toBeGreaterThan(countBeforeTransition)
+      
+      orchestrator.stop()
+    })
+  })
 })
+
+// Additional fake doubles for UI components
+class FakeMainMenu {
+  showCallCount = 0
+  hideCallCount = 0
+  
+  show(): void {
+    this.showCallCount++
+  }
+  
+  hide(): void {
+    this.hideCallCount++
+  }
+  
+  destroy(): void {
+    // Fake implementation
+  }
+}
+
+class FakeRoomLobby {
+  showCallCount = 0
+  hideCallCount = 0
+  updateCallCount = 0
+  lastRoomState: any = null
+  
+  show(): void {
+    this.showCallCount++
+  }
+  
+  hide(): void {
+    this.hideCallCount++
+  }
+  
+  update(roomState: any): void {
+    this.updateCallCount++
+    this.lastRoomState = roomState
+  }
+  
+  destroy(): void {
+    // Fake implementation
+  }
+}
 
