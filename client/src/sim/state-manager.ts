@@ -4,30 +4,36 @@
  * Labels: scope:integration loop:g6-client layer:client
  */
 
-import type { SnapshotMessage, ShipSnapshot, PlanetSnapshot, PalletSnapshot } from '../net/protocol'
+import type { SnapshotMessage, ShipSnapshot, PlanetSnapshot, PalletSnapshot, WorldBounds } from '../net/protocol'
 
 /**
- * Game state structure matching SnapshotMessage (without the 't' discriminator).
+ * Game state structure matching SnapshotMessage v1 format (without the 't' discriminator).
  * Used internally for state management layers.
+ * v1 multiplayer format: uses ships array, includes myShipId and worldBounds.
  */
 export interface GameState {
   tick: number
-  ship: ShipSnapshot
+  ships: ShipSnapshot[]
   planets: PlanetSnapshot[]
   pallets: PalletSnapshot[]
+  worldBounds: WorldBounds
+  myShipId: number
   done: boolean
   win: boolean
 }
 
 /**
  * Converts a SnapshotMessage to GameState format.
+ * v1 multiplayer format: uses ships array, includes myShipId and worldBounds.
  */
 function snapshotToGameState(snapshot: SnapshotMessage): GameState {
   return {
     tick: snapshot.tick,
-    ship: snapshot.ship,
+    ships: snapshot.ships,
     planets: snapshot.planets,
     pallets: snapshot.pallets,
+    worldBounds: snapshot.worldBounds,
+    myShipId: snapshot.myShipId,
     done: snapshot.done,
     win: snapshot.win
   }
@@ -35,17 +41,20 @@ function snapshotToGameState(snapshot: SnapshotMessage): GameState {
 
 /**
  * Creates a deep clone of a GameState.
+ * v1 multiplayer format: clones ships array.
  */
 function cloneGameState(state: GameState): GameState {
   return {
     tick: state.tick,
-    ship: {
-      pos: { ...state.ship.pos },
-      vel: { ...state.ship.vel },
-      rot: state.ship.rot,
-      energy: state.ship.energy
-    },
+    ships: state.ships.map(ship => ({
+      id: ship.id,
+      pos: { ...ship.pos },
+      vel: { ...ship.vel },
+      rot: ship.rot,
+      energy: ship.energy
+    })),
     planets: state.planets.map(planet => ({
+      id: planet.id,
       pos: { ...planet.pos },
       radius: planet.radius
     })),
@@ -54,6 +63,8 @@ function cloneGameState(state: GameState): GameState {
       pos: { ...pallet.pos },
       active: pallet.active
     })),
+    worldBounds: { ...state.worldBounds },
+    myShipId: state.myShipId,
     done: state.done,
     win: state.win
   }
@@ -133,9 +144,11 @@ export class StateManager {
     // Return empty state if nothing is available (shouldn't happen in practice)
     return {
       tick: 0,
-      ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 0 },
+      ships: [],
       planets: [],
       pallets: [],
+      worldBounds: { width: 2000, height: 2000 },
+      myShipId: 0,
       done: false,
       win: false
     }
