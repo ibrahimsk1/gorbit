@@ -15,6 +15,38 @@ type RestartMessage struct {
 	Type string `json:"t"` // Message type: "restart"
 }
 
+// PlayerInfo represents player information.
+// Used in room state messages: {"id":u32,"name":str}
+type PlayerInfo struct {
+	ID   uint32 `json:"id"`   // Player identifier
+	Name string `json:"name"` // Player display name
+}
+
+// CreateRoomMessage represents a client room creation request message.
+// Client → Server message format: {"t":"createRoom"}
+type CreateRoomMessage struct {
+	Type string `json:"t"` // Message type: "createRoom"
+}
+
+// JoinRoomMessage represents a client room join request message.
+// Client → Server message format: {"t":"joinRoom","roomCode":"ABC123"}
+type JoinRoomMessage struct {
+	Type     string `json:"t"`        // Message type: "joinRoom"
+	RoomCode string `json:"roomCode"` // 6-character room code
+}
+
+// LeaveRoomMessage represents a client room leave request message.
+// Client → Server message format: {"t":"leaveRoom"}
+type LeaveRoomMessage struct {
+	Type string `json:"t"` // Message type: "leaveRoom"
+}
+
+// StartMatchMessage represents a client match start request message.
+// Client → Server message format: {"t":"startMatch"}
+type StartMatchMessage struct {
+	Type string `json:"t"` // Message type: "startMatch"
+}
+
 // SnapshotMessage represents a server state snapshot message.
 // Server → Client message format with tick, ship, sun, pallets, done, win
 type SnapshotMessage struct {
