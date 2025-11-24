@@ -132,5 +132,54 @@ var _ = Describe("Room Code Generation", Label("scope:unit", "loop:g6-room", "la
 			Expect(found2).To(Equal(room2))
 		})
 	})
+
+	Describe("CreateRoom", Label("scope:unit", "loop:g6-room", "layer:room", "b:room-creation", "r:medium", "double:fake", "dep:none"), func() {
+		It("creates room with unique code in lobby state", func() {
+			manager := NewRoomManager()
+
+			code, err := manager.CreateRoom()
+			Expect(err).To(BeNil())
+			Expect(code).To(HaveLen(6))
+			Expect(code).To(MatchRegexp("^[A-Z0-9]{6}$"))
+		})
+
+		It("creates room in lobby state with empty players", func() {
+			manager := NewRoomManager()
+
+			code, err := manager.CreateRoom()
+			Expect(err).To(BeNil())
+
+			room, err := manager.GetRoom(code)
+			Expect(err).To(BeNil())
+			Expect(room.GetState()).To(Equal(RoomStateLobby))
+			Expect(room.GetPlayers()).To(HaveLen(0))
+			Expect(room.RoomCode).To(Equal(code))
+		})
+
+		It("generates unique room codes", func() {
+			manager := NewRoomManager()
+			codes := make(map[string]bool)
+
+			for i := 0; i < 50; i++ {
+				code, err := manager.CreateRoom()
+				Expect(err).To(BeNil())
+				Expect(codes[code]).To(BeFalse(), "Code %s should be unique", code)
+				codes[code] = true
+			}
+		})
+
+		It("adds room to rooms map", func() {
+			manager := NewRoomManager()
+
+			code, err := manager.CreateRoom()
+			Expect(err).To(BeNil())
+
+			// Verify room can be retrieved
+			room, err := manager.GetRoom(code)
+			Expect(err).To(BeNil())
+			Expect(room).NotTo(BeNil())
+			Expect(room.RoomCode).To(Equal(code))
+		})
+	})
 })
 
