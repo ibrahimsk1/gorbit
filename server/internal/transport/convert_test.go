@@ -60,6 +60,7 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 	Describe("ShipToSnapshot", func() {
 		It("converts ship with all fields set correctly", func() {
 			ship := entities.NewShip(
+				1, // Player ID
 				entities.NewVec2(10.5, 20.3),
 				entities.NewVec2(1.0, -2.0),
 				1.57,
@@ -67,6 +68,7 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 			)
 			result := ShipToSnapshot(ship)
 
+			Expect(result.ID).To(Equal(uint32(1)))
 			Expect(result.Pos.X).To(Equal(10.5))
 			Expect(result.Pos.Y).To(Equal(20.3))
 			Expect(result.Vel.X).To(Equal(1.0))
@@ -77,6 +79,7 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 
 		It("converts ship with zero values correctly", func() {
 			ship := entities.NewShip(
+				1, // Player ID
 				entities.Zero(),
 				entities.Zero(),
 				0.0,
@@ -84,6 +87,7 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 			)
 			result := ShipToSnapshot(ship)
 
+			Expect(result.ID).To(Equal(uint32(1)))
 			Expect(result.Pos.X).To(Equal(0.0))
 			Expect(result.Pos.Y).To(Equal(0.0))
 			Expect(result.Vel.X).To(Equal(0.0))
@@ -94,6 +98,7 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 
 		It("verifies Pos and Vel are converted using Vec2ToSnapshot", func() {
 			ship := entities.NewShip(
+				1, // Player ID
 				entities.NewVec2(100.0, 200.0),
 				entities.NewVec2(-50.0, 25.0),
 				0.785,
@@ -112,6 +117,7 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 
 		It("verifies Rot and Energy are mapped correctly", func() {
 			ship := entities.NewShip(
+				1, // Player ID
 				entities.Zero(),
 				entities.Zero(),
 				3.14159,
@@ -124,69 +130,76 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 		})
 	})
 
-	Describe("SunToSnapshot", func() {
-		It("converts sun with all fields set correctly", func() {
-			sun := entities.NewSun(
+	Describe("PlanetToSnapshot", func() {
+		It("converts planet with all fields set correctly", func() {
+			planet := entities.NewPlanet(
+				1, // Planet ID
 				entities.NewVec2(0.0, 0.0),
 				50.0,
 				1000.0,
 			)
-			result := SunToSnapshot(sun)
+			result := PlanetToSnapshot(planet)
 
+			Expect(result.ID).To(Equal(uint32(1)))
 			Expect(result.Pos.X).To(Equal(0.0))
 			Expect(result.Pos.Y).To(Equal(0.0))
 			Expect(result.Radius).To(Equal(float32(50.0)))
 		})
 
-		It("converts sun at origin correctly", func() {
-			sun := entities.NewSun(
+		It("converts planet at origin correctly", func() {
+			planet := entities.NewPlanet(
+				1, // Planet ID
 				entities.Zero(),
 				25.5,
 				500.0,
 			)
-			result := SunToSnapshot(sun)
+			result := PlanetToSnapshot(planet)
 
+			Expect(result.ID).To(Equal(uint32(1)))
 			Expect(result.Pos.X).To(Equal(0.0))
 			Expect(result.Pos.Y).To(Equal(0.0))
 			Expect(result.Radius).To(Equal(float32(25.5)))
 		})
 
 		It("verifies Pos is converted using Vec2ToSnapshot", func() {
-			sun := entities.NewSun(
+			planet := entities.NewPlanet(
+				1, // Planet ID
 				entities.NewVec2(100.0, -200.0),
 				30.0,
 				750.0,
 			)
-			result := SunToSnapshot(sun)
+			result := PlanetToSnapshot(planet)
 
-			posSnapshot := Vec2ToSnapshot(sun.Pos)
+			posSnapshot := Vec2ToSnapshot(planet.Pos)
 			Expect(result.Pos).To(Equal(posSnapshot))
 		})
 
 		It("verifies Radius is mapped correctly", func() {
-			sun := entities.NewSun(
+			planet := entities.NewPlanet(
+				1, // Planet ID
 				entities.Zero(),
 				42.5,
 				1000.0,
 			)
-			result := SunToSnapshot(sun)
+			result := PlanetToSnapshot(planet)
 
 			Expect(result.Radius).To(Equal(float32(42.5)))
 		})
 
 		It("verifies Mass is not included (not in proto)", func() {
-			// This test verifies that Mass field from entities.Sun
-			// is not part of the proto.SunSnapshot structure
-			// The proto.SunSnapshot only has Pos and Radius
-			sun := entities.NewSun(
+			// This test verifies that Mass field from entities.Planet
+			// is not part of the proto.PlanetSnapshot structure
+			// The proto.PlanetSnapshot only has ID, Pos, and Radius
+			planet := entities.NewPlanet(
+				1, // Planet ID
 				entities.NewVec2(0.0, 0.0),
 				50.0,
 				1000.0,
 			)
-			result := SunToSnapshot(sun)
+			result := PlanetToSnapshot(planet)
 
-			// Verify that result only contains Pos and Radius
-			// (Mass is not accessible in proto.SunSnapshot)
+			// Verify that result only contains ID, Pos, and Radius
+			// (Mass is not accessible in proto.PlanetSnapshot)
 			Expect(result.Pos).ToNot(BeNil())
 			Expect(result.Radius).To(Equal(float32(50.0)))
 		})
@@ -248,42 +261,42 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 
 	Describe("WorldToSnapshot", func() {
 		It("converts complete world with all entities correctly", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(10.5, 20.3),
-				entities.NewVec2(1.0, -2.0),
-				1.57,
-				75.5,
-			)
-			sun := entities.NewSun(
-				entities.NewVec2(0.0, 0.0),
-				50.0,
-				1000.0,
-			)
+			ships := []entities.Ship{
+				entities.NewShip(1, entities.NewVec2(10.5, 20.3), entities.NewVec2(1.0, -2.0), 1.57, 75.5),
+				entities.NewShip(2, entities.NewVec2(-10.5, -20.3), entities.NewVec2(-1.0, 2.0), 0.0, 50.0),
+			}
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+				entities.NewPlanet(2, entities.NewVec2(100.0, 100.0), 30.0, 500.0),
+			}
 			pallets := []entities.Pallet{
 				entities.NewPallet(1, entities.NewVec2(15.0, 15.0), true),
 				entities.NewPallet(2, entities.NewVec2(-10.0, 10.0), false),
 			}
-			world := entities.NewWorld(ship, sun, pallets)
+			world := entities.NewWorld(ships, planets, pallets)
 			world.Tick = 100
-			world.Done = false
-			world.Win = false
 
-			result := WorldToSnapshot(world)
+			playerID := uint32(1)
+			result := WorldToSnapshot(world, playerID)
 
 			Expect(result.Type).To(Equal("snapshot"))
 			Expect(result.Tick).To(Equal(uint32(100)))
-			Expect(result.Done).To(BeFalse())
-			Expect(result.Win).To(BeFalse())
+			Expect(result.MyShipId).To(Equal(playerID))
 
-			// Verify Ship
-			Expect(result.Ship.Pos.X).To(Equal(10.5))
-			Expect(result.Ship.Pos.Y).To(Equal(20.3))
-			Expect(result.Ship.Energy).To(Equal(float32(75.5)))
+			// Verify Ships array
+			Expect(result.Ships).To(HaveLen(2))
+			Expect(result.Ships[0].ID).To(Equal(uint32(1)))
+			Expect(result.Ships[0].Pos.X).To(Equal(10.5))
+			Expect(result.Ships[0].Pos.Y).To(Equal(20.3))
+			Expect(result.Ships[0].Energy).To(Equal(float32(75.5)))
+			Expect(result.Ships[1].ID).To(Equal(uint32(2)))
 
-			// Verify Sun
-			Expect(result.Sun.Pos.X).To(Equal(0.0))
-			Expect(result.Sun.Pos.Y).To(Equal(0.0))
-			Expect(result.Sun.Radius).To(Equal(float32(50.0)))
+			// Verify Planets array
+			Expect(result.Planets).To(HaveLen(2))
+			Expect(result.Planets[0].ID).To(Equal(uint32(1)))
+			Expect(result.Planets[0].Pos.X).To(Equal(0.0))
+			Expect(result.Planets[0].Pos.Y).To(Equal(0.0))
+			Expect(result.Planets[0].Radius).To(Equal(float32(50.0)))
 
 			// Verify Pallets
 			Expect(result.Pallets).To(HaveLen(2))
@@ -293,23 +306,23 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 			Expect(result.Pallets[1].ID).To(Equal(uint32(2)))
 			Expect(result.Pallets[1].Pos.X).To(Equal(-10.0))
 			Expect(result.Pallets[1].Active).To(BeFalse())
+
+			// Verify WorldBounds
+			Expect(result.WorldBounds.Width).To(Equal(entities.WORLD_WIDTH))
+			Expect(result.WorldBounds.Height).To(Equal(entities.WORLD_HEIGHT))
 		})
 
 		It("converts world with empty pallets slice correctly", func() {
-			ship := entities.NewShip(
-				entities.Zero(),
-				entities.Zero(),
-				0.0,
-				100.0,
-			)
-			sun := entities.NewSun(
-				entities.Zero(),
-				50.0,
-				1000.0,
-			)
-			world := entities.NewWorld(ship, sun, []entities.Pallet{})
+			ships := []entities.Ship{
+				entities.NewShip(1, entities.Zero(), entities.Zero(), 0.0, 100.0),
+			}
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.Zero(), 50.0, 1000.0),
+			}
+			world := entities.NewWorld(ships, planets, []entities.Pallet{})
 
-			result := WorldToSnapshot(world)
+			playerID := uint32(1)
+			result := WorldToSnapshot(world, playerID)
 
 			Expect(result.Pallets).To(BeEmpty())
 			Expect(result.Pallets).ToNot(BeNil()) // Should be empty slice, not nil
@@ -321,13 +334,16 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 				entities.NewPallet(2, entities.NewVec2(20.0, 20.0), true),
 				entities.NewPallet(3, entities.NewVec2(30.0, 30.0), false),
 			}
-			world := entities.NewWorld(
-				entities.NewShip(entities.Zero(), entities.Zero(), 0.0, 100.0),
-				entities.NewSun(entities.Zero(), 50.0, 1000.0),
-				pallets,
-			)
+			ships := []entities.Ship{
+				entities.NewShip(1, entities.Zero(), entities.Zero(), 0.0, 100.0),
+			}
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.Zero(), 50.0, 1000.0),
+			}
+			world := entities.NewWorld(ships, planets, pallets)
 
-			result := WorldToSnapshot(world)
+			playerID := uint32(1)
+			result := WorldToSnapshot(world, playerID)
 
 			Expect(result.Pallets).To(HaveLen(3))
 			Expect(result.Pallets[0].ID).To(Equal(uint32(1)))
@@ -336,62 +352,63 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 		})
 
 		It("verifies Type is set to 'snapshot'", func() {
-			world := entities.NewWorld(
-				entities.NewShip(entities.Zero(), entities.Zero(), 0.0, 100.0),
-				entities.NewSun(entities.Zero(), 50.0, 1000.0),
-				nil,
-			)
+			ships := []entities.Ship{
+				entities.NewShip(1, entities.Zero(), entities.Zero(), 0.0, 100.0),
+			}
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.Zero(), 50.0, 1000.0),
+			}
+			world := entities.NewWorld(ships, planets, nil)
 
-			result := WorldToSnapshot(world)
+			playerID := uint32(1)
+			result := WorldToSnapshot(world, playerID)
 
 			Expect(result.Type).To(Equal("snapshot"))
 		})
 
-		It("verifies Tick, Done, Win are mapped correctly", func() {
-			world := entities.NewWorld(
-				entities.NewShip(entities.Zero(), entities.Zero(), 0.0, 100.0),
-				entities.NewSun(entities.Zero(), 50.0, 1000.0),
-				nil,
-			)
+		It("verifies Tick and MyShipId are mapped correctly", func() {
+			ships := []entities.Ship{
+				entities.NewShip(1, entities.Zero(), entities.Zero(), 0.0, 100.0),
+			}
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.Zero(), 50.0, 1000.0),
+			}
+			world := entities.NewWorld(ships, planets, nil)
 			world.Tick = 42
-			world.Done = true
-			world.Win = true
 
-			result := WorldToSnapshot(world)
+			playerID := uint32(1)
+			result := WorldToSnapshot(world, playerID)
 
 			Expect(result.Tick).To(Equal(uint32(42)))
-			Expect(result.Done).To(BeTrue())
-			Expect(result.Win).To(BeTrue())
+			Expect(result.MyShipId).To(Equal(playerID))
 		})
 
 		It("verifies all nested entities are converted correctly", func() {
-			ship := entities.NewShip(
-				entities.NewVec2(5.0, 10.0),
-				entities.NewVec2(0.5, 1.0),
-				1.0,
-				75.0,
-			)
-			sun := entities.NewSun(
-				entities.NewVec2(0.0, 0.0),
-				25.0,
-				500.0,
-			)
+			ships := []entities.Ship{
+				entities.NewShip(1, entities.NewVec2(5.0, 10.0), entities.NewVec2(0.5, 1.0), 1.0, 75.0),
+			}
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 25.0, 500.0),
+			}
 			pallet := entities.NewPallet(
 				1,
 				entities.NewVec2(50.0, 50.0),
 				true,
 			)
-			world := entities.NewWorld(ship, sun, []entities.Pallet{pallet})
+			world := entities.NewWorld(ships, planets, []entities.Pallet{pallet})
 
-			result := WorldToSnapshot(world)
+			playerID := uint32(1)
+			result := WorldToSnapshot(world, playerID)
 
 			// Verify Ship conversion
-			shipSnapshot := ShipToSnapshot(ship)
-			Expect(result.Ship).To(Equal(shipSnapshot))
+			shipSnapshot := ShipToSnapshot(ships[0])
+			Expect(result.Ships).To(HaveLen(1))
+			Expect(result.Ships[0]).To(Equal(shipSnapshot))
 
-			// Verify Sun conversion
-			sunSnapshot := SunToSnapshot(sun)
-			Expect(result.Sun).To(Equal(sunSnapshot))
+			// Verify Planet conversion
+			planetSnapshot := PlanetToSnapshot(planets[0])
+			Expect(result.Planets).To(HaveLen(1))
+			Expect(result.Planets[0]).To(Equal(planetSnapshot))
 
 			// Verify Pallet conversion
 			Expect(result.Pallets).To(HaveLen(1))
@@ -402,62 +419,62 @@ var _ = Describe("Entity-to-Protocol Conversion", Label("scope:unit", "loop:g5-a
 
 	Describe("Round-trip Validation", func() {
 		It("converted SnapshotMessage should pass proto.ValidateSnapshotMessage", func() {
+			ships := []entities.Ship{
+				entities.NewShip(1, entities.NewVec2(10.5, 20.3), entities.NewVec2(1.0, -2.0), 1.57, 75.5),
+			}
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 			world := entities.NewWorld(
-				entities.NewShip(
-					entities.NewVec2(10.5, 20.3),
-					entities.NewVec2(1.0, -2.0),
-					1.57,
-					75.5,
-				),
-				entities.NewSun(
-					entities.NewVec2(0.0, 0.0),
-					50.0,
-					1000.0,
-				),
+				ships,
+				planets,
 				[]entities.Pallet{
 					entities.NewPallet(1, entities.NewVec2(15.0, 15.0), true),
 				},
 			)
 			world.Tick = 100
 
-			result := WorldToSnapshot(world)
+			playerID := uint32(1)
+			result := WorldToSnapshot(world, playerID)
 
 			err := proto.ValidateSnapshotMessage(&result)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("all nested snapshots should pass their respective validation functions", func() {
+			ships := []entities.Ship{
+				entities.NewShip(1, entities.NewVec2(10.5, 20.3), entities.NewVec2(1.0, -2.0), 1.57, 75.5),
+			}
+			planets := []entities.Planet{
+				entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+			}
 			world := entities.NewWorld(
-				entities.NewShip(
-					entities.NewVec2(10.5, 20.3),
-					entities.NewVec2(1.0, -2.0),
-					1.57,
-					75.5,
-				),
-				entities.NewSun(
-					entities.NewVec2(0.0, 0.0),
-					50.0,
-					1000.0,
-				),
+				ships,
+				planets,
 				[]entities.Pallet{
 					entities.NewPallet(1, entities.NewVec2(15.0, 15.0), true),
 					entities.NewPallet(2, entities.NewVec2(-10.0, 10.0), false),
 				},
 			)
 
-			result := WorldToSnapshot(world)
+			playerID := uint32(1)
+			result := WorldToSnapshot(world, playerID)
 
-			// Validate Ship
-			err := proto.ValidateShipSnapshot(&result.Ship)
-			Expect(err).NotTo(HaveOccurred())
+			// Validate Ships
+			for i := range result.Ships {
+				err := proto.ValidateShipSnapshot(&result.Ships[i])
+				Expect(err).NotTo(HaveOccurred())
+			}
 
-			// Validate Sun
-			err = proto.ValidateSunSnapshot(&result.Sun)
-			Expect(err).NotTo(HaveOccurred())
+			// Validate Planets
+			for i := range result.Planets {
+				err := proto.ValidatePlanetSnapshot(&result.Planets[i])
+				Expect(err).NotTo(HaveOccurred())
+			}
 
 			// Validate Pallets
 			for i := range result.Pallets {
-				err = proto.ValidatePalletSnapshot(&result.Pallets[i])
+				err := proto.ValidatePalletSnapshot(&result.Pallets[i])
 				Expect(err).NotTo(HaveOccurred())
 			}
 		})

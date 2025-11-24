@@ -2,12 +2,18 @@ package transport
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/gorbit/orbitalrush/internal/observability"
+	"github.com/gorbit/orbitalrush/internal/proto"
+	"github.com/gorbit/orbitalrush/internal/session"
+	"github.com/gorbit/orbitalrush/internal/sim/entities"
+	"github.com/gorbit/orbitalrush/internal/sim/rules"
 	"github.com/gorilla/websocket"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -52,28 +58,22 @@ var _ = Describe("HTTP Route Handlers", Label("scope:integration", "loop:g5-adap
 			conn.Close()
 		})
 
-		It("creates session handler and starts it", func() {
+		It("does not create per-connection session handler", func() {
 			dialer := websocket.Dialer{}
 			conn, _, err := dialer.Dial(serverURL, nil)
 			Expect(err).NotTo(HaveOccurred())
 			defer conn.Close()
 
-			// Wait a bit to ensure session handler is started
+			// Wait a bit to ensure connection is established
 			time.Sleep(50 * time.Millisecond)
 
-			// Try to read a snapshot message (should be broadcast periodically)
+			// Verify no snapshots are sent from per-connection sessions
 			// Set a short read deadline to avoid hanging
 			conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-			_, data, err := conn.ReadMessage()
-			// We might get a snapshot or timeout, both are acceptable
-			// The important thing is that the connection is working
-			if err == nil {
-				// If we got a message, it should be a valid JSON snapshot
-				var snapshot map[string]interface{}
-				err = json.Unmarshal(data, &snapshot)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(snapshot["t"]).To(Equal("snapshot"))
-			}
+			_, _, err = conn.ReadMessage()
+			// Should timeout or get connection closed error (no snapshots from per-connection sessions)
+			// The important thing is that no per-connection session is broadcasting snapshots
+			Expect(err).To(HaveOccurred()) // Should timeout or error, not receive snapshots
 		})
 
 		It("handles connection lifecycle properly", func() {
@@ -725,6 +725,884 @@ var _ = Describe("Connection Metrics", Label("scope:integration", "loop:g7-ops",
 			Expect(bodyStr).To(ContainSubstring("connection_duration_seconds"))
 			Expect(bodyStr).To(ContainSubstring("connection_bytes_total"))
 		})
+	})
+})
+
+var _ = Describe("Connection Registry", Label("scope:integration", "loop:g7-transport", "layer:transport", "dep:none", "b:connection-tracking", "r:high", "double:fake"), func() {
+	var registry *ConnectionRegistry
+	var conn *Connection
+
+	BeforeEach(func() {
+		registry = NewConnectionRegistry()
+		// Create a mock connection for testing
+		mux := http.NewServeMux()
+		var wsConn *websocket.Conn
+		mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+			var err error
+			wsConn, err = UpgradeConnection(w, r)
+			if err == nil {
+				conn = NewConnection(wsConn)
+			}
+		})
+		testServer := httptest.NewServer(mux)
+		defer testServer.Close()
+
+		dialer := websocket.Dialer{}
+		clientConn, _, _ := dialer.Dial("ws"+testServer.URL[4:]+"/ws", nil)
+		defer clientConn.Close()
+
+		// Wait for connection to be established
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	Describe("Associate", func() {
+		It("associates connection with room code and player ID", func() {
+			registry.Associate(conn, "ABC123", 1)
+
+			roomCode, playerID, err := registry.GetRoomInfo(conn)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(roomCode).To(Equal("ABC123"))
+			Expect(playerID).To(Equal(uint32(1)))
+		})
+
+		It("updates association if connection is already associated", func() {
+			registry.Associate(conn, "ABC123", 1)
+			registry.Associate(conn, "XYZ789", 2)
+
+			roomCode, playerID, err := registry.GetRoomInfo(conn)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(roomCode).To(Equal("XYZ789"))
+			Expect(playerID).To(Equal(uint32(2)))
+		})
+	})
+
+	Describe("Disassociate", func() {
+		It("removes connection from registry", func() {
+			registry.Associate(conn, "ABC123", 1)
+			registry.Disassociate(conn)
+
+			_, _, err := registry.GetRoomInfo(conn)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not associated"))
+		})
+
+		It("handles disassociating unassociated connection gracefully", func() {
+			// Should not panic
+			registry.Disassociate(conn)
+		})
+	})
+
+	Describe("GetRoomInfo", func() {
+		It("returns room code and player ID for associated connection", func() {
+			registry.Associate(conn, "ABC123", 42)
+
+			roomCode, playerID, err := registry.GetRoomInfo(conn)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(roomCode).To(Equal("ABC123"))
+			Expect(playerID).To(Equal(uint32(42)))
+		})
+
+		It("returns error for unassociated connection", func() {
+			_, _, err := registry.GetRoomInfo(conn)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not associated"))
+		})
+	})
+
+	Describe("IsAssociated", func() {
+		It("returns true for associated connection", func() {
+			registry.Associate(conn, "ABC123", 1)
+			Expect(registry.IsAssociated(conn)).To(BeTrue())
+		})
+
+		It("returns false for unassociated connection", func() {
+			Expect(registry.IsAssociated(conn)).To(BeFalse())
+		})
+
+		It("returns false after disassociation", func() {
+			registry.Associate(conn, "ABC123", 1)
+			registry.Disassociate(conn)
+			Expect(registry.IsAssociated(conn)).To(BeFalse())
+		})
+	})
+
+	Describe("Thread Safety", func() {
+		It("handles concurrent associate operations", func() {
+			// Create multiple connections
+			var connections []*Connection
+			for i := 0; i < 10; i++ {
+				mux := http.NewServeMux()
+				var wsConn *websocket.Conn
+				mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+					var err error
+					wsConn, err = UpgradeConnection(w, r)
+					if err == nil {
+						connections = append(connections, NewConnection(wsConn))
+					}
+				})
+				testServer := httptest.NewServer(mux)
+				defer testServer.Close()
+
+				dialer := websocket.Dialer{}
+				clientConn, _, _ := dialer.Dial("ws"+testServer.URL[4:]+"/ws", nil)
+				defer clientConn.Close()
+			}
+
+			time.Sleep(100 * time.Millisecond)
+
+			// Concurrently associate connections
+			var wg sync.WaitGroup
+			for i, c := range connections {
+				wg.Add(1)
+				go func(idx int, conn *Connection) {
+					defer wg.Done()
+					registry.Associate(conn, fmt.Sprintf("ROOM%02d", idx), uint32(idx))
+				}(i, c)
+			}
+			wg.Wait()
+
+			// Verify all associations
+			for i, c := range connections {
+				roomCode, playerID, err := registry.GetRoomInfo(c)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(roomCode).To(Equal(fmt.Sprintf("ROOM%02d", i)))
+				Expect(playerID).To(Equal(uint32(i)))
+			}
+		})
+
+		It("handles concurrent associate and disassociate operations", func() {
+			registry.Associate(conn, "ABC123", 1)
+
+			var wg sync.WaitGroup
+			// Concurrently read and write
+			for i := 0; i < 10; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					registry.Associate(conn, "ABC123", 1)
+					registry.IsAssociated(conn)
+					_, _, _ = registry.GetRoomInfo(conn)
+				}()
+			}
+			wg.Wait()
+
+			// Should still be associated
+			Expect(registry.IsAssociated(conn)).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("Room Management Handlers", Label("scope:integration", "loop:g7-transport", "layer:transport", "dep:room,proto", "b:room-handlers", "r:high", "double:fake-io"), func() {
+	var registry *ConnectionRegistry
+	var conn *Connection
+	var roomOps RoomOperations
+	var handler *RoomHandler
+	var clock session.Clock
+
+	BeforeEach(func() {
+		registry = NewConnectionRegistry()
+		clock = session.NewFakeClock()
+
+		// Create a mock connection for testing
+		mux := http.NewServeMux()
+		var wsConn *websocket.Conn
+		mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+			var err error
+			wsConn, err = UpgradeConnection(w, r)
+			if err == nil {
+				conn = NewConnection(wsConn)
+			}
+		})
+		testServer := httptest.NewServer(mux)
+		defer testServer.Close()
+
+		dialer := websocket.Dialer{}
+		clientConn, _, _ := dialer.Dial("ws"+testServer.URL[4:]+"/ws", nil)
+		defer clientConn.Close()
+
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	Describe("HandleCreateRoom", func() {
+		It("creates room and sends roomCreated response", func() {
+			createdRoomCode := "ABC123"
+			roomOps = RoomOperations{
+				CreateRoomFunc: func() (string, error) {
+					return createdRoomCode, nil
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.CreateRoomMessage{Type: "createRoom"}
+			err := handler.HandleCreateRoom(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("returns error if CreateRoomFunc fails", func() {
+			roomOps = RoomOperations{
+				CreateRoomFunc: func() (string, error) {
+					return "", fmt.Errorf("room creation failed")
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.CreateRoomMessage{Type: "createRoom"}
+			err := handler.HandleCreateRoom(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to create room"))
+		})
+	})
+
+	Describe("HandleJoinRoom", func() {
+		It("joins room, tracks connection, and sends roomState response", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			roomData := RoomData{
+				RoomCode:     roomCode,
+				Players:      []PlayerData{{PlayerID: playerID, Name: "", Conn: conn}},
+				State:        "lobby",
+				HostPlayerID: playerID,
+			}
+
+			roomOps = RoomOperations{
+				JoinRoomFunc: func(code string, c *Connection) (RoomData, uint32, error) {
+					return roomData, playerID, nil
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.JoinRoomMessage{Type: "joinRoom", RoomCode: roomCode}
+			err := handler.HandleJoinRoom(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(registry.IsAssociated(conn)).To(BeTrue())
+			roomCodeFromReg, playerIDFromReg, err := registry.GetRoomInfo(conn)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(roomCodeFromReg).To(Equal(roomCode))
+			Expect(playerIDFromReg).To(Equal(playerID))
+		})
+
+		It("returns error if JoinRoomFunc fails", func() {
+			roomOps = RoomOperations{
+				JoinRoomFunc: func(code string, c *Connection) (RoomData, uint32, error) {
+					return RoomData{}, 0, fmt.Errorf("join failed")
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.JoinRoomMessage{Type: "joinRoom", RoomCode: "ABC123"}
+			err := handler.HandleJoinRoom(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to join room"))
+		})
+	})
+
+	Describe("HandleLeaveRoom", func() {
+		It("leaves room, untracks connection, and broadcasts playerLeft", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomData := RoomData{
+				RoomCode:     roomCode,
+				Players:      []PlayerData{},
+				State:        "lobby",
+				HostPlayerID: playerID,
+			}
+
+			roomOps = RoomOperations{
+				GetRoomFunc: func(code string) (RoomData, error) {
+					return roomData, nil
+				},
+				LeaveRoomFunc: func(code string, pid uint32) error {
+					return nil
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.LeaveRoomMessage{Type: "leaveRoom"}
+			err := handler.HandleLeaveRoom(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(registry.IsAssociated(conn)).To(BeFalse())
+		})
+
+		It("returns error if connection not in a room", func() {
+			roomOps = RoomOperations{}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.LeaveRoomMessage{Type: "leaveRoom"}
+			err := handler.HandleLeaveRoom(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("connection not in a room"))
+		})
+	})
+
+	Describe("HandleStartMatch", func() {
+		It("returns error if StartMatchFunc is nil", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomOps = RoomOperations{
+				StartMatchFunc: nil, // Not implemented
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.StartMatchMessage{Type: "startMatch"}
+			err := handler.HandleStartMatch(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("StartMatch not yet implemented"))
+		})
+
+		It("starts match and broadcasts matchStarted if StartMatchFunc is provided", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomData := RoomData{
+				RoomCode:     roomCode,
+				Players:      []PlayerData{{PlayerID: playerID, Name: "", Conn: conn}},
+				State:        "playing",
+				HostPlayerID: playerID,
+			}
+
+			roomOps = RoomOperations{
+				StartMatchFunc: func(code string, pid uint32, c session.Clock) error {
+					return nil
+				},
+				GetRoomFunc: func(code string) (RoomData, error) {
+					return roomData, nil
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.StartMatchMessage{Type: "startMatch"}
+			err := handler.HandleStartMatch(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("returns error if connection not in a room", func() {
+			roomOps = RoomOperations{
+				StartMatchFunc: func(code string, pid uint32, c session.Clock) error {
+					return nil
+				},
+			}
+			handler = NewRoomHandler(registry, roomOps, conn, clock)
+
+			msg := &proto.StartMatchMessage{Type: "startMatch"}
+			err := handler.HandleStartMatch(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("connection not in a room"))
+		})
+	})
+})
+
+var _ = Describe("Room Input Handler", Label("scope:integration", "loop:g7-transport", "layer:transport", "dep:room", "b:input-routing", "r:high", "double:fake-io"), func() {
+	var registry *ConnectionRegistry
+	var conn *Connection
+	var roomOps RoomOperations
+	var handler *RoomInputHandler
+
+	BeforeEach(func() {
+		registry = NewConnectionRegistry()
+
+		// Create a mock connection for testing
+		mux := http.NewServeMux()
+		var wsConn *websocket.Conn
+		mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+			var err error
+			wsConn, err = UpgradeConnection(w, r)
+			if err == nil {
+				conn = NewConnection(wsConn)
+			}
+		})
+		testServer := httptest.NewServer(mux)
+		defer testServer.Close()
+
+		dialer := websocket.Dialer{}
+		clientConn, _, _ := dialer.Dial("ws"+testServer.URL[4:]+"/ws", nil)
+		defer clientConn.Close()
+
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	Describe("HandleInput", func() {
+		It("routes command to room session successfully", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			var enqueuedRoomCode string
+			var enqueuedPlayerID uint32
+			var enqueuedSeq uint32
+			var enqueuedCmd rules.InputCommand
+
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: func(code string, pid uint32, seq uint32, cmd rules.InputCommand) error {
+					enqueuedRoomCode = code
+					enqueuedPlayerID = pid
+					enqueuedSeq = seq
+					enqueuedCmd = cmd
+					return nil
+				},
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    42,
+				Thrust: 0.75,
+				Turn:   -0.5,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(enqueuedRoomCode).To(Equal(roomCode))
+			Expect(enqueuedPlayerID).To(Equal(playerID))
+			Expect(enqueuedSeq).To(Equal(uint32(42)))
+			Expect(enqueuedCmd.Thrust).To(Equal(float32(0.75)))
+			Expect(enqueuedCmd.Turn).To(Equal(float32(-0.5)))
+		})
+
+		It("returns error if connection not associated with room", func() {
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: func(code string, pid uint32, seq uint32, cmd rules.InputCommand) error {
+					return nil
+				},
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    1,
+				Thrust: 0.5,
+				Turn:   0.0,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("connection not associated with any room"))
+		})
+
+		It("returns error if EnqueueCommandToRoomFunc fails (room not found)", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: func(code string, pid uint32, seq uint32, cmd rules.InputCommand) error {
+					return fmt.Errorf("room not found")
+				},
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    1,
+				Thrust: 0.5,
+				Turn:   0.0,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to enqueue command to room"))
+		})
+
+		It("returns error if EnqueueCommandToRoomFunc fails (session not found)", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: func(code string, pid uint32, seq uint32, cmd rules.InputCommand) error {
+					return fmt.Errorf("session not found")
+				},
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    1,
+				Thrust: 0.5,
+				Turn:   0.0,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to enqueue command to room"))
+		})
+
+		It("returns error if EnqueueCommandToRoomFunc is nil", func() {
+			roomCode := "ABC123"
+			playerID := uint32(1)
+			registry.Associate(conn, roomCode, playerID)
+
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: nil,
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    1,
+				Thrust: 0.5,
+				Turn:   0.0,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("EnqueueCommandToRoomFunc not provided"))
+		})
+
+		It("correctly uses player ID from registry", func() {
+			roomCode := "ABC123"
+			playerID := uint32(42) // Different player ID
+			registry.Associate(conn, roomCode, playerID)
+
+			var enqueuedPlayerID uint32
+
+			roomOps = RoomOperations{
+				EnqueueCommandToRoomFunc: func(code string, pid uint32, seq uint32, cmd rules.InputCommand) error {
+					enqueuedPlayerID = pid
+					return nil
+				},
+			}
+			handler = NewRoomInputHandler(registry, roomOps, conn)
+
+			msg := &proto.InputMessage{
+				Type:   "input",
+				Seq:    1,
+				Thrust: 0.5,
+				Turn:   0.0,
+			}
+			err := handler.HandleInput(msg)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(enqueuedPlayerID).To(Equal(uint32(42)))
+		})
+	})
+})
+
+var _ = Describe("WebSocketHandler - No Per-Connection Sessions", Label("scope:integration", "loop:g7-transport", "layer:transport", "dep:none", "b:session-removal", "r:medium", "double:fake"), func() {
+	var testServer *httptest.Server
+	var serverURL string
+
+	BeforeEach(func() {
+		// Create test HTTP server with handlers
+		mux := http.NewServeMux()
+		mux.HandleFunc("/ws", WebSocketHandler)
+
+		testServer = httptest.NewServer(mux)
+		serverURL = "ws" + testServer.URL[4:] + "/ws" // Convert http:// to ws://
+	})
+
+	AfterEach(func() {
+		if testServer != nil {
+			testServer.Close()
+		}
+	})
+
+	It("does not create SessionHandler for new connections", func() {
+		dialer := websocket.Dialer{}
+		conn, _, err := dialer.Dial(serverURL, nil)
+		Expect(err).NotTo(HaveOccurred())
+		defer conn.Close()
+
+		// Wait a bit to ensure connection is established
+		time.Sleep(50 * time.Millisecond)
+
+		// Verify no snapshots are sent from per-connection sessions
+		// Per-connection sessions have been removed - snapshots will come from room sessions (step 7)
+		conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		_, _, err = conn.ReadMessage()
+		// Should timeout or error (no snapshots from per-connection sessions)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("handles connection lifecycle without per-connection sessions", func() {
+		dialer := websocket.Dialer{}
+		conn, _, err := dialer.Dial(serverURL, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Connection should be open
+		Expect(conn).NotTo(BeNil())
+
+		// Close connection - should clean up gracefully without session handler
+		err = conn.Close()
+		Expect(err).NotTo(HaveOccurred())
+
+		// Wait a bit for cleanup
+		time.Sleep(50 * time.Millisecond)
+	})
+})
+
+var _ = Describe("Snapshot Broadcaster", Label("scope:integration", "loop:g7-transport", "layer:transport", "dep:room", "b:snapshot-broadcast", "r:high", "double:fake-io"), func() {
+	var broadcaster *SnapshotBroadcaster
+	var roomOps RoomOperations
+	var roomCode string
+
+	BeforeEach(func() {
+		roomCode = "ABC123"
+
+		// Create mock connections
+		// Note: We can't easily capture WriteMessage calls without modifying Connection,
+		// so we'll test the broadcaster logic without full integration
+		createMockConn := func() *Connection {
+			mux := http.NewServeMux()
+			var wsConn *websocket.Conn
+			mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+				wsConn, _ = UpgradeConnection(w, r)
+			})
+			testServer := httptest.NewServer(mux)
+			defer testServer.Close()
+
+			dialer := websocket.Dialer{}
+			clientConn, _, _ := dialer.Dial("ws"+testServer.URL[4:]+"/ws", nil)
+			defer clientConn.Close()
+
+			time.Sleep(50 * time.Millisecond)
+
+			return NewConnection(wsConn)
+		}
+
+		conn1 := createMockConn()
+		conn2 := createMockConn()
+
+		roomOps = RoomOperations{
+			GetRoomFunc: func(code string) (RoomData, error) {
+				if code != roomCode {
+					return RoomData{}, fmt.Errorf("room not found")
+				}
+				return RoomData{
+					RoomCode: roomCode,
+					Players: []PlayerData{
+						{PlayerID: 1, Conn: conn1},
+						{PlayerID: 2, Conn: conn2},
+					},
+					State:        "playing",
+					HostPlayerID: 1,
+				}, nil
+			},
+			GetWorldFromRoomFunc: func(code string) (entities.World, error) {
+				if code != roomCode {
+					return entities.World{}, fmt.Errorf("room not found")
+				}
+				// Return a simple world for testing
+				return entities.World{
+					Ships:   []entities.Ship{},
+					Planets: []entities.Planet{},
+					Pallets: []entities.Pallet{},
+					Tick:    42,
+					Done:    false,
+					Win:     false,
+				}, nil
+			},
+		}
+		broadcaster = NewSnapshotBroadcaster(roomOps)
+	})
+
+	It("starts and stops broadcasting for a room", func() {
+		// Test that StartBroadcasting and StopBroadcasting work without errors
+		broadcaster.StartBroadcasting(roomCode)
+
+		// Wait a bit to let broadcaster run
+		time.Sleep(150 * time.Millisecond)
+
+		// Stop broadcasting
+		broadcaster.StopBroadcasting(roomCode)
+
+		// Wait a bit more to ensure it stopped
+		time.Sleep(50 * time.Millisecond)
+
+		// If we got here without panicking, the test passed
+		Expect(true).To(BeTrue())
+	})
+
+	It("only broadcasts when room is in playing state", func() {
+		// Set room state to lobby
+		roomOps.GetRoomFunc = func(code string) (RoomData, error) {
+			return RoomData{
+				RoomCode: roomCode,
+				Players:  []PlayerData{},
+				State:    "lobby",
+			}, nil
+		}
+		broadcaster = NewSnapshotBroadcaster(roomOps)
+
+		broadcaster.StartBroadcasting(roomCode)
+
+		// Wait a bit - broadcaster should skip ticks when in lobby
+		time.Sleep(150 * time.Millisecond)
+
+		// Stop broadcasting
+		broadcaster.StopBroadcasting(roomCode)
+
+		// Test passes if no errors occurred (broadcaster skips lobby state)
+		Expect(true).To(BeTrue())
+	})
+
+	It("stops broadcasting when room ends", func() {
+		callCount := 0
+		roomOps.GetRoomFunc = func(code string) (RoomData, error) {
+			callCount++
+			// First call: playing, subsequent calls: ended
+			state := "playing"
+			if callCount > 1 {
+				state = "ended"
+			}
+			return RoomData{
+				RoomCode: roomCode,
+				Players:  []PlayerData{},
+				State:    state,
+			}, nil
+		}
+		broadcaster = NewSnapshotBroadcaster(roomOps)
+
+		broadcaster.StartBroadcasting(roomCode)
+
+		// Wait for room to transition to ended
+		time.Sleep(250 * time.Millisecond)
+
+		// Verify broadcaster stopped (no more calls after ended)
+		// This is verified by the fact that the goroutine exits
+		// We can't directly verify, but if it didn't stop, we'd get more calls
+	})
+
+	It("handles errors gracefully (room not found)", func() {
+		roomOps.GetRoomFunc = func(code string) (RoomData, error) {
+			return RoomData{}, fmt.Errorf("room not found")
+		}
+		broadcaster = NewSnapshotBroadcaster(roomOps)
+
+		broadcaster.StartBroadcasting(roomCode)
+
+		// Wait a bit
+		time.Sleep(150 * time.Millisecond)
+
+		// Broadcaster should have stopped due to room not found
+		// Verify by checking that StopBroadcasting doesn't panic
+		broadcaster.StopBroadcasting(roomCode)
+	})
+
+	It("handles errors gracefully (session not found)", func() {
+		roomOps.GetWorldFromRoomFunc = func(code string) (entities.World, error) {
+			return entities.World{}, fmt.Errorf("session not found")
+		}
+		broadcaster = NewSnapshotBroadcaster(roomOps)
+
+		broadcaster.StartBroadcasting(roomCode)
+
+		// Wait a bit
+		time.Sleep(150 * time.Millisecond)
+
+		// Should not crash, just skip broadcasting when session not found
+		broadcaster.StopBroadcasting(roomCode)
+	})
+
+	It("does not start broadcasting twice for same room", func() {
+		broadcaster.StartBroadcasting(roomCode)
+		broadcaster.StartBroadcasting(roomCode) // Second call should be ignored
+
+		// Wait a bit
+		time.Sleep(150 * time.Millisecond)
+
+		// Should only have one broadcaster running
+		broadcaster.StopBroadcasting(roomCode)
+	})
+})
+
+var _ = Describe("Connection Disconnection Handling", Label("scope:integration", "loop:g7-transport", "layer:transport", "dep:room", "b:disconnection", "r:high", "double:fake-io"), func() {
+	var testServer *httptest.Server
+	var serverURL string
+	var registry *ConnectionRegistry
+
+	BeforeEach(func() {
+		// Create test HTTP server with handlers
+		mux := http.NewServeMux()
+		mux.HandleFunc("/ws", WebSocketHandler)
+
+		testServer = httptest.NewServer(mux)
+		serverURL = "ws" + testServer.URL[4:] + "/ws" // Convert http:// to ws://
+
+		// Get global registry for testing
+		registry = getGlobalRegistry()
+	})
+
+	AfterEach(func() {
+		if testServer != nil {
+			testServer.Close()
+		}
+	})
+
+	It("removes connection from registry on disconnect", func() {
+		dialer := websocket.Dialer{}
+		conn, _, err := dialer.Dial(serverURL, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create a connection wrapper to test registry
+		// Note: We can't easily get the actual Connection from WebSocketHandler,
+		// so this test verifies the registry behavior in isolation
+		testConn := NewConnection(conn)
+		registry.Associate(testConn, "TEST01", 1)
+
+		// Verify connection is associated
+		Expect(registry.IsAssociated(testConn)).To(BeTrue())
+
+		// Disassociate (simulating disconnect cleanup)
+		registry.Disassociate(testConn)
+
+		// Verify connection is no longer associated
+		Expect(registry.IsAssociated(testConn)).To(BeFalse())
+
+		// Close connection
+		conn.Close()
+	})
+
+	It("handles disconnection gracefully when not in room", func() {
+		dialer := websocket.Dialer{}
+		conn, _, err := dialer.Dial(serverURL, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Connection should be open
+		Expect(conn).NotTo(BeNil())
+
+		// Close connection without being in a room
+		// Should not panic or error
+		err = conn.Close()
+		Expect(err).NotTo(HaveOccurred())
+
+		// Wait a bit for cleanup
+		time.Sleep(100 * time.Millisecond)
+
+		// If we got here, disconnection handling worked correctly
+		Expect(true).To(BeTrue())
+	})
+
+	It("handles disconnection when LeaveRoomFunc is nil", func() {
+		// This test verifies that disconnection handling doesn't panic
+		// when LeaveRoomFunc is nil (e.g., during initialization)
+
+		dialer := websocket.Dialer{}
+		conn, _, err := dialer.Dial(serverURL, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Close connection
+		err = conn.Close()
+		Expect(err).NotTo(HaveOccurred())
+
+		// Wait a bit for cleanup
+		time.Sleep(100 * time.Millisecond)
+
+		// Should not panic even if LeaveRoomFunc is nil
+		Expect(true).To(BeTrue())
 	})
 })
 

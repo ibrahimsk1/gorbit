@@ -237,12 +237,27 @@ type InputMessageHandler interface {
 	HandleInput(msg *proto.InputMessage) error
 }
 
-// RestartMessageHandler handles RestartMessage messages.
-type RestartMessageHandler interface {
-	HandleRestart(msg *proto.RestartMessage) error
+// CreateRoomHandler handles CreateRoomMessage messages.
+type CreateRoomHandler interface {
+	HandleCreateRoom(msg *proto.CreateRoomMessage) error
 }
 
-// ParseMessage parses a JSON message and returns a typed message (InputMessage or RestartMessage).
+// JoinRoomHandler handles JoinRoomMessage messages.
+type JoinRoomHandler interface {
+	HandleJoinRoom(msg *proto.JoinRoomMessage) error
+}
+
+// LeaveRoomHandler handles LeaveRoomMessage messages.
+type LeaveRoomHandler interface {
+	HandleLeaveRoom(msg *proto.LeaveRoomMessage) error
+}
+
+// StartMatchHandler handles StartMatchMessage messages.
+type StartMatchHandler interface {
+	HandleStartMatch(msg *proto.StartMatchMessage) error
+}
+
+// ParseMessage parses a JSON message and returns a typed message (InputMessage or room management messages).
 // Returns an error if the message is malformed, invalid, or of unknown type.
 func ParseMessage(data []byte) (interface{}, error) {
 	if len(data) == 0 {
@@ -278,13 +293,43 @@ func ParseMessage(data []byte) (interface{}, error) {
 		}
 		return &msg, nil
 
-	case "restart":
-		var msg proto.RestartMessage
+	case "createRoom":
+		var msg proto.CreateRoomMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
-			return nil, fmt.Errorf("failed to parse RestartMessage: %w", err)
+			return nil, fmt.Errorf("failed to parse CreateRoomMessage: %w", err)
 		}
-		if err := proto.ValidateRestartMessage(&msg); err != nil {
-			return nil, fmt.Errorf("invalid RestartMessage: %w", err)
+		if err := proto.ValidateCreateRoomMessage(&msg); err != nil {
+			return nil, fmt.Errorf("invalid CreateRoomMessage: %w", err)
+		}
+		return &msg, nil
+
+	case "joinRoom":
+		var msg proto.JoinRoomMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return nil, fmt.Errorf("failed to parse JoinRoomMessage: %w", err)
+		}
+		if err := proto.ValidateJoinRoomMessage(&msg); err != nil {
+			return nil, fmt.Errorf("invalid JoinRoomMessage: %w", err)
+		}
+		return &msg, nil
+
+	case "leaveRoom":
+		var msg proto.LeaveRoomMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return nil, fmt.Errorf("failed to parse LeaveRoomMessage: %w", err)
+		}
+		if err := proto.ValidateLeaveRoomMessage(&msg); err != nil {
+			return nil, fmt.Errorf("invalid LeaveRoomMessage: %w", err)
+		}
+		return &msg, nil
+
+	case "startMatch":
+		var msg proto.StartMatchMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return nil, fmt.Errorf("failed to parse StartMatchMessage: %w", err)
+		}
+		if err := proto.ValidateStartMatchMessage(&msg); err != nil {
+			return nil, fmt.Errorf("invalid StartMatchMessage: %w", err)
 		}
 		return &msg, nil
 
@@ -295,7 +340,14 @@ func ParseMessage(data []byte) (interface{}, error) {
 
 // RouteMessage parses a JSON message, validates it, and routes it to the appropriate handler.
 // Returns an error if parsing, validation, or handler execution fails.
-func RouteMessage(data []byte, inputHandler InputMessageHandler, restartHandler RestartMessageHandler) error {
+func RouteMessage(
+	data []byte,
+	inputHandler InputMessageHandler,
+	createRoomHandler CreateRoomHandler,
+	joinRoomHandler JoinRoomHandler,
+	leaveRoomHandler LeaveRoomHandler,
+	startMatchHandler StartMatchHandler,
+) error {
 	msg, err := ParseMessage(data)
 	if err != nil {
 		return err
@@ -309,11 +361,29 @@ func RouteMessage(data []byte, inputHandler InputMessageHandler, restartHandler 
 		}
 		return inputHandler.HandleInput(m)
 
-	case *proto.RestartMessage:
-		if restartHandler == nil {
-			return fmt.Errorf("RestartMessageHandler is nil")
+	case *proto.CreateRoomMessage:
+		if createRoomHandler == nil {
+			return fmt.Errorf("CreateRoomHandler is nil")
 		}
-		return restartHandler.HandleRestart(m)
+		return createRoomHandler.HandleCreateRoom(m)
+
+	case *proto.JoinRoomMessage:
+		if joinRoomHandler == nil {
+			return fmt.Errorf("JoinRoomHandler is nil")
+		}
+		return joinRoomHandler.HandleJoinRoom(m)
+
+	case *proto.LeaveRoomMessage:
+		if leaveRoomHandler == nil {
+			return fmt.Errorf("LeaveRoomHandler is nil")
+		}
+		return leaveRoomHandler.HandleLeaveRoom(m)
+
+	case *proto.StartMatchMessage:
+		if startMatchHandler == nil {
+			return fmt.Errorf("StartMatchHandler is nil")
+		}
+		return startMatchHandler.HandleStartMatch(m)
 
 	default:
 		return fmt.Errorf("unexpected message type: %T", msg)
@@ -337,33 +407,37 @@ func NewErrorMessage(err error) []byte {
 }
 
 // NewInitialWorld creates a default initial world state for new sessions.
+// NOTE: This is legacy code for per-connection sessions (removed in step 6).
+// For room-based sessions, initial world is created by RoomManager.StartMatch.
 // Ship at position (70, 0) with zero velocity, 100 energy.
-// Sun at origin (0, 0) with radius 50, mass 1000.
-// Ship starts outside sun radius (70 > 50) to avoid immediate collision.
+// Planet at origin (0, 0) with radius 50, mass 1000.
+// Ship starts outside planet radius (70 > 50) to avoid immediate collision.
 // Initial pallets positioned around the world in a circular pattern.
 func NewInitialWorld() entities.World {
 	ship := entities.NewShip(
+		1, // Player ID 1 for legacy single-player sessions
 		entities.NewVec2(70.0, 0.0),
 		entities.NewVec2(0.0, 0.0),
 		0.0,
 		100.0,
 	)
-	sun := entities.NewSun(
+	planet := entities.NewPlanet(
+		1, // Planet ID 1
 		entities.NewVec2(0.0, 0.0),
 		50.0,
 		1000.0,
 	)
 
-	// Create initial pallets positioned in a circle around the sun
+	// Create initial pallets positioned in a circle around the planet
 	// Position them at various distances and angles for gameplay variety
 	pallets := []entities.Pallet{
-		// First ring - closer to sun
+		// First ring - closer to planet
 		entities.NewPallet(1, entities.NewVec2(80.0, 0.0), true),  // Right
 		entities.NewPallet(2, entities.NewVec2(-80.0, 0.0), true), // Left
 		entities.NewPallet(3, entities.NewVec2(0.0, 80.0), true),  // Up
 		entities.NewPallet(4, entities.NewVec2(0.0, -80.0), true), // Down
 
-		// Second ring - further from sun
+		// Second ring - further from planet
 		entities.NewPallet(5, entities.NewVec2(120.0, 60.0), true),   // Right-up
 		entities.NewPallet(6, entities.NewVec2(-120.0, 60.0), true),  // Left-up
 		entities.NewPallet(7, entities.NewVec2(120.0, -60.0), true),  // Right-down
@@ -374,11 +448,11 @@ func NewInitialWorld() entities.World {
 		entities.NewPallet(10, entities.NewVec2(-150.0, 0.0), true), // Far left
 	}
 
-	return entities.NewWorld(ship, sun, pallets)
+	return entities.NewWorld([]entities.Ship{ship}, []entities.Planet{planet}, pallets)
 }
 
 // SessionHandler manages a session for a WebSocket connection.
-// It implements InputMessageHandler and RestartMessageHandler interfaces.
+// It implements InputMessageHandler interface.
 type SessionHandler struct {
 	session        *session.Session
 	conn           *Connection
@@ -415,21 +489,11 @@ func (h *SessionHandler) HandleInput(msg *proto.InputMessage) error {
 		Turn:   msg.Turn,
 	}
 
-	success := h.session.EnqueueCommand(msg.Seq, cmd)
+	// Use playerID 1 as default for per-connection sessions (will be removed in step 6)
+	success := h.session.EnqueueCommand(msg.Seq, 1, cmd)
 	if !success {
 		return fmt.Errorf("failed to enqueue command with seq %d", msg.Seq)
 	}
-
-	return nil
-}
-
-// HandleRestart resets the session to the initial world state.
-func (h *SessionHandler) HandleRestart(msg *proto.RestartMessage) error {
-	// Stop current session
-	h.session.Stop()
-
-	// Create new session with initial world state
-	h.session = session.NewSession(h.clock, h.initialWorld, 100, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
 
 	return nil
 }
@@ -459,8 +523,10 @@ func (h *SessionHandler) Start() {
 				return
 			case <-h.snapshotTicker.C:
 				// Get world state and broadcast snapshot
+				// NOTE: This is legacy code for per-connection sessions (removed in step 6)
+				// Using playerID 1 as default for legacy single-player sessions
 				world := h.session.GetWorld()
-				snapshot := WorldToSnapshot(world)
+				snapshot := WorldToSnapshot(world, 1)
 
 				// Serialize and send snapshot
 				data, err := json.Marshal(snapshot)

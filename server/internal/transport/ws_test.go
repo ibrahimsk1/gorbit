@@ -387,18 +387,58 @@ func (h *mockInputHandler) HandleInput(msg *proto.InputMessage) error {
 	return nil
 }
 
-type mockRestartHandler struct {
-	lastMessage *proto.RestartMessage
+type mockCreateRoomHandler struct {
+	lastMessage *proto.CreateRoomMessage
 	shouldError bool
 }
 
-func (h *mockRestartHandler) HandleRestart(msg *proto.RestartMessage) error {
+func (h *mockCreateRoomHandler) HandleCreateRoom(msg *proto.CreateRoomMessage) error {
 	h.lastMessage = msg
 	if h.shouldError {
 		return errors.New("handler error")
 	}
 	return nil
 }
+
+type mockJoinRoomHandler struct {
+	lastMessage *proto.JoinRoomMessage
+	shouldError bool
+}
+
+func (h *mockJoinRoomHandler) HandleJoinRoom(msg *proto.JoinRoomMessage) error {
+	h.lastMessage = msg
+	if h.shouldError {
+		return errors.New("handler error")
+	}
+	return nil
+}
+
+type mockLeaveRoomHandler struct {
+	lastMessage *proto.LeaveRoomMessage
+	shouldError bool
+}
+
+func (h *mockLeaveRoomHandler) HandleLeaveRoom(msg *proto.LeaveRoomMessage) error {
+	h.lastMessage = msg
+	if h.shouldError {
+		return errors.New("handler error")
+	}
+	return nil
+}
+
+type mockStartMatchHandler struct {
+	lastMessage *proto.StartMatchMessage
+	shouldError bool
+}
+
+func (h *mockStartMatchHandler) HandleStartMatch(msg *proto.StartMatchMessage) error {
+	h.lastMessage = msg
+	if h.shouldError {
+		return errors.New("handler error")
+	}
+	return nil
+}
+
 
 var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop:g5-adapter", "layer:server", "dep:ws", "b:message-routing", "r:high"), func() {
 
@@ -418,17 +458,6 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 			Expect(inputMsg.Turn).To(Equal(float32(-0.5)))
 		})
 
-		It("successfully parses valid RestartMessage JSON", func() {
-			jsonData := []byte(`{"t":"restart"}`)
-			msg, err := ParseMessage(jsonData)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(msg).NotTo(BeNil())
-
-			restartMsg, ok := msg.(*proto.RestartMessage)
-			Expect(ok).To(BeTrue())
-			Expect(restartMsg.Type).To(Equal("restart"))
-		})
 
 		It("returns error for malformed JSON", func() {
 			jsonData := []byte(`{"t":"input","seq":invalid}`)
@@ -507,59 +536,251 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 			Expect(err.Error()).To(ContainSubstring("turn"))
 		})
 
-		It("returns error for RestartMessage with invalid type", func() {
+		It("successfully parses valid CreateRoomMessage JSON", func() {
+			jsonData := []byte(`{"t":"createRoom"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(msg).NotTo(BeNil())
+
+			createRoomMsg, ok := msg.(*proto.CreateRoomMessage)
+			Expect(ok).To(BeTrue())
+			Expect(createRoomMsg.Type).To(Equal("createRoom"))
+		})
+
+		It("successfully parses valid JoinRoomMessage JSON", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC123"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(msg).NotTo(BeNil())
+
+			joinRoomMsg, ok := msg.(*proto.JoinRoomMessage)
+			Expect(ok).To(BeTrue())
+			Expect(joinRoomMsg.Type).To(Equal("joinRoom"))
+			Expect(joinRoomMsg.RoomCode).To(Equal("ABC123"))
+		})
+
+		It("successfully parses valid LeaveRoomMessage JSON", func() {
+			jsonData := []byte(`{"t":"leaveRoom"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(msg).NotTo(BeNil())
+
+			leaveRoomMsg, ok := msg.(*proto.LeaveRoomMessage)
+			Expect(ok).To(BeTrue())
+			Expect(leaveRoomMsg.Type).To(Equal("leaveRoom"))
+		})
+
+		It("successfully parses valid StartMatchMessage JSON", func() {
+			jsonData := []byte(`{"t":"startMatch"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(msg).NotTo(BeNil())
+
+			startMatchMsg, ok := msg.(*proto.StartMatchMessage)
+			Expect(ok).To(BeTrue())
+			Expect(startMatchMsg.Type).To(Equal("startMatch"))
+		})
+
+		It("returns error for CreateRoomMessage with invalid type", func() {
 			jsonData := []byte(`{"t":"invalid"}`)
 			msg, err := ParseMessage(jsonData)
 
 			Expect(err).To(HaveOccurred())
 			Expect(msg).To(BeNil())
 		})
+
+		It("returns error for JoinRoomMessage with invalid roomCode (too short)", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("roomCode"))
+		})
+
+		It("returns error for JoinRoomMessage with invalid roomCode (too long)", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC1234"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("roomCode"))
+		})
+
+		It("returns error for JoinRoomMessage with invalid roomCode (non-alphanumeric)", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC-12"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("roomCode"))
+		})
+
+		It("returns error for LeaveRoomMessage with invalid type", func() {
+			jsonData := []byte(`{"t":"invalid"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+		})
+
+		It("returns error for StartMatchMessage with invalid type", func() {
+			jsonData := []byte(`{"t":"invalid"}`)
+			msg, err := ParseMessage(jsonData)
+
+			Expect(err).To(HaveOccurred())
+			Expect(msg).To(BeNil())
+		})
+
 	})
 
 	Describe("RouteMessage", func() {
 		var inputHandler *mockInputHandler
-		var restartHandler *mockRestartHandler
+		var createRoomHandler *mockCreateRoomHandler
+		var joinRoomHandler *mockJoinRoomHandler
+		var leaveRoomHandler *mockLeaveRoomHandler
+		var startMatchHandler *mockStartMatchHandler
 
 		BeforeEach(func() {
 			inputHandler = &mockInputHandler{}
-			restartHandler = &mockRestartHandler{}
+			createRoomHandler = &mockCreateRoomHandler{}
+			joinRoomHandler = &mockJoinRoomHandler{}
+			leaveRoomHandler = &mockLeaveRoomHandler{}
+			startMatchHandler = &mockStartMatchHandler{}
 		})
 
 		It("successfully routes valid InputMessage to InputMessageHandler", func() {
 			jsonData := []byte(`{"t":"input","seq":42,"thrust":0.75,"turn":-0.5}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(inputHandler.lastMessage).NotTo(BeNil())
 			Expect(inputHandler.lastMessage.Seq).To(Equal(uint32(42)))
 			Expect(inputHandler.lastMessage.Thrust).To(Equal(float32(0.75)))
 			Expect(inputHandler.lastMessage.Turn).To(Equal(float32(-0.5)))
-			Expect(restartHandler.lastMessage).To(BeNil())
 		})
 
-		It("successfully routes valid RestartMessage to RestartMessageHandler", func() {
-			jsonData := []byte(`{"t":"restart"}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+		It("successfully routes valid CreateRoomMessage to CreateRoomHandler", func() {
+			jsonData := []byte(`{"t":"createRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(restartHandler.lastMessage).NotTo(BeNil())
-			Expect(restartHandler.lastMessage.Type).To(Equal("restart"))
-			Expect(inputHandler.lastMessage).To(BeNil())
+			Expect(createRoomHandler.lastMessage).NotTo(BeNil())
+			Expect(createRoomHandler.lastMessage.Type).To(Equal("createRoom"))
+		})
+
+		It("successfully routes valid JoinRoomMessage to JoinRoomHandler", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC123"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(joinRoomHandler.lastMessage).NotTo(BeNil())
+			Expect(joinRoomHandler.lastMessage.Type).To(Equal("joinRoom"))
+			Expect(joinRoomHandler.lastMessage.RoomCode).To(Equal("ABC123"))
+		})
+
+		It("successfully routes valid LeaveRoomMessage to LeaveRoomHandler", func() {
+			jsonData := []byte(`{"t":"leaveRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(leaveRoomHandler.lastMessage).NotTo(BeNil())
+			Expect(leaveRoomHandler.lastMessage.Type).To(Equal("leaveRoom"))
+		})
+
+		It("successfully routes valid StartMatchMessage to StartMatchHandler", func() {
+			jsonData := []byte(`{"t":"startMatch"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(startMatchHandler.lastMessage).NotTo(BeNil())
+			Expect(startMatchHandler.lastMessage.Type).To(Equal("startMatch"))
+		})
+
+		It("returns error if InputMessageHandler is nil", func() {
+			jsonData := []byte(`{"t":"input","seq":1,"thrust":0.5,"turn":0.0}`)
+			err := RouteMessage(jsonData, nil, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("InputMessageHandler is nil"))
+		})
+
+		It("returns error if CreateRoomHandler is nil", func() {
+			jsonData := []byte(`{"t":"createRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, nil, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("CreateRoomHandler is nil"))
+		})
+
+		It("returns error if JoinRoomHandler is nil", func() {
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC123"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, nil, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("JoinRoomHandler is nil"))
+		})
+
+		It("returns error if LeaveRoomHandler is nil", func() {
+			jsonData := []byte(`{"t":"leaveRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, nil, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("LeaveRoomHandler is nil"))
+		})
+
+		It("returns error if StartMatchHandler is nil", func() {
+			jsonData := []byte(`{"t":"startMatch"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, nil)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("StartMatchHandler is nil"))
 		})
 
 		It("returns handler error if InputMessageHandler fails", func() {
 			inputHandler.shouldError = true
 			jsonData := []byte(`{"t":"input","seq":1,"thrust":0.5,"turn":0.0}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("handler error"))
 		})
 
-		It("returns handler error if RestartMessageHandler fails", func() {
-			restartHandler.shouldError = true
-			jsonData := []byte(`{"t":"restart"}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+		It("returns handler error if CreateRoomHandler fails", func() {
+			createRoomHandler.shouldError = true
+			jsonData := []byte(`{"t":"createRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("handler error"))
+		})
+
+		It("returns handler error if JoinRoomHandler fails", func() {
+			joinRoomHandler.shouldError = true
+			jsonData := []byte(`{"t":"joinRoom","roomCode":"ABC123"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("handler error"))
+		})
+
+		It("returns handler error if LeaveRoomHandler fails", func() {
+			leaveRoomHandler.shouldError = true
+			jsonData := []byte(`{"t":"leaveRoom"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("handler error"))
+		})
+
+		It("returns handler error if StartMatchHandler fails", func() {
+			startMatchHandler.shouldError = true
+			jsonData := []byte(`{"t":"startMatch"}`)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("handler error"))
@@ -567,16 +788,15 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 
 		It("returns error for malformed messages", func() {
 			jsonData := []byte(`{"t":"input","seq":invalid}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(inputHandler.lastMessage).To(BeNil())
-			Expect(restartHandler.lastMessage).To(BeNil())
 		})
 
 		It("returns error for validation failures", func() {
 			jsonData := []byte(`{"t":"input","seq":0,"thrust":0.5,"turn":0.0}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(inputHandler.lastMessage).To(BeNil())
@@ -584,11 +804,10 @@ var _ = Describe("Message Parsing and Routing", Label("scope:integration", "loop
 
 		It("returns error for unknown message types", func() {
 			jsonData := []byte(`{"t":"unknown"}`)
-			err := RouteMessage(jsonData, inputHandler, restartHandler)
+			err := RouteMessage(jsonData, inputHandler, createRoomHandler, joinRoomHandler, leaveRoomHandler, startMatchHandler)
 
 			Expect(err).To(HaveOccurred())
 			Expect(inputHandler.lastMessage).To(BeNil())
-			Expect(restartHandler.lastMessage).To(BeNil())
 		})
 	})
 
@@ -662,18 +881,13 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 
 	// Helper function to create initial world state
 	newInitialWorld := func() entities.World {
-		ship := entities.NewShip(
-			entities.NewVec2(10.0, 0.0),
-			entities.NewVec2(0.0, 0.0),
-			0.0,
-			100.0,
-		)
-		sun := entities.NewSun(
-			entities.NewVec2(0.0, 0.0),
-			50.0,
-			1000.0,
-		)
-		return entities.NewWorld(ship, sun, nil)
+		ships := []entities.Ship{
+			entities.NewShip(1, entities.NewVec2(10.0, 0.0), entities.NewVec2(0.0, 0.0), 0.0, 100.0),
+		}
+		planets := []entities.Planet{
+			entities.NewPlanet(1, entities.NewVec2(0.0, 0.0), 50.0, 1000.0),
+		}
+		return entities.NewWorld(ships, planets, nil)
 	}
 
 	BeforeEach(func() {
@@ -778,58 +992,6 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			Expect(world.Tick).To(BeNumerically(">", uint32(0)))
 		})
 
-		It("successfully resets session world state on restart", func() {
-			var conn *websocket.Conn
-			var clientConn *websocket.Conn
-
-			mux := http.NewServeMux()
-			mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-				var err error
-				conn, err = UpgradeConnection(w, r)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-			})
-
-			testServer = httptest.NewServer(mux)
-			serverURL = "ws" + testServer.URL[4:] + "/ws"
-
-			dialer := websocket.Dialer{}
-			var err error
-			clientConn, _, err = dialer.Dial(serverURL, nil)
-			Expect(err).NotTo(HaveOccurred())
-			defer clientConn.Close()
-
-			Eventually(func() bool {
-				return conn != nil
-			}).Should(BeTrue())
-
-			connection := NewConnection(conn)
-			defer connection.Close()
-
-			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
-
-			// Advance session to tick 10
-			clock.Advance(10 * 33 * time.Millisecond)
-			handler.session.Run(10)
-			world := handler.session.GetWorld()
-			// Session may process fewer ticks if time hasn't advanced enough
-			// Just verify we've progressed past tick 0
-			Expect(world.Tick).To(BeNumerically(">=", uint32(1)))
-
-			// Restart
-			restartMsg := &proto.RestartMessage{Type: "restart"}
-			err = handler.HandleRestart(restartMsg)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify world is reset
-			world = handler.session.GetWorld()
-			Expect(world.Tick).To(Equal(uint32(0)))
-			Expect(world.Ship.Pos.X).To(Equal(10.0))
-			Expect(world.Ship.Pos.Y).To(Equal(0.0))
-		})
 	})
 
 	Describe("Session Run Loop and Snapshot Broadcasting", func() {
@@ -943,16 +1105,20 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			err = clientConn.ReadJSON(&snapshot)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify snapshot content
+			// Verify snapshot content (multiplayer format)
 			Expect(snapshot.Type).To(Equal("snapshot"))
+			// Ships array should have at least one ship
+			Expect(len(snapshot.Ships)).To(BeNumerically(">=", 1))
 			// Ship position may have changed slightly due to gravity, use approximate matching
-			Expect(snapshot.Ship.Pos.X).To(BeNumerically("~", 10.0, 0.5))
-			Expect(snapshot.Ship.Pos.Y).To(BeNumerically("~", 0.0, 0.5))
+			Expect(snapshot.Ships[0].Pos.X).To(BeNumerically("~", 10.0, 0.5))
+			Expect(snapshot.Ships[0].Pos.Y).To(BeNumerically("~", 0.0, 0.5))
 			// Energy may have decreased if ship was thrusting, but should be close to 100
-			Expect(snapshot.Ship.Energy).To(BeNumerically(">=", float32(90.0)))
-			Expect(snapshot.Sun.Pos.X).To(Equal(0.0))
-			Expect(snapshot.Sun.Pos.Y).To(Equal(0.0))
-			Expect(snapshot.Sun.Radius).To(Equal(float32(50.0)))
+			Expect(snapshot.Ships[0].Energy).To(BeNumerically(">=", float32(90.0)))
+			// Planets array should have at least one planet
+			Expect(len(snapshot.Planets)).To(BeNumerically(">=", 1))
+			Expect(snapshot.Planets[0].Pos.X).To(Equal(0.0))
+			Expect(snapshot.Planets[0].Pos.Y).To(Equal(0.0))
+			Expect(snapshot.Planets[0].Radius).To(Equal(float32(50.0)))
 			Expect(snapshot.Pallets).To(BeEmpty())
 			// Game may have ended if ship collided with sun, so just verify snapshot structure
 			// Don't assert on Done/Win as they depend on game state
@@ -1018,64 +1184,6 @@ var _ = Describe("Session-WebSocket Integration", Label("scope:integration", "lo
 			Expect(snapshot.Tick).To(BeNumerically(">", uint32(0)))
 		})
 
-		It("handles restart message and broadcasts reset snapshot", func() {
-			var conn *websocket.Conn
-			var clientConn *websocket.Conn
-
-			mux := http.NewServeMux()
-			mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-				var err error
-				conn, err = UpgradeConnection(w, r)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-			})
-
-			testServer = httptest.NewServer(mux)
-			serverURL = "ws" + testServer.URL[4:] + "/ws"
-
-			dialer := websocket.Dialer{}
-			var err error
-			clientConn, _, err = dialer.Dial(serverURL, nil)
-			Expect(err).NotTo(HaveOccurred())
-			defer clientConn.Close()
-
-			Eventually(func() bool {
-				return conn != nil
-			}).Should(BeTrue())
-
-			connection := NewConnection(conn)
-			defer connection.Close()
-
-			initialWorld := newInitialWorld()
-			handler := NewSessionHandler(connection, clock, initialWorld, logr.Discard())
-			handler.Start()
-			defer handler.Stop()
-
-			// Advance session to tick 5
-			clock.Advance(5 * 33 * time.Millisecond)
-
-			// Send restart message
-			restartMsg := map[string]interface{}{
-				"t": "restart",
-			}
-			err = clientConn.WriteJSON(restartMsg)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Advance time to process restart and broadcast snapshot
-			clock.Advance(200 * time.Millisecond)
-
-			// Read snapshot
-			var snapshot proto.SnapshotMessage
-			err = clientConn.ReadJSON(&snapshot)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify snapshot shows reset state
-			Expect(snapshot.Type).To(Equal("snapshot"))
-			// After restart, tick should be 0 or very low
-			Expect(snapshot.Tick).To(BeNumerically("<=", uint32(2)))
-		})
 	})
 
 	Describe("Graceful Shutdown", func() {
