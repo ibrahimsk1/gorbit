@@ -305,3 +305,74 @@ func (rm *RoomManager) GetWorldFromRoom(roomCode string) (entities.World, error)
 	return world, nil
 }
 
+// CleanupEmptyRooms removes all empty rooms (rooms with no players) from the rooms map.
+// Stops sessions for empty rooms before removing them.
+// Returns the number of rooms cleaned up.
+func (rm *RoomManager) CleanupEmptyRooms() int {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	cleanedCount := 0
+	roomsToClean := make([]string, 0)
+
+	// First pass: identify empty rooms
+	for code, room := range rm.rooms {
+		room.mu.RLock()
+		isEmpty := len(room.Players) == 0
+		sess := room.Session
+		room.mu.RUnlock()
+
+		if isEmpty {
+			roomsToClean = append(roomsToClean, code)
+			// Stop session if exists
+			if sess != nil {
+				sess.Stop()
+			}
+		}
+	}
+
+	// Second pass: remove empty rooms
+	for _, code := range roomsToClean {
+		delete(rm.rooms, code)
+		cleanedCount++
+	}
+
+	return cleanedCount
+}
+
+// CheckMatchEnd checks if a match has ended (world.Done == true) and transitions the room to ended state.
+// Returns true if the match has ended, false otherwise.
+// Returns an error if the room does not exist.
+func (rm *RoomManager) CheckMatchEnd(roomCode string) (bool, error) {
+	rm.mu.RLock()
+	room, exists := rm.rooms[roomCode]
+	rm.mu.RUnlock()
+
+	if !exists {
+		return false, ErrRoomNotFound
+	}
+
+	// Check if room is in playing state
+	room.mu.RLock()
+	state := room.State
+	sess := room.Session
+	room.mu.RUnlock()
+
+	if state != RoomStatePlaying || sess == nil {
+		return false, nil
+	}
+
+	// Check world.Done
+	world := sess.GetWorld()
+	if !world.Done {
+		return false, nil
+	}
+
+	// Match has ended, transition to ended state
+	room.mu.Lock()
+	room.State = RoomStateEnded
+	room.mu.Unlock()
+
+	return true, nil
+}
+
