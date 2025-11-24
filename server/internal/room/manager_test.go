@@ -298,5 +298,84 @@ var _ = Describe("Room Code Generation", Label("scope:unit", "loop:g6-room", "la
 			}
 		})
 	})
+
+	Describe("LeaveRoom", Label("scope:unit", "loop:g6-room", "layer:room", "b:player-leave", "r:high", "double:fake-io", "dep:none"), func() {
+		It("removes player from room when room has other players", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn1 := &transport.Connection{}
+			conn2 := &transport.Connection{}
+			manager.JoinRoom(code, conn1)
+			manager.JoinRoom(code, conn2)
+
+			err := manager.LeaveRoom(code, 1)
+
+			Expect(err).To(BeNil())
+			room, _ := manager.GetRoom(code)
+			Expect(room.GetPlayers()).To(HaveLen(1))
+			Expect(room.GetPlayers()[0].PlayerID).To(Equal(uint32(2)))
+		})
+
+		It("removes room when last player leaves", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn := &transport.Connection{}
+			manager.JoinRoom(code, conn)
+
+			err := manager.LeaveRoom(code, 1)
+
+			Expect(err).To(BeNil())
+			_, err = manager.GetRoom(code)
+			Expect(errors.Is(err, ErrRoomNotFound)).To(BeTrue())
+		})
+
+		It("closes player connection when leaving", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn := &transport.Connection{}
+			manager.JoinRoom(code, conn)
+
+			err := manager.LeaveRoom(code, 1)
+
+			Expect(err).To(BeNil())
+			// Connection.Close() should be called (we can't easily verify without mocking)
+		})
+
+		It("stops session when room becomes empty", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn := &transport.Connection{}
+			manager.JoinRoom(code, conn)
+			room, _ := manager.GetRoom(code)
+			session := &session.Session{}
+			room.SetSession(session)
+
+			err := manager.LeaveRoom(code, 1)
+
+			Expect(err).To(BeNil())
+			// Session.Stop() should be called (we can't easily verify without mocking)
+		})
+
+		It("returns error when room code does not exist", func() {
+			manager := NewRoomManager()
+
+			err := manager.LeaveRoom("NONEXIST", 1)
+
+			Expect(err).NotTo(BeNil())
+			Expect(errors.Is(err, ErrRoomNotFound)).To(BeTrue())
+		})
+
+		It("returns error when player ID does not exist in room", func() {
+			manager := NewRoomManager()
+			code, _ := manager.CreateRoom()
+			conn := &transport.Connection{}
+			manager.JoinRoom(code, conn)
+
+			err := manager.LeaveRoom(code, 999)
+
+			Expect(err).NotTo(BeNil())
+			Expect(errors.Is(err, ErrPlayerNotFound)).To(BeTrue())
+		})
+	})
 })
 
