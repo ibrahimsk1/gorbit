@@ -611,8 +611,9 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 			// Handle disconnection by calling LeaveRoom if in room
 			if registry.IsAssociated(wsConn) {
 				roomCode, playerID, err := registry.GetRoomInfo(wsConn)
-				if err == nil {
+				if err == nil && roomOps.LeaveRoomFunc != nil {
 					// Call LeaveRoom to handle cleanup
+					// This will remove player from room, close connection, and clean up if room becomes empty
 					_ = roomOps.LeaveRoomFunc(roomCode, playerID)
 				}
 			}
