@@ -16,6 +16,7 @@ export interface INetworkClient {
   onDisconnect(callback: () => void): void
   onError(callback: (error: Error) => void): void
   connect(url: string): Promise<void>
+  disconnect(): void
   isConnected(): boolean
 }
 
@@ -64,6 +65,8 @@ export class AppOrchestrator {
   private initError: Error | null = null
   private gameLoopId: number | null = null
   private isGameLoopRunning: boolean = false
+  private sceneCreatedByOrchestrator: boolean = false
+  private beforeunloadHandler: (() => void) | null = null
 
   constructor(
     app: App,
@@ -136,6 +139,7 @@ export class AppOrchestrator {
       // Create Scene if not provided
       if (!this.scene) {
         this.scene = new Scene(this.app)
+        this.sceneCreatedByOrchestrator = true
       }
 
       // Set up NetworkClient event handlers if provided
@@ -225,11 +229,30 @@ export class AppOrchestrator {
     }
 
     this.gameLoopId = requestAnimationFrame(gameLoop)
+
+    // Set up beforeunload handler
+    this.setupBeforeUnloadHandler()
+  }
+
+  /**
+   * Sets up beforeunload event handler.
+   * Private helper method called during start().
+   */
+  private setupBeforeUnloadHandler(): void {
+    if (this.beforeunloadHandler) {
+      return // Already set up
+    }
+
+    this.beforeunloadHandler = () => {
+      this.destroy()
+    }
+
+    window.addEventListener('beforeunload', this.beforeunloadHandler)
   }
 
   /**
    * Stops the render loop and game loop.
-   * Basic implementation - full lifecycle management will be in CU cu/subsystem-lifecycle.
+   * Also detaches input handler and disconnects network client.
    */
   stop(): void {
     // Stop game loop
@@ -243,14 +266,75 @@ export class AppOrchestrator {
     if (this.renderLoop) {
       this.renderLoop.stop()
     }
+
+    // Detach input handler
+    if (this.inputHandler) {
+      this.inputHandler.detach()
+    }
+
+    // Disconnect network client
+    if (this.networkClient) {
+      this.networkClient.disconnect()
+    }
   }
 
   /**
    * Destroys all subsystems and cleans up resources.
-   * Will be implemented in CU cu/subsystem-lifecycle.
+   * Destroys subsystems in reverse dependency order.
    */
   destroy(): void {
-    // Placeholder - implementation in CU cu/subsystem-lifecycle
+    // Stop loops and detach/disconnect
+    this.stop()
+
+    // Destroy subsystems in reverse dependency order
+    // Input handler (already detached in stop())
+    if (this.inputHandler) {
+      this.inputHandler.reset()
+      this.inputHandler = null
+    }
+
+    // HUD
+    if (this.hud) {
+      this.hud.destroy()
+      this.hud = null
+    }
+
+    // Renderer
+    if (this.renderer) {
+      this.renderer.destroy()
+      this.renderer = null
+    }
+
+    // Network client (already disconnected in stop())
+    this.networkClient = null
+
+    // State manager (no destroy method, just clear reference)
+    this.stateManager = null
+
+    // Scene (only if we created it)
+    if (this.scene && this.sceneCreatedByOrchestrator) {
+      this.scene.destroy()
+      this.scene = null
+      this.sceneCreatedByOrchestrator = false
+    }
+
+    // RenderLoop
+    if (this.renderLoop) {
+      this.renderLoop = null
+    }
+
+    // App
+    this.app.destroy()
+
+    // Remove beforeunload listener
+    if (this.beforeunloadHandler) {
+      window.removeEventListener('beforeunload', this.beforeunloadHandler)
+      this.beforeunloadHandler = null
+    }
+
+    // Reset state
+    this.initialized = false
+    this.initError = null
   }
 }
 
