@@ -5,70 +5,39 @@
  * Labels: scope:integration loop:g2-app layer:core
  */
 
+import { DIContainer } from './core/di-container'
+import { DI_KEYS } from './core/di-keys'
+import { registerDependencies } from './core/di-config'
 import { App } from './core/app'
 import { AppOrchestrator } from './core/orchestrator'
-import { Scene } from './gfx/scene'
-import { Renderer } from './gfx/renderer'
-import { StateManager } from './sim/state-manager'
-import { LocalSimulator } from './sim/local-simulator'
-import { CommandHistory } from './net/command-history'
-import { PredictionSystem } from './sim/prediction'
-import { ReconciliationSystem } from './sim/reconciliation'
-import { InterpolationSystem } from './sim/interpolation'
 import { NetworkClient } from './net/client'
-import { KeyboardInputHandler } from './input/keyboard'
-import { HUD } from './ui/hud'
-import type { SnapshotMessage } from './net/protocol'
 
 // Configuration
 const WS_URL = 'ws://localhost:8080/ws'
-const INPUT_SEND_INTERVAL_MS = 1000 / 30 // 30Hz input rate (matches server tick rate)
 
 async function init() {
-  // Initialize Pixi Application
-  const app = new App()
+  // Create DI container
+  const container = new DIContainer()
 
-  // Initialize simulation systems (not part of orchestrator's interface)
-  const stateManager = new StateManager()
-  const localSimulator = new LocalSimulator()
-  const commandHistory = new CommandHistory()
-  const predictionSystem = new PredictionSystem(stateManager, localSimulator, commandHistory)
-  const reconciliationSystem = new ReconciliationSystem(stateManager, localSimulator, commandHistory, predictionSystem)
-  const interpolationSystem = new InterpolationSystem(stateManager)
+  // Register all dependencies
+  registerDependencies(container)
 
-  // Create subsystems
-  const networkClient = new NetworkClient()
-  const keyboardInput = new KeyboardInputHandler()
-  
-  // Scene needs to be created before Renderer (Renderer depends on Scene)
-  const scene = new Scene(app)
-  const renderer = new Renderer(stateManager, scene, app)
-  const hud = new HUD(scene, stateManager)
+  // BOOTSTRAP PHASE: Initialize core infrastructure
+  await container.initializePhase('bootstrap')
 
-  // Set up custom snapshot handler (uses simulation systems not in orchestrator)
-  networkClient.onSnapshot((snapshot: SnapshotMessage) => {
-    // Update authoritative state from server
-    stateManager.updateAuthoritative(snapshot)
-    
-    // Add snapshot to interpolation buffer
-    interpolationSystem.addSnapshot(snapshot, performance.now())
-    
-    // Reconcile predicted state with authoritative
-    reconciliationSystem.reconcile(snapshot)
-  })
+  // Initialize App (must be done before menu phase)
+  const app = container.resolve<App>(DI_KEYS.APP)
+  await app.init()
 
-  // Create orchestrator with all subsystems
-  const orchestrator = new AppOrchestrator(app, {
-    networkClient,
-    renderer,
-    hud,
-    inputHandler: keyboardInput,
-    stateManager,
-    scene
-  })
+  // MENU PHASE: Initialize menu systems (Scene auto-initializes via hook)
+  await container.initializePhase('menu')
 
-  // Initialize orchestrator (initializes App, sets up event handlers)
+  // Get orchestrator (menu systems ready, game systems will be lazy loaded)
+  const orchestrator = container.resolve<AppOrchestrator>(DI_KEYS.ORCHESTRATOR)
   await orchestrator.init()
+
+  // Get network client for connection
+  const networkClient = container.resolve<NetworkClient>(DI_KEYS.NETWORK_CLIENT)
 
   // Connect to server
   try {
@@ -78,46 +47,23 @@ async function init() {
     // Continue anyway - might be testing without server
   }
 
-  // Start orchestrator (starts render loop and game loop)
+  // Start orchestrator (starts render loop for UI, game loops start when match begins)
   orchestrator.start()
 
-  // Set up input sending loop (custom logic, runs in parallel with game loop)
-  let lastInputSendTime = 0
-  let commandSequence = 0
-  const inputLoop = () => {
-    const now = performance.now()
+  // GAME PHASE: Systems initialized lazily when match starts
+  // (handled in orchestrator.transitionToInGame())
 
-    // Send input commands at regular intervals
-    if (now - lastInputSendTime >= INPUT_SEND_INTERVAL_MS) {
-      const thrust = keyboardInput.getThrust()
-      const turn = keyboardInput.getTurn()
-
-      // Only send if there's actual input
-      if (thrust > 0 || turn !== 0) {
-        commandSequence++
-        commandHistory.addCommand(commandSequence, thrust, turn)
-        networkClient.sendInput(commandSequence, thrust, turn)
-        
-        // Immediately predict locally for responsive feel
-        predictionSystem.predict({ thrust, turn })
-      }
-
-      lastInputSendTime = now
-    }
-
-    requestAnimationFrame(inputLoop)
-  }
-  inputLoop()
-
-  // Set up interpolation update loop (runs in parallel with game loop)
-  const interpolationLoop = () => {
-    interpolationSystem.update(performance.now())
-    requestAnimationFrame(interpolationLoop)
-  }
-  interpolationLoop()
-
-  // Cleanup is handled by orchestrator's destroy() on beforeunload
-  // Orchestrator will clean up: render loop, input handler, network client, renderer, HUD, scene, app
+  // Cleanup on exit
+  window.addEventListener('beforeunload', () => {
+    orchestrator.destroy()
+    
+    // Destroy App (application-owned, not container-owned)
+    // App must be destroyed after orchestrator (which uses it) but before container
+    const app = container.resolve<App>(DI_KEYS.APP)
+    app.destroy()
+    
+    container.destroy()
+  })
 }
 
 init().catch(console.error)
