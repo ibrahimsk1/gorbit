@@ -80,7 +80,7 @@ func (cr *ConnectionRegistry) IsAssociated(conn *Connection) bool {
 // RoomOperations defines callback functions for room operations.
 // This avoids circular dependencies by using function callbacks instead of importing room package.
 type RoomOperations struct {
-	CreateRoomFunc         func() (string, error)
+	CreateRoomFunc         func(conn *Connection) (RoomData, uint32, error)
 	JoinRoomFunc          func(roomCode string, conn *Connection) (RoomData, uint32, error)
 	LeaveRoomFunc         func(roomCode string, playerID uint32) error
 	GetRoomFunc           func(roomCode string) (RoomData, error)
@@ -130,29 +130,35 @@ func (h *RoomHandler) SetBroadcaster(broadcaster *SnapshotBroadcaster) {
 	h.broadcaster = broadcaster
 }
 
-// HandleCreateRoom handles CreateRoomMessage by creating a room and sending roomCreated response.
+// HandleCreateRoom handles CreateRoomMessage by creating a room, adding the creator as host,
+// tracking the connection, and sending roomState response.
 func (h *RoomHandler) HandleCreateRoom(msg *proto.CreateRoomMessage) error {
 	if h.ops.CreateRoomFunc == nil {
 		return fmt.Errorf("CreateRoomFunc not provided")
 	}
 
-	// Create room
-	roomCode, err := h.ops.CreateRoomFunc()
+	// Create room and automatically add creator as host
+	roomData, playerID, err := h.ops.CreateRoomFunc(h.conn)
 	if err != nil {
 		return fmt.Errorf("failed to create room: %w", err)
 	}
 
-	// Send roomCreated response
-	response := proto.RoomCreatedMessage{
-		Type:     "roomCreated",
-		RoomCode: roomCode,
-	}
-	data, err := json.Marshal(response)
+	// Track connection
+	h.registry.Associate(h.conn, roomData.RoomCode, playerID)
+
+	// Convert room to RoomStateMessage
+	roomState := roomToRoomStateMessage(roomData)
+
+	// Send roomState response to creator
+	data, err := json.Marshal(roomState)
 	if err != nil {
-		return fmt.Errorf("failed to marshal roomCreated response: %w", err)
+		return fmt.Errorf("failed to marshal roomState response: %w", err)
+	}
+	if err := h.conn.WriteMessage(data); err != nil {
+		return fmt.Errorf("failed to send roomState response: %w", err)
 	}
 
-	return h.conn.WriteMessage(data)
+	return nil
 }
 
 // HandleJoinRoom handles JoinRoomMessage by joining a room, tracking connection, and sending responses.

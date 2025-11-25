@@ -23,8 +23,12 @@ import (
 func WireRoomToTransport(roomManager *room.RoomManager) {
 	transport.SetRoomOperationsAdapter(func() transport.RoomOperations {
 		return transport.RoomOperations{
-			CreateRoomFunc: func() (string, error) {
-				return roomManager.CreateRoom()
+			CreateRoomFunc: func(conn *transport.Connection) (transport.RoomData, uint32, error) {
+				rm, playerID, err := roomManager.CreateRoom(conn)
+				if err != nil {
+					return transport.RoomData{}, 0, err
+				}
+				return convertRoomToRoomData(rm), playerID, nil
 			},
 			JoinRoomFunc: func(roomCode string, conn *transport.Connection) (transport.RoomData, uint32, error) {
 				rm, playerID, err := roomManager.JoinRoom(roomCode, conn)

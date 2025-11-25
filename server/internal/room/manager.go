@@ -118,17 +118,18 @@ func (rm *RoomManager) GetRoom(roomCode string) (*Room, error) {
 	return room, nil
 }
 
-// CreateRoom creates a new room with a unique room code and adds it to the rooms map.
-// The room is created in lobby state with no players.
-// Returns the generated room code or an error if room creation fails.
-func (rm *RoomManager) CreateRoom() (string, error) {
+// CreateRoom creates a new room with a unique room code, adds the creator as the first player (host),
+// and adds it to the rooms map.
+// The room is created in lobby state with the creator automatically added as player 1 (host).
+// Returns the room, assigned player ID, and an error if room creation fails.
+func (rm *RoomManager) CreateRoom(conn *transport.Connection) (*Room, uint32, error) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
 	// Generate unique room code
 	code, err := GenerateRoomCode(rm.rooms)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate room code: %w", err)
+		return nil, 0, fmt.Errorf("failed to generate room code: %w", err)
 	}
 
 	// Create new room in lobby state
@@ -136,14 +137,24 @@ func (rm *RoomManager) CreateRoom() (string, error) {
 		RoomCode:     code,
 		Players:      []*PlayerConnection{},
 		State:        RoomStateLobby,
-		HostPlayerID: 0, // Will be set when first player joins
+		HostPlayerID: 0, // Will be set below
 		Session:      nil,
 	}
 
 	// Add room to map
 	rm.rooms[code] = room
 
-	return code, nil
+	// Automatically add creator as first player (host)
+	playerID := uint32(1)
+	player := &PlayerConnection{
+		Conn:     conn,
+		PlayerID: playerID,
+		Name:     "", // Empty name in v1
+	}
+	room.AddPlayer(player)
+	room.SetHostPlayerID(playerID)
+
+	return room, playerID, nil
 }
 
 // JoinRoom adds a player to a room by room code.
