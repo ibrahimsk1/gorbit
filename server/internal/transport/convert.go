@@ -70,6 +70,8 @@ func WorldToSnapshot(w entities.World, playerID uint32) proto.SnapshotMessage {
 	return proto.SnapshotMessage{
 		Type:        "snapshot",
 		Tick:        w.Tick,
+		Done:        false, // Match is not finished yet
+		Win:         false, // Not applicable when done=false
 		Ships:       ships,
 		Planets:     planets,
 		Pallets:     pallets,
