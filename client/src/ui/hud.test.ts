@@ -27,6 +27,7 @@ describe('HUD', () => {
     await app.init(container)
 
     scene = new Scene(app)
+    scene.initialize() // Explicit initialization
     stateManager = new StateManager()
     hud = new HUD(scene, stateManager)
   })

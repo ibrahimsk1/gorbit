@@ -117,6 +117,14 @@ export class GameBanner {
   }
 
   /**
+   * Gets the container for this game banner.
+   * @returns The container
+   */
+  getContainer(): Container {
+    return this.container
+  }
+
+  /**
    * Destroys the game banner and removes it from parent.
    */
   destroy(): void {
