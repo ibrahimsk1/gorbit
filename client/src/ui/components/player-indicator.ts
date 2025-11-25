@@ -57,6 +57,14 @@ export class PlayerIndicator {
   }
 
   /**
+   * Gets the container for this player indicator.
+   * @returns The container
+   */
+  getContainer(): Container {
+    return this.container
+  }
+
+  /**
    * Updates the displayed player ID and optional name.
    * 
    * @param playerId Player ID to display

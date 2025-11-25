@@ -98,6 +98,12 @@ class FakeRenderer {
 }
 
 class FakeHUD {
+  show(): void {
+    // Fake implementation
+  }
+  hide(): void {
+    // Fake implementation
+  }
   update(): void {
     // Fake implementation
   }
@@ -150,6 +156,39 @@ describe('AppOrchestrator', () => {
   let app: App
   let container: HTMLElement
 
+  // Helper function to create orchestrator with all required dependencies
+  function createOrchestrator(overrides: Partial<{
+    app: App
+    networkClient: any
+    renderer: any
+    hud: any
+    inputHandler: any
+    stateManager: any
+    scene: any
+    mainMenu: any
+    roomLobby: any
+  }> = {}): AppOrchestrator {
+    const networkClient = overrides.networkClient || new FakeNetworkClient()
+    const renderer = overrides.renderer || new FakeRenderer()
+    const hud = overrides.hud || new FakeHUD()
+    const inputHandler = overrides.inputHandler || new FakeInputHandler()
+    const stateManager = overrides.stateManager || new FakeStateManager()
+    const scene = overrides.scene || new FakeScene()
+    const appInstance = overrides.app || app
+
+    return new AppOrchestrator({
+      app: appInstance,
+      networkClient,
+      renderer,
+      hud,
+      inputHandler,
+      stateManager,
+      scene,
+      mainMenu: overrides.mainMenu,
+      roomLobby: overrides.roomLobby
+    })
+  }
+
   beforeEach(async () => {
     // Create fresh container for each test
     container = document.createElement('div')
@@ -186,7 +225,7 @@ describe('AppOrchestrator', () => {
      * Labels: scope:unit loop:g2-app layer:core double:fake-io b:orchestrator-structure r:medium
      */
 
-    it('can be instantiated with subsystem instances', () => {
+    it('can be instantiated with all required dependencies', () => {
       const networkClient = new FakeNetworkClient()
       const renderer = new FakeRenderer()
       const hud = new FakeHUD()
@@ -194,7 +233,8 @@ describe('AppOrchestrator', () => {
       const stateManager = new FakeStateManager()
       const scene = new FakeScene()
 
-      const orchestrator = new AppOrchestrator(app, {
+      const orchestrator = new AppOrchestrator({
+        app,
         networkClient,
         renderer,
         hud,
@@ -202,37 +242,6 @@ describe('AppOrchestrator', () => {
         stateManager,
         scene
       })
-
-      expect(orchestrator).toBeInstanceOf(AppOrchestrator)
-    })
-
-    it('can be instantiated with subsystem factory functions', () => {
-      const orchestrator = new AppOrchestrator(app, {
-        networkClient: () => new FakeNetworkClient(),
-        renderer: () => new FakeRenderer(),
-        hud: () => new FakeHUD(),
-        inputHandler: () => new FakeInputHandler(),
-        stateManager: () => new FakeStateManager(),
-        scene: () => new FakeScene()
-      })
-
-      expect(orchestrator).toBeInstanceOf(AppOrchestrator)
-    })
-
-    it('can be instantiated with mixed instances and factory functions', () => {
-      const networkClient = new FakeNetworkClient()
-      const renderer = () => new FakeRenderer()
-
-      const orchestrator = new AppOrchestrator(app, {
-        networkClient,
-        renderer
-      })
-
-      expect(orchestrator).toBeInstanceOf(AppOrchestrator)
-    })
-
-    it('can be instantiated with optional subsystems', () => {
-      const orchestrator = new AppOrchestrator(app, {})
 
       expect(orchestrator).toBeInstanceOf(AppOrchestrator)
     })
@@ -244,25 +253,25 @@ describe('AppOrchestrator', () => {
      */
 
     it('has init method', () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       
       expect(typeof orchestrator.init).toBe('function')
     })
 
     it('has start method', () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       
       expect(typeof orchestrator.start).toBe('function')
     })
 
     it('has stop method', () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       
       expect(typeof orchestrator.stop).toBe('function')
     })
 
     it('has destroy method', () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       
       expect(typeof orchestrator.destroy).toBe('function')
     })
@@ -275,7 +284,7 @@ describe('AppOrchestrator', () => {
 
     it('initializes App successfully', async () => {
       const uninitializedApp = new App()
-      const orchestrator = new AppOrchestrator(uninitializedApp, {})
+      const orchestrator = createOrchestrator({ app: uninitializedApp })
       
       await orchestrator.init(container)
       
@@ -287,7 +296,7 @@ describe('AppOrchestrator', () => {
     })
 
     it('creates Scene when not provided', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       
       await orchestrator.init(container)
       
@@ -298,7 +307,7 @@ describe('AppOrchestrator', () => {
 
     it('uses provided Scene when available', async () => {
       const scene = new FakeScene()
-      const orchestrator = new AppOrchestrator(app, { scene })
+      const orchestrator = createOrchestrator({ scene })
       
       await orchestrator.init(container)
       
@@ -309,7 +318,7 @@ describe('AppOrchestrator', () => {
     it('sets up NetworkClient event handlers when networkClient and stateManager are provided', async () => {
       const networkClient = new FakeNetworkClient()
       const stateManager = new FakeStateManager()
-      const orchestrator = new AppOrchestrator(app, {
+      const orchestrator = createOrchestrator({
         networkClient,
         stateManager
       })
@@ -332,7 +341,7 @@ describe('AppOrchestrator', () => {
 
     it('handles App initialization errors gracefully', async () => {
       const uninitializedApp = new App()
-      const orchestrator = new AppOrchestrator(uninitializedApp, {})
+      const orchestrator = createOrchestrator({ app: uninitializedApp })
       
       // Try to initialize without a container (should fail)
       // But we provide container, so this should work
@@ -340,7 +349,7 @@ describe('AppOrchestrator', () => {
     })
 
     it('is idempotent (can be called multiple times safely)', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       
       await orchestrator.init(container)
       await orchestrator.init(container) // Second call should not throw
@@ -352,7 +361,7 @@ describe('AppOrchestrator', () => {
 
     it('handles missing container element gracefully', async () => {
       const uninitializedApp = new App()
-      const orchestrator = new AppOrchestrator(uninitializedApp, {})
+      const orchestrator = createOrchestrator({ app: uninitializedApp })
       
       // Try to initialize without container and without #app in DOM
       // Remove container from DOM temporarily
@@ -386,7 +395,7 @@ describe('AppOrchestrator', () => {
 
     it('start() requires init() to be called first', async () => {
       const uninitializedApp = new App()
-      const orchestrator = new AppOrchestrator(uninitializedApp, {})
+      const orchestrator = createOrchestrator({ app: uninitializedApp })
       
       // Should throw error if start() called before init()
       expect(() => orchestrator.start()).toThrow('must be initialized')
@@ -396,7 +405,7 @@ describe('AppOrchestrator', () => {
     })
 
     it('start() creates RenderLoop if not already created', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       await orchestrator.init(container)
       
       orchestrator.start()
@@ -406,13 +415,16 @@ describe('AppOrchestrator', () => {
     })
 
     it('start() starts RenderLoop', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       await orchestrator.init(container)
       
       orchestrator.start()
       
       // RenderLoop should be started (we can't directly verify, but start should complete)
       expect(true).toBe(true) // Placeholder - RenderLoop start is internal
+      
+      // Clean up
+      orchestrator.stop()
     })
 
     it('start() starts game loop that calls renderer.update()', async () => {
@@ -422,7 +434,7 @@ describe('AppOrchestrator', () => {
         updateCallCount++
       }
       
-      const orchestrator = new AppOrchestrator(app, { renderer })
+      const orchestrator = createOrchestrator({ renderer })
       await orchestrator.init(container)
       
       // Transition to in-game state first (start() only works in in-game state)
@@ -446,7 +458,7 @@ describe('AppOrchestrator', () => {
         updateCallCount++
       }
       
-      const orchestrator = new AppOrchestrator(app, { hud })
+      const orchestrator = createOrchestrator({ hud })
       await orchestrator.init(container)
       
       // Transition to in-game state first (start() only works in in-game state)
@@ -464,7 +476,7 @@ describe('AppOrchestrator', () => {
     })
 
     it('start() is idempotent (can be called multiple times safely)', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       await orchestrator.init(container)
       
       orchestrator.start()
@@ -477,7 +489,7 @@ describe('AppOrchestrator', () => {
     })
 
     it('stop() stops RenderLoop', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       await orchestrator.init(container)
       
       orchestrator.start()
@@ -494,7 +506,7 @@ describe('AppOrchestrator', () => {
         updateCallCount++
       }
       
-      const orchestrator = new AppOrchestrator(app, { renderer })
+      const orchestrator = createOrchestrator({ renderer })
       await orchestrator.init(container)
       
       orchestrator.start()
@@ -514,7 +526,7 @@ describe('AppOrchestrator', () => {
     })
 
     it('stop() is safe to call when not started', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       await orchestrator.init(container)
       
       // Should not throw when stopping without starting
@@ -529,7 +541,7 @@ describe('AppOrchestrator', () => {
 
     it('destroy() calls stop() first', async () => {
       const renderer = new FakeRenderer()
-      const orchestrator = new AppOrchestrator(app, { renderer })
+      const orchestrator = createOrchestrator({ renderer })
       await orchestrator.init(container)
       orchestrator.start()
       
@@ -552,7 +564,7 @@ describe('AppOrchestrator', () => {
         detachCallCount++
       }
       
-      const orchestrator = new AppOrchestrator(app, { inputHandler })
+      const orchestrator = createOrchestrator({ inputHandler })
       await orchestrator.init(container)
       orchestrator.start()
       
@@ -568,7 +580,7 @@ describe('AppOrchestrator', () => {
         disconnectCallCount++
       }
       
-      const orchestrator = new AppOrchestrator(app, { networkClient })
+      const orchestrator = createOrchestrator({ networkClient })
       await orchestrator.init(container)
       orchestrator.start()
       
@@ -590,7 +602,7 @@ describe('AppOrchestrator', () => {
       renderer.destroy = () => { destroyOrder.push('renderer') }
       networkClient.disconnect = () => { destroyOrder.push('network') }
       
-      const orchestrator = new AppOrchestrator(app, {
+      const orchestrator = createOrchestrator({
         inputHandler,
         hud,
         renderer,
@@ -621,37 +633,25 @@ describe('AppOrchestrator', () => {
       expect(destroyOrder.indexOf('hud')).toBeLessThan(destroyOrder.indexOf('renderer'))
     })
 
-    it('destroy() destroys scene only if created by orchestrator', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
-      await orchestrator.init(container)
-      
-      // Scene was created by orchestrator, should be destroyed
-      const sceneDestroySpy = vi.spyOn(Scene.prototype, 'destroy')
-      orchestrator.destroy()
-      
-      expect(sceneDestroySpy).toHaveBeenCalled()
-      sceneDestroySpy.mockRestore()
-    })
-
-    it('destroy() does not destroy scene if provided', async () => {
+    it('destroy() destroys scene (orchestrator owns scene lifecycle)', async () => {
       const scene = new FakeScene()
       let sceneDestroyCallCount = 0
       scene.destroy = () => {
         sceneDestroyCallCount++
       }
       
-      const orchestrator = new AppOrchestrator(app, { scene })
+      const orchestrator = createOrchestrator({ scene })
       await orchestrator.init(container)
       
       orchestrator.destroy()
       
-      // Scene was provided, should not be destroyed by orchestrator
-      expect(sceneDestroyCallCount).toBe(0)
+      // Scene is owned by orchestrator, should be destroyed
+      expect(sceneDestroyCallCount).toBe(1)
     })
 
     it('destroy() destroys app', async () => {
       const uninitializedApp = new App()
-      const orchestrator = new AppOrchestrator(uninitializedApp, {})
+      const orchestrator = createOrchestrator({ app: uninitializedApp })
       await orchestrator.init(container)
       
       const appDestroySpy = vi.spyOn(uninitializedApp, 'destroy')
@@ -662,7 +662,7 @@ describe('AppOrchestrator', () => {
     })
 
     it('destroy() is idempotent', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       await orchestrator.init(container)
       
       orchestrator.destroy()
@@ -673,7 +673,7 @@ describe('AppOrchestrator', () => {
     })
 
     it('beforeunload event calls destroy()', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       await orchestrator.init(container)
       orchestrator.start()
       
@@ -699,7 +699,7 @@ describe('AppOrchestrator', () => {
      */
 
     it('initial UI state is main-menu', async () => {
-      const orchestrator = new AppOrchestrator(app, {})
+      const orchestrator = createOrchestrator()
       await orchestrator.init(container)
       
       expect(orchestrator.getUIState()).toBe('main-menu')
@@ -708,7 +708,7 @@ describe('AppOrchestrator', () => {
     it('transitionToLobby() shows lobby and hides main menu', async () => {
       const mainMenu = new FakeMainMenu()
       const roomLobby = new FakeRoomLobby()
-      const orchestrator = new AppOrchestrator(app, { mainMenu, roomLobby })
+      const orchestrator = createOrchestrator({ mainMenu, roomLobby })
       await orchestrator.init(container)
       
       orchestrator.transitionToLobby()
@@ -722,7 +722,7 @@ describe('AppOrchestrator', () => {
       const mainMenu = new FakeMainMenu()
       const roomLobby = new FakeRoomLobby()
       const hud = new FakeHUD()
-      const orchestrator = new AppOrchestrator(app, { mainMenu, roomLobby, hud })
+      const orchestrator = createOrchestrator({ mainMenu, roomLobby, hud })
       await orchestrator.init(container)
       
       orchestrator.transitionToInGame()
@@ -734,7 +734,7 @@ describe('AppOrchestrator', () => {
 
     it('transitionToInGame() enables input and starts rendering', async () => {
       const inputHandler = new FakeInputHandler()
-      const orchestrator = new AppOrchestrator(app, { inputHandler })
+      const orchestrator = createOrchestrator({ inputHandler })
       await orchestrator.init(container)
       
       let attachCallCount = 0
@@ -751,7 +751,7 @@ describe('AppOrchestrator', () => {
     it('onRoomState event transitions to lobby', async () => {
       const networkClient = new FakeNetworkClient()
       const roomLobby = new FakeRoomLobby()
-      const orchestrator = new AppOrchestrator(app, { networkClient, roomLobby })
+      const orchestrator = createOrchestrator({ networkClient, roomLobby })
       await orchestrator.init(container)
       
       const roomState = {
@@ -769,7 +769,7 @@ describe('AppOrchestrator', () => {
 
     it('onMatchStarted event transitions to in-game', async () => {
       const networkClient = new FakeNetworkClient()
-      const orchestrator = new AppOrchestrator(app, { networkClient })
+      const orchestrator = createOrchestrator({ networkClient })
       await orchestrator.init(container)
       
       // Simulate matchStarted event
@@ -780,7 +780,7 @@ describe('AppOrchestrator', () => {
 
     it('onMatchEnded event transitions back to lobby', async () => {
       const networkClient = new FakeNetworkClient()
-      const orchestrator = new AppOrchestrator(app, { networkClient })
+      const orchestrator = createOrchestrator({ networkClient })
       await orchestrator.init(container)
       
       // First transition to in-game
@@ -795,13 +795,13 @@ describe('AppOrchestrator', () => {
 
     it('input is only enabled in in-game state', async () => {
       const inputHandler = new FakeInputHandler()
-      const orchestrator = new AppOrchestrator(app, { inputHandler })
-      await orchestrator.init(container)
-      
       let attachCallCount = 0
       let detachCallCount = 0
       inputHandler.attach = () => { attachCallCount++ }
       inputHandler.detach = () => { detachCallCount++ }
+      
+      const orchestrator = createOrchestrator({ inputHandler })
+      await orchestrator.init(container)
       
       // In main-menu, input should not be attached
       expect(orchestrator.getUIState()).toBe('main-menu')
@@ -814,24 +814,30 @@ describe('AppOrchestrator', () => {
       // Transition to in-game, input should be attached
       orchestrator.transitionToInGame()
       expect(attachCallCount).toBeGreaterThan(0)
+      
+      // Clean up
+      orchestrator.stop()
     })
 
     it('rendering only runs in in-game state', async () => {
       const renderer = new FakeRenderer()
-      const orchestrator = new AppOrchestrator(app, { renderer })
-      await orchestrator.init(container)
-      
       let updateCallCount = 0
       renderer.update = () => { updateCallCount++ }
       
-      // Start in main-menu, rendering should not run
+      const orchestrator = createOrchestrator({ renderer })
+      await orchestrator.init(container)
+      
+      // Start in main-menu, rendering should not run (game loop not started)
       orchestrator.start()
       await new Promise(resolve => setTimeout(resolve, 50))
       const countBeforeTransition = updateCallCount
       
-      // Transition to in-game, rendering should start
+      // Transition to in-game, rendering should start (game loop starts)
       orchestrator.transitionToInGame()
       await new Promise(resolve => setTimeout(resolve, 50))
+      
+      // Clean up
+      orchestrator.stop()
       
       // Update count should increase (rendering is running)
       expect(updateCallCount).toBeGreaterThan(countBeforeTransition)

@@ -27,6 +27,7 @@ describe('Rendering Integration', () => {
     app = new App()
     await app.init(container)
     scene = new Scene(app)
+    scene.initialize() // Explicit initialization
     stateManager = new StateManager()
     renderer = new Renderer(stateManager, scene)
   })
@@ -332,6 +333,7 @@ describe('Headless Render Checks', () => {
     app = new App()
     await app.init(container)
     scene = new Scene(app)
+    scene.initialize() // Explicit initialization
     stateManager = new StateManager()
     renderer = new Renderer(stateManager, scene)
   })

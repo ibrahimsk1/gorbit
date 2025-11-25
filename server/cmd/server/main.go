@@ -15,18 +15,18 @@ import (
 
 func main() {
 	logger := observability.NewLogger().WithValues("component", "server")
-	
+
 	// Initialize Prometheus metrics
 	observability.InitMetrics()
 	logger.Info("Metrics initialized", "metrics_endpoint", "/metrics")
-	
+
 	// Start GC monitor with 5 second interval
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	gcMonitorInterval := 5 * time.Second
 	stopGCMonitor := observability.StartGCMonitor(ctx, gcMonitorInterval, logger)
 	logger.Info("GC monitor started", "interval_seconds", gcMonitorInterval.Seconds())
-	
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

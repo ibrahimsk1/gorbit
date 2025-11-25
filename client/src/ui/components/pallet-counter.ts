@@ -54,6 +54,14 @@ export class PalletCounter {
   }
 
   /**
+   * Gets the container for this pallet counter.
+   * @returns The container
+   */
+  getContainer(): Container {
+    return this.container
+  }
+
+  /**
    * Updates the pallet counter based on active pallet count.
    * 
    * @param activeCount Number of active (collectible) pallets

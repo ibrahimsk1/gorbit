@@ -78,6 +78,14 @@ export class EnergyBar {
   }
 
   /**
+   * Gets the container for this energy bar.
+   * @returns The container
+   */
+  getContainer(): Container {
+    return this.container
+  }
+
+  /**
    * Updates the energy bar based on current energy level.
    * 
    * @param energy Current energy value

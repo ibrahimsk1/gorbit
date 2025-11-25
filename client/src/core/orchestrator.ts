@@ -9,7 +9,16 @@ import { RenderLoop } from './render-loop'
 import { Scene } from '../gfx/scene'
 import { MainMenu } from '../ui/main-menu'
 import { RoomLobby } from '../ui/room-lobby'
-import type { Container } from 'pixi.js'
+import { Container } from 'pixi.js'
+import { DIContainer } from './di-container'
+import { DI_KEYS } from './di-keys'
+import { Renderer } from '../gfx/renderer'
+import { HUD } from '../ui/hud'
+import { StateManager } from '../sim/state-manager'
+import { CommandHistory } from '../net/command-history'
+import { PredictionSystem } from '../sim/prediction'
+import { InterpolationSystem } from '../sim/interpolation'
+import { ReconciliationSystem } from '../sim/reconciliation'
 
 // UI state type
 export type UIState = 'main-menu' | 'lobby' | 'in-game'
@@ -29,7 +38,7 @@ export interface RoomState {
 
 // Subsystem interfaces for dependency injection
 export interface INetworkClient {
-  onSnapshot(callback: (snapshot: any) => void): void
+  onSnapshot(callback: (snapshot: unknown) => void): void
   onConnect(callback: () => void): void
   onDisconnect(callback: () => void): void
   onError(callback: (error: Error) => void): void
@@ -44,6 +53,7 @@ export interface INetworkClient {
   joinRoom(roomCode: string): Promise<void>
   leaveRoom(): void
   startMatch(): void
+  sendInput(seq: number, thrust: number, turn: number): void
   isConnected(): boolean
 }
 
@@ -66,6 +76,8 @@ export interface IRoomLobby {
 }
 
 export interface IHUD {
+  show(): void
+  hide(): void
   update(): void
   destroy(): void
 }
@@ -79,13 +91,31 @@ export interface IInputHandler {
 }
 
 export interface IStateManager {
-  updateAuthoritative(snapshot: any): void
+  updateAuthoritative(snapshot: unknown): void
 }
 
 export interface IScene {
   getRoot(): Container
   getLayer(name: string): Container
   destroy(): void
+}
+
+export interface ICommandHistory {
+  addCommand(seq: number, thrust: number, turn: number): void
+  getNextSequence(): number
+}
+
+export interface IPredictionSystem {
+  predict(input: { thrust: number, turn: number }): void
+}
+
+export interface IInterpolationSystem {
+  addSnapshot(snapshot: unknown, timestamp: number): void
+  update(now: number): void
+}
+
+export interface IReconciliationSystem {
+  reconcile(snapshot: unknown): void
 }
 
 /**
@@ -101,79 +131,62 @@ export class AppOrchestrator {
   private inputHandler: IInputHandler | null = null
   private stateManager: IStateManager | null = null
   private scene: IScene | null = null
+  private commandHistory: ICommandHistory | null = null
+  private predictionSystem: IPredictionSystem | null = null
+  private interpolationSystem: IInterpolationSystem | null = null
+  private reconciliationSystem: IReconciliationSystem | null = null
   private initialized: boolean = false
   private initError: Error | null = null
   private gameLoopId: number | null = null
   private isGameLoopRunning: boolean = false
-  private sceneCreatedByOrchestrator: boolean = false
+  private inputLoopId: number | null = null
+  private isInputLoopRunning: boolean = false
+  private interpolationLoopId: number | null = null
+  private isInterpolationLoopRunning: boolean = false
   private beforeunloadHandler: (() => void) | null = null
   private uiState: UIState = 'main-menu'
   private mainMenu: IMainMenu | null = null
   private roomLobby: IRoomLobby | null = null
-
+  private inputSendIntervalMs: number = 1000 / 30 // 30Hz input rate
+  private lastInputSendTime: number = 0
+  private commandSequence: number = 0
+  private container: DIContainer | null = null
+  private gameSystemsInitialized: boolean = false
+  
   constructor(
-    app: App,
-    subsystems: {
-      networkClient?: INetworkClient | (() => INetworkClient)
-      renderer?: IRenderer | (() => IRenderer)
-      hud?: IHUD | (() => IHUD)
-      inputHandler?: IInputHandler | (() => IInputHandler)
-      stateManager?: IStateManager | (() => IStateManager)
-      scene?: IScene | (() => IScene)
-      mainMenu?: IMainMenu | (() => IMainMenu)
-      roomLobby?: IRoomLobby | (() => IRoomLobby)
-    } = {}
+    dependencies: {
+      app: App
+      networkClient: INetworkClient
+      renderer?: IRenderer  // Optional - lazy loaded from game phase
+      hud?: IHUD  // Optional - lazy loaded from game phase
+      inputHandler: IInputHandler
+      stateManager?: IStateManager  // Optional - lazy loaded from game phase
+      scene: IScene
+      commandHistory?: ICommandHistory  // Optional - lazy loaded from game phase
+      predictionSystem?: IPredictionSystem  // Optional - lazy loaded from game phase
+      interpolationSystem?: IInterpolationSystem  // Optional - lazy loaded from game phase
+      reconciliationSystem?: IReconciliationSystem  // Optional - lazy loaded from game phase
+      mainMenu?: IMainMenu  // Optional - created by orchestrator if not provided
+      roomLobby?: IRoomLobby  // Optional - created by orchestrator if not provided
+      container?: DIContainer  // Optional - for lazy resolution of game systems
+    }
   ) {
-    this.app = app
-
-    // Resolve subsystems (handle both instances and factory functions)
-    if (subsystems.networkClient) {
-      this.networkClient = typeof subsystems.networkClient === 'function'
-        ? subsystems.networkClient()
-        : subsystems.networkClient
-    }
-
-    if (subsystems.renderer) {
-      this.renderer = typeof subsystems.renderer === 'function'
-        ? subsystems.renderer()
-        : subsystems.renderer
-    }
-
-    if (subsystems.hud) {
-      this.hud = typeof subsystems.hud === 'function'
-        ? subsystems.hud()
-        : subsystems.hud
-    }
-
-    if (subsystems.inputHandler) {
-      this.inputHandler = typeof subsystems.inputHandler === 'function'
-        ? subsystems.inputHandler()
-        : subsystems.inputHandler
-    }
-
-    if (subsystems.stateManager) {
-      this.stateManager = typeof subsystems.stateManager === 'function'
-        ? subsystems.stateManager()
-        : subsystems.stateManager
-    }
-
-    if (subsystems.scene) {
-      this.scene = typeof subsystems.scene === 'function'
-        ? subsystems.scene()
-        : subsystems.scene
-    }
-
-    if (subsystems.mainMenu) {
-      this.mainMenu = typeof subsystems.mainMenu === 'function'
-        ? subsystems.mainMenu()
-        : subsystems.mainMenu
-    }
-
-    if (subsystems.roomLobby) {
-      this.roomLobby = typeof subsystems.roomLobby === 'function'
-        ? subsystems.roomLobby()
-        : subsystems.roomLobby
-    }
+    // All dependencies are injected and resolved by DI container
+    // No creation logic here - just store references
+    this.app = dependencies.app
+    this.networkClient = dependencies.networkClient
+    this.renderer = dependencies.renderer ?? null
+    this.hud = dependencies.hud ?? null
+    this.inputHandler = dependencies.inputHandler
+    this.stateManager = dependencies.stateManager ?? null
+    this.scene = dependencies.scene
+    this.commandHistory = dependencies.commandHistory ?? null
+    this.predictionSystem = dependencies.predictionSystem ?? null
+    this.interpolationSystem = dependencies.interpolationSystem ?? null
+    this.reconciliationSystem = dependencies.reconciliationSystem ?? null
+    this.mainMenu = dependencies.mainMenu ?? null
+    this.roomLobby = dependencies.roomLobby ?? null
+    this.container = dependencies.container ?? null
   }
 
   /**
@@ -183,25 +196,36 @@ export class AppOrchestrator {
    * @param container Optional container element for App initialization
    * @throws Error if initialization fails
    */
-  async init(container?: HTMLElement): Promise<void> {
+  async init(_container?: HTMLElement): Promise<void> {
     if (this.initialized) {
       // Already initialized, skip
       return
     }
 
     try {
-      // Initialize PixiJS App
-      await this.app.init(container)
-
-      // Create Scene if not provided
-      if (!this.scene) {
-        this.scene = new Scene(this.app)
-        this.sceneCreatedByOrchestrator = true
+      // App is already initialized in main.ts before orchestrator is created
+      // Do NOT call app.init() here as it would destroy the existing app instance
+      // and all its children (including Scene root)
+      
+      // Verify app is initialized (will throw if not)
+      try {
+        this.app.getApplication()
+      } catch {
+        throw new Error('App must be initialized before orchestrator.init()')
       }
+
+      // Scene is always provided by DI container
+      // Scene is initialized automatically via DI container's initializeAfter hook
+      // No manual initialization needed here
 
       // Set up NetworkClient event handlers if provided
       if (this.networkClient && this.stateManager) {
         this.setupNetworkEventHandlers()
+      }
+
+      // Set up snapshot handler for game systems (if available)
+      if (this.networkClient && this.stateManager && this.interpolationSystem && this.reconciliationSystem) {
+        this.setupSnapshotHandler()
       }
 
       // Set up room management event handlers if provided
@@ -238,9 +262,17 @@ export class AppOrchestrator {
         )
       }
 
-      // Show main menu on start
+      // Show main menu on start and hide HUD
       if (this.mainMenu) {
         this.mainMenu.show()
+      }
+      if (this.hud) {
+        this.hud.hide()
+      }
+
+      // Center UI layer (UI-specific logic moved from Scene)
+      if (this.scene && this.scene instanceof Scene) {
+        this.centerUILayer()
       }
 
       this.initialized = true
@@ -262,11 +294,6 @@ export class AppOrchestrator {
       return
     }
 
-    // Set up snapshot handler
-    this.networkClient.onSnapshot((snapshot) => {
-      this.stateManager!.updateAuthoritative(snapshot)
-    })
-
     // Set up connection handlers
     this.networkClient.onConnect(() => {
       console.log('Connected to game server')
@@ -278,6 +305,28 @@ export class AppOrchestrator {
 
     this.networkClient.onError((error) => {
       console.error('Network error:', error)
+    })
+  }
+
+  /**
+   * Sets up snapshot handler for game systems.
+   * Handles server snapshots: updates authoritative state, adds to interpolation buffer, and reconciles.
+   * Private helper method called during initialization.
+   */
+  private setupSnapshotHandler(): void {
+    if (!this.networkClient || !this.stateManager || !this.interpolationSystem || !this.reconciliationSystem) {
+      return
+    }
+
+    this.networkClient.onSnapshot((snapshot) => {
+      // Update authoritative state from server
+      this.stateManager!.updateAuthoritative(snapshot)
+      
+      // Add snapshot to interpolation buffer
+      this.interpolationSystem!.addSnapshot(snapshot, performance.now())
+      
+      // Reconcile predicted state with authoritative
+      this.reconciliationSystem!.reconcile(snapshot)
     })
   }
 
@@ -368,10 +417,7 @@ export class AppOrchestrator {
     this.networkClient.onRoomState((roomState) => {
       // Update room lobby with new state
       if (this.roomLobby) {
-        // Determine if current player is host
-        // We need to know the current player's ID - for now, assume first player or check if myShipId matches hostId
-        // This will be properly set when we have player info from network
-        const isHost = roomState.hostId === roomState.players[0]?.id || false
+        // Update room lobby with new state
         this.roomLobby.update(roomState)
       }
 
@@ -394,8 +440,8 @@ export class AppOrchestrator {
       }
     })
 
-    this.networkClient.onMatchStarted(() => {
-      this.transitionToInGame()
+    this.networkClient.onMatchStarted(async () => {
+      await this.transitionToInGame()
     })
 
     this.networkClient.onMatchEnded((winnerId) => {
@@ -417,7 +463,7 @@ export class AppOrchestrator {
 
   /**
    * Transitions to main menu state.
-   * Shows main menu, hides lobby/HUD, disables input, stops rendering.
+   * Shows main menu, hides lobby/HUD, disables input, stops game loop (keeps render loop running for UI).
    */
   transitionToMainMenu(): void {
     this.uiState = 'main-menu'
@@ -428,19 +474,22 @@ export class AppOrchestrator {
     if (this.roomLobby) {
       this.roomLobby.hide()
     }
+    if (this.hud) {
+      this.hud.hide()
+    }
 
     // Disable input
     if (this.inputHandler) {
       this.inputHandler.detach()
     }
 
-    // Stop rendering
-    this.stop()
+    // Stop all game systems (but keep render loop running for UI visibility)
+    this.stopGameSystems()
   }
 
   /**
    * Transitions to lobby state.
-   * Shows lobby, hides main menu/HUD, disables input, stops rendering.
+   * Shows lobby, hides main menu/HUD, disables input, stops game loop (keeps render loop running for UI).
    * 
    * @param roomState Optional room state to update lobby with
    */
@@ -456,21 +505,72 @@ export class AppOrchestrator {
         this.roomLobby.update(roomState)
       }
     }
+    if (this.hud) {
+      this.hud.hide()
+    }
 
     // Disable input
     if (this.inputHandler) {
       this.inputHandler.detach()
     }
 
-    // Stop rendering
-    this.stop()
+    // Stop all game systems (but keep render loop running for UI visibility)
+    this.stopGameSystems()
+  }
+
+  /**
+   * Lazy initialization of game systems.
+   * Called when transitioning to in-game state.
+   * Initializes game phase dependencies if not already initialized.
+   */
+  private async initializeGameSystems(): Promise<void> {
+    if (this.gameSystemsInitialized || !this.container) {
+      return
+    }
+
+    try {
+      // Initialize game phase (StateManager, Renderer, HUD, etc.)
+      await this.container.initializePhase('game')
+      
+      // Re-resolve dependencies that were just created
+      if (this.container.isRegistered(DI_KEYS.STATE_MANAGER)) {
+        this.stateManager = this.container.resolve<StateManager>(DI_KEYS.STATE_MANAGER)
+      }
+      if (this.container.isRegistered(DI_KEYS.RENDERER)) {
+        this.renderer = this.container.resolve<Renderer>(DI_KEYS.RENDERER)
+      }
+      if (this.container.isRegistered(DI_KEYS.HUD)) {
+        this.hud = this.container.resolve<HUD>(DI_KEYS.HUD)
+      }
+      if (this.container.isRegistered(DI_KEYS.COMMAND_HISTORY)) {
+        this.commandHistory = this.container.resolve<CommandHistory>(DI_KEYS.COMMAND_HISTORY)
+      }
+      if (this.container.isRegistered(DI_KEYS.PREDICTION_SYSTEM)) {
+        this.predictionSystem = this.container.resolve<PredictionSystem>(DI_KEYS.PREDICTION_SYSTEM)
+      }
+      if (this.container.isRegistered(DI_KEYS.INTERPOLATION_SYSTEM)) {
+        this.interpolationSystem = this.container.resolve<InterpolationSystem>(DI_KEYS.INTERPOLATION_SYSTEM)
+      }
+      if (this.container.isRegistered(DI_KEYS.RECONCILIATION_SYSTEM)) {
+        this.reconciliationSystem = this.container.resolve<ReconciliationSystem>(DI_KEYS.RECONCILIATION_SYSTEM)
+      }
+
+      this.gameSystemsInitialized = true
+    } catch (error) {
+      console.error('Failed to initialize game systems:', error)
+      throw error
+    }
   }
 
   /**
    * Transitions to in-game state.
-   * Shows HUD, hides main menu/lobby, enables input, starts rendering.
+   * Lazy-loads game systems if not already initialized.
+   * Shows HUD, hides main menu/lobby, enables input, starts rendering and game loops.
    */
-  transitionToInGame(): void {
+  async transitionToInGame(): Promise<void> {
+    // Lazy initialize game systems
+    await this.initializeGameSystems()
+
     this.uiState = 'in-game'
 
     if (this.mainMenu) {
@@ -479,22 +579,24 @@ export class AppOrchestrator {
     if (this.roomLobby) {
       this.roomLobby.hide()
     }
+    if (this.hud) {
+      this.hud.show()
+    }
 
     // Enable input
     if (this.inputHandler) {
       this.inputHandler.attach()
     }
 
-    // Start rendering (if not already started)
-    if (!this.isGameLoopRunning && this.initialized) {
-      this.start()
+    // Start all game systems (render loop, game loop, input loop, interpolation loop)
+    if (this.initialized) {
+      this.startGameSystems()
     }
   }
 
   /**
-   * Starts the render loop and game loop.
-   * Creates and starts RenderLoop, then starts game loop that updates renderer and HUD.
-   * Only starts rendering if in 'in-game' state.
+   * Starts the render loop (always needed for UI visibility).
+   * This is called on initial startup to show menus.
    * 
    * @throws Error if not initialized
    */
@@ -503,26 +605,60 @@ export class AppOrchestrator {
       throw new Error('AppOrchestrator must be initialized before starting')
     }
 
-    // Only start rendering if in 'in-game' state
-    if (this.uiState !== 'in-game') {
-      return
-    }
-
-    if (this.isGameLoopRunning) {
-      // Already running, skip
-      return
-    }
-
-    // Create and start RenderLoop
+    // Always start render loop (needed for UI visibility in all states)
+    // RenderLoop handles its own running state internally
     if (!this.renderLoop) {
       this.renderLoop = new RenderLoop(this.app)
     }
     this.renderLoop.start()
 
-    // Start game loop
+    // Set up beforeunload handler
+    this.setupBeforeUnloadHandler()
+  }
+
+  /**
+   * Starts all game systems: game loop, input loop, and interpolation loop.
+   * Only runs when in 'in-game' state.
+   * Called automatically when transitioning to in-game state.
+   */
+  startGameSystems(): void {
+    if (!this.initialized) {
+      throw new Error('AppOrchestrator must be initialized before starting game systems')
+    }
+
+    // Start render loop if not already started
+    if (!this.renderLoop) {
+      this.renderLoop = new RenderLoop(this.app)
+      this.renderLoop.start()
+    }
+
+    // Only start game systems if in 'in-game' state
+    if (this.uiState !== 'in-game') {
+      return
+    }
+
+    // Start game loop (updates renderer and HUD)
+    this.startGameLoop()
+
+    // Start input loop (sends input commands to server)
+    this.startInputLoop()
+
+    // Start interpolation loop (smooths between snapshots)
+    this.startInterpolationLoop()
+  }
+
+  /**
+   * Starts the game loop that updates renderer and HUD.
+   * Only runs when in 'in-game' state.
+   */
+  private startGameLoop(): void {
+    if (this.isGameLoopRunning) {
+      return // Already running
+    }
+
     this.isGameLoopRunning = true
     const gameLoop = () => {
-      if (!this.isGameLoopRunning) {
+      if (!this.isGameLoopRunning || this.uiState !== 'in-game') {
         return
       }
 
@@ -541,9 +677,167 @@ export class AppOrchestrator {
     }
 
     this.gameLoopId = requestAnimationFrame(gameLoop)
+  }
 
-    // Set up beforeunload handler
-    this.setupBeforeUnloadHandler()
+  /**
+   * Starts the input loop that sends input commands to the server at 30Hz.
+   * Only processes input when in 'in-game' state.
+   */
+  private startInputLoop(): void {
+    if (this.isInputLoopRunning) {
+      return // Already running
+    }
+
+    if (!this.networkClient || !this.inputHandler || !this.commandHistory || !this.predictionSystem) {
+      console.warn('Cannot start input loop: required dependencies not available')
+      return
+    }
+
+    this.isInputLoopRunning = true
+    this.lastInputSendTime = 0
+    this.commandSequence = 0
+
+    const inputLoop = () => {
+      if (!this.isInputLoopRunning) {
+        return
+      }
+
+      const now = performance.now()
+
+      // Only process input when in-game
+      if (this.uiState === 'in-game') {
+        // Send input commands at regular intervals
+        if (now - this.lastInputSendTime >= this.inputSendIntervalMs) {
+          const thrust = this.inputHandler!.getThrust()
+          const turn = this.inputHandler!.getTurn()
+
+          // Only send if there's actual input
+          if (thrust > 0 || turn !== 0) {
+            this.commandSequence++
+            this.commandHistory!.addCommand(this.commandSequence, thrust, turn)
+            this.networkClient!.sendInput(this.commandSequence, thrust, turn)
+            
+            // Immediately predict locally for responsive feel
+            this.predictionSystem!.predict({ thrust, turn })
+          }
+
+          this.lastInputSendTime = now
+        }
+      }
+
+      this.inputLoopId = requestAnimationFrame(inputLoop)
+    }
+
+    this.inputLoopId = requestAnimationFrame(inputLoop)
+  }
+
+  /**
+   * Starts the interpolation loop that smooths between server snapshots.
+   * Only interpolates when in 'in-game' state.
+   */
+  private startInterpolationLoop(): void {
+    if (this.isInterpolationLoopRunning) {
+      return // Already running
+    }
+
+    if (!this.interpolationSystem) {
+      console.warn('Cannot start interpolation loop: interpolation system not available')
+      return
+    }
+
+    this.isInterpolationLoopRunning = true
+
+    const interpolationLoop = () => {
+      if (!this.isInterpolationLoopRunning) {
+        return
+      }
+
+      // Only interpolate when in-game
+      if (this.uiState === 'in-game') {
+        this.interpolationSystem!.update(performance.now())
+      }
+
+      this.interpolationLoopId = requestAnimationFrame(interpolationLoop)
+    }
+
+    this.interpolationLoopId = requestAnimationFrame(interpolationLoop)
+  }
+
+  /**
+   * Centers the UI layer on screen (UI-specific logic moved from Scene).
+   * Private helper method called during initialization.
+   * Scene must be initialized before calling this.
+   */
+  private centerUILayer(): void {
+    if (!this.scene || !(this.scene instanceof Scene)) {
+      return
+    }
+
+    // Scene should be initialized at this point (called after scene.initialize())
+    if (!this.scene.isInitialized()) {
+      console.warn('Scene not initialized, skipping UI layer centering')
+      return
+    }
+
+    try {
+      const pixiApp = this.app.getApplication()
+      
+      // Verify scene state before getting layer
+      if (!this.scene.isInitialized()) {
+        throw new Error('Scene not initialized when trying to center UI layer')
+      }
+      
+      // Get UI layer - this should never return null (throws if missing)
+      let uiLayer: Container | null = null
+      try {
+        uiLayer = this.scene.getLayer('ui')
+      } catch (error) {
+        throw new Error(
+          `Failed to get UI layer: ${error instanceof Error ? error.message : String(error)}. ` +
+          `Scene initialized: ${this.scene.isInitialized()}`
+        )
+      }
+      
+      // Defensive check: ensure uiLayer is valid (should never be null due to getLayer() contract)
+      if (!uiLayer) {
+        throw new Error(
+          'UI layer is null after getLayer() call. ' +
+          `Scene initialized: ${this.scene.isInitialized()}`
+        )
+      }
+      
+      // Verify layer is not destroyed
+      if (uiLayer.destroyed) {
+        throw new Error('UI layer is already destroyed')
+      }
+      
+      const centerUI = () => {
+        // Re-check uiLayer in case it was destroyed (defensive)
+        if (!uiLayer || uiLayer.destroyed) {
+          console.warn('UI layer destroyed, skipping centering')
+          return
+        }
+        try {
+          const screen = pixiApp.screen
+          uiLayer.x = screen.width / 2
+          uiLayer.y = screen.height / 2
+        } catch (error) {
+          console.error('Error centering UI layer:', error)
+        }
+      }
+      
+      // Center initially
+      centerUI()
+      
+      // Re-center on resize (only if layer is valid)
+      if (uiLayer && !uiLayer.destroyed) {
+        pixiApp.renderer.on('resize', centerUI)
+      }
+    } catch (error) {
+      // This should not happen if initialization order is correct
+      console.error('Failed to center UI layer:', error)
+      throw error // Re-throw to surface the problem
+    }
   }
 
   /**
@@ -563,16 +857,56 @@ export class AppOrchestrator {
   }
 
   /**
-   * Stops the render loop and game loop.
-   * Also detaches input handler and disconnects network client.
+   * Stops all game systems: game loop, input loop, and interpolation loop.
+   * Keeps render loop running for UI visibility.
+   * Used when transitioning to main-menu or lobby states.
    */
-  stop(): void {
-    // Stop game loop
+  private stopGameSystems(): void {
+    this.stopGameLoop()
+    this.stopInputLoop()
+    this.stopInterpolationLoop()
+  }
+
+  /**
+   * Stops only the game loop (keeps render loop running for UI visibility).
+   */
+  private stopGameLoop(): void {
     this.isGameLoopRunning = false
     if (this.gameLoopId !== null) {
       cancelAnimationFrame(this.gameLoopId)
       this.gameLoopId = null
     }
+  }
+
+  /**
+   * Stops the input loop.
+   */
+  private stopInputLoop(): void {
+    this.isInputLoopRunning = false
+    if (this.inputLoopId !== null) {
+      cancelAnimationFrame(this.inputLoopId)
+      this.inputLoopId = null
+    }
+  }
+
+  /**
+   * Stops the interpolation loop.
+   */
+  private stopInterpolationLoop(): void {
+    this.isInterpolationLoopRunning = false
+    if (this.interpolationLoopId !== null) {
+      cancelAnimationFrame(this.interpolationLoopId)
+      this.interpolationLoopId = null
+    }
+  }
+
+  /**
+   * Stops the render loop and all game systems.
+   * Also detaches input handler and disconnects network client.
+   */
+  stop(): void {
+    // Stop all game systems
+    this.stopGameSystems()
 
     // Stop RenderLoop
     if (this.renderLoop) {
@@ -635,24 +969,27 @@ export class AppOrchestrator {
       this.roomLobby = null
     }
 
-    // Scene (only if we created it)
-    if (this.scene && this.sceneCreatedByOrchestrator) {
+    // Scene is owned by orchestrator (from DI container)
+    // Destroy is handled by orchestrator's lifecycle
+    // IMPORTANT: Destroy Scene BEFORE App, as Scene needs App to remove itself from stage
+    if (this.scene) {
       try {
         this.scene.destroy()
-      } catch (error) {
+      } catch {
         // Ignore errors - scene may already be destroyed or app not initialized
       }
       this.scene = null
-      this.sceneCreatedByOrchestrator = false
     }
 
-    // RenderLoop
+    // RenderLoop - already stopped by this.stop() above, just clear reference
     if (this.renderLoop) {
       this.renderLoop = null
     }
 
-    // App
-    this.app.destroy()
+    // App is owned by 'application' (not orchestrator), so do NOT destroy it here
+    // App should be destroyed in main.ts by the application owner
+    // Removing this line to fix ownership violation:
+    // this.app.destroy()
 
     // Remove beforeunload listener
     if (this.beforeunloadHandler) {

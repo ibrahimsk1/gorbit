@@ -52,6 +52,26 @@ export class HUD {
   }
 
   /**
+   * Shows the HUD (makes all components visible).
+   */
+  show(): void {
+    this.energyBar.getContainer().visible = true
+    this.palletCounter.getContainer().visible = true
+    this.playerIndicator.getContainer().visible = true
+    this.gameBanner.getContainer().visible = true
+  }
+
+  /**
+   * Hides the HUD (makes all components invisible).
+   */
+  hide(): void {
+    this.energyBar.getContainer().visible = false
+    this.palletCounter.getContainer().visible = false
+    this.playerIndicator.getContainer().visible = false
+    this.gameBanner.getContainer().visible = false
+  }
+
+  /**
    * Updates all HUD components from current game state.
    * Should be called each frame or when state changes.
    */
