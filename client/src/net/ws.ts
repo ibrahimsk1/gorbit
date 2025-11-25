@@ -49,6 +49,9 @@ export class WebSocketClient {
             const data = JSON.parse(event.data)
             this.messageHandlers.forEach(handler => handler(data))
           } catch (error) {
+            console.error('[WebSocketClient] Failed to parse message', error, {
+              data: event.data.substring(0, 200)
+            })
             // Malformed JSON - emit error
             const err = error instanceof Error ? error : new Error('Failed to parse message')
             this.errorHandlers.forEach(handler => handler(err))

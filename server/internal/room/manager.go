@@ -4,10 +4,11 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
 	"sync"
+	"time"
 
+	"github.com/gorbit/orbitalrush/internal/observability"
 	"github.com/gorbit/orbitalrush/internal/session"
 	"github.com/gorbit/orbitalrush/internal/sim/entities"
 	"github.com/gorbit/orbitalrush/internal/sim/rules"
@@ -121,17 +122,18 @@ func (rm *RoomManager) GetRoom(roomCode string) (*Room, error) {
 	return room, nil
 }
 
-// CreateRoom creates a new room with a unique room code and adds it to the rooms map.
-// The room is created in lobby state with no players.
-// Returns the generated room code or an error if room creation fails.
-func (rm *RoomManager) CreateRoom() (string, error) {
+// CreateRoom creates a new room with a unique room code, adds the creator as the first player (host),
+// and adds it to the rooms map.
+// The room is created in lobby state with the creator automatically added as player 1 (host).
+// Returns the room, assigned player ID, and an error if room creation fails.
+func (rm *RoomManager) CreateRoom(conn *transport.Connection) (*Room, uint32, error) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
 	// Generate unique room code
 	code, err := GenerateRoomCode(rm.rooms)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate room code: %w", err)
+		return nil, 0, fmt.Errorf("failed to generate room code: %w", err)
 	}
 
 	// Create new room in lobby state
@@ -139,14 +141,24 @@ func (rm *RoomManager) CreateRoom() (string, error) {
 		RoomCode:     code,
 		Players:      []*PlayerConnection{},
 		State:        RoomStateLobby,
-		HostPlayerID: 0, // Will be set when first player joins
+		HostPlayerID: 0, // Will be set below
 		Session:      nil,
 	}
 
 	// Add room to map
 	rm.rooms[code] = room
 
-	return code, nil
+	// Automatically add creator as first player (host)
+	playerID := uint32(1)
+	player := &PlayerConnection{
+		Conn:     conn,
+		PlayerID: playerID,
+		Name:     "", // Empty name in v1
+	}
+	room.AddPlayer(player)
+	room.SetHostPlayerID(playerID)
+
+	return room, playerID, nil
 }
 
 // JoinRoom adds a player to a room by room code.
@@ -225,7 +237,6 @@ func (rm *RoomManager) LeaveRoom(roomCode string, playerID uint32) error {
 			break
 		}
 	}
-	playerCount := len(room.Players)
 	roomSession := room.Session
 	room.mu.RUnlock()
 
@@ -376,3 +387,137 @@ func (rm *RoomManager) CheckMatchEnd(roomCode string) (bool, error) {
 	return true, nil
 }
 
+// StartMatch starts a match for a room.
+// Validates that the player is the host, room is in lobby state, and has at least 2 players.
+// Creates initial world state with planets, ships, and pallets, then starts the session.
+// Returns an error if validation fails or world creation fails.
+func (rm *RoomManager) StartMatch(roomCode string, hostPlayerID uint32, clock session.Clock) error {
+	rm.mu.RLock()
+	room, exists := rm.rooms[roomCode]
+	rm.mu.RUnlock()
+
+	if !exists {
+		return ErrRoomNotFound
+	}
+
+	// Validate host
+	room.mu.RLock()
+	actualHostID := room.HostPlayerID
+	state := room.State
+	players := room.GetPlayers()
+	room.mu.RUnlock()
+
+	if hostPlayerID != actualHostID {
+		return ErrNotHost
+	}
+
+	// Validate room state
+	if state != RoomStateLobby {
+		return ErrRoomNotInLobby
+	}
+
+	// Validate minimum players
+	if len(players) < 2 {
+		return ErrNotEnoughPlayers
+	}
+
+	// Generate planets (3-5 random count)
+	planetCount := 3 + rand.Intn(3) // Random between 3 and 5
+	planets := entities.GeneratePlanets(planetCount, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+
+	// Generate ship positions (one per player, avoiding planets)
+	shipPositions := entities.GenerateShipPositions(len(players), planets, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+
+	// Create ships (one per player)
+	ships := make([]entities.Ship, 0, len(players))
+	for i, player := range players {
+		pos := shipPositions[i]
+		ship := entities.NewShip(
+			player.PlayerID,
+			pos,
+			entities.Zero(), // Initial velocity: zero
+			0.0,             // Initial rotation: zero
+			100.0,           // Initial energy: 100
+		)
+		ships = append(ships, ship)
+	}
+
+	// Generate pallets (8 + player count, max 12)
+	palletCount := 8 + len(players)
+	if palletCount > 12 {
+		palletCount = 12
+	}
+	pallets := entities.GeneratePallets(palletCount, planets, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+
+	// Create initial world
+	world := entities.NewWorld(ships, planets, pallets)
+
+	// Create session
+	const maxQueueSize = 1000
+	sess := session.NewSession(clock, world, maxQueueSize, entities.WORLD_WIDTH, entities.WORLD_HEIGHT)
+
+	// Set logger for session
+	sessionLogger := observability.NewLogger().WithValues("component", "session", "room_code", roomCode)
+	sess.SetLogger(sessionLogger)
+
+	// Store session in room
+	room.mu.Lock()
+	room.Session = sess
+	room.State = RoomStatePlaying
+	room.mu.Unlock()
+
+	// Start session run loop in goroutine (30Hz = ~33ms per tick)
+	logger := observability.NewLogger().WithValues("component", "room", "room_code", roomCode)
+
+	go func() {
+		sessionTicker := time.NewTicker(33 * time.Millisecond)
+		defer sessionTicker.Stop()
+
+		// Process initial tick immediately (don't wait for first ticker)
+		if err := sess.Run(10); err != nil {
+			logger.Error(err, "Error in initial session run", "room_code", roomCode)
+		}
+
+		for {
+			// Wait for next tick
+			<-sessionTicker.C
+
+			// Check if room still exists and is in playing state
+			rm.mu.RLock()
+			room, exists := rm.rooms[roomCode]
+			rm.mu.RUnlock()
+
+			if !exists {
+				logger.Info("Room deleted, stopping session", "room_code", roomCode)
+				return // Room was deleted
+			}
+
+			room.mu.RLock()
+			state := room.State
+			room.mu.RUnlock()
+
+			if state != RoomStatePlaying {
+				logger.Info("Room no longer in playing state, stopping session", "room_code", roomCode, "state", state)
+				return // Room is no longer playing
+			}
+
+			// Process ticks (limit to 10 ticks per call to prevent lag)
+			if err := sess.Run(10); err != nil {
+				logger.Error(err, "Error in session run", "room_code", roomCode)
+			}
+
+			// Check if match ended
+			world := sess.GetWorld()
+			if world.Done {
+				logger.Info("Match ended, transitioning to ended state", "room_code", roomCode, "tick", world.Tick)
+				// Match ended, transition to ended state
+				room.mu.Lock()
+				room.State = RoomStateEnded
+				room.mu.Unlock()
+				return
+			}
+		}
+	}()
+
+	return nil
+}

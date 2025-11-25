@@ -42,10 +42,10 @@ func NewSession(clock Clock, world entities.World, maxQueueSize int, worldWidth,
 		queue:        NewCommandQueue(maxQueueSize),
 		ticker:       NewFixedRateTicker(clock),
 		clock:        clock,
-		dt:           1.0 / 30.0, // 30Hz tick rate
-		G:            1.0,        // Gravitational constant
-		aMax:         100.0,      // Maximum acceleration
-		pickupRadius: 15.0,       // Pallet pickup radius (about ship length for better gameplay)
+		dt:           1.0 / 30.0,  // 30Hz tick rate
+		G:            1.0,         // Gravitational constant
+		aMax:         100.0,       // Maximum acceleration
+		pickupRadius: 15.0,        // Pallet pickup radius (about ship length for better gameplay)
 		worldWidth:   worldWidth,  // World width for wraparound
 		worldHeight:  worldHeight, // World height for wraparound
 		running:      false,
@@ -57,11 +57,11 @@ func NewSession(clock Clock, world entities.World, maxQueueSize int, worldWidth,
 // Returns true if the command was successfully enqueued, false otherwise.
 func (s *Session) EnqueueCommand(seq uint32, playerID uint32, cmd rules.InputCommand) bool {
 	success := s.queue.Enqueue(seq, playerID, cmd)
-	
+
 	// Update queue depth metric
 	queueSize := s.queue.Size()
 	observability.UpdateQueueDepth(queueSize)
-	
+
 	// Log if queue depth exceeds threshold (50% of max size)
 	const thresholdPercent = 0.5
 	threshold := int(float64(s.maxQueueSize) * thresholdPercent)
@@ -73,7 +73,7 @@ func (s *Session) EnqueueCommand(seq uint32, playerID uint32, cmd rules.InputCom
 			"threshold", threshold,
 		).Info("Queue depth exceeded threshold")
 	}
-	
+
 	return success
 }
 
@@ -101,9 +101,25 @@ func (s *Session) Run(maxTicks int) error {
 		totalTicksNeeded = 1
 	}
 
+	// Force at least 1 tick on first run if no ticks would be processed
+	// This ensures the world state is initialized even if called immediately after session creation
+	if totalTicksNeeded == 0 && elapsed >= 0 {
+		totalTicksNeeded = 1
+	}
+
 	// Limit to maxTicks (don't process more than requested)
 	if totalTicksNeeded > maxTicks {
 		totalTicksNeeded = maxTicks
+	}
+
+	// Log if logger is enabled
+	if s.logger.Enabled() && totalTicksNeeded > 0 {
+		s.logger.V(1).Info("Session.Run processing ticks",
+			"elapsed_ms", elapsed.Milliseconds(),
+			"total_ticks_needed", totalTicksNeeded,
+			"max_ticks", maxTicks,
+			"current_tick", s.world.Tick,
+		)
 	}
 
 	// Process all ticks that should have occurred
@@ -125,7 +141,7 @@ func (s *Session) Run(maxTicks int) error {
 			input = rules.InputCommand{Thrust: 0.0, Turn: 0.0}
 			playerID = 0
 		}
-		
+
 		// Update queue depth metric after dequeue
 		observability.UpdateQueueDepth(s.queue.Size())
 
@@ -137,7 +153,7 @@ func (s *Session) Run(maxTicks int) error {
 		// Measure tick duration and record to metrics
 		tickDuration := time.Since(tickStart)
 		tickDurationSeconds := tickDuration.Seconds()
-		
+
 		// Record to Prometheus histogram (if metrics are initialized)
 		if histogram := observability.GetTickDurationHistogram(); histogram != nil {
 			histogram.Observe(tickDurationSeconds)

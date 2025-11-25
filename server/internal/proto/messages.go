@@ -105,6 +105,8 @@ type PlanetSnapshot struct {
 type SnapshotMessage struct {
 	Type        string            `json:"t"`          // Message type: "snapshot"
 	Tick        uint32            `json:"tick"`       // Current simulation tick
+	Done        bool              `json:"done"`       // Whether the match is finished
+	Win         bool              `json:"win"`         // Whether the player won (only meaningful if done=true)
 	Ships       []ShipSnapshot    `json:"ships"`      // List of ships
 	Planets     []PlanetSnapshot  `json:"planets"`    // List of planets
 	Pallets     []PalletSnapshot  `json:"pallets"`   // List of pallets

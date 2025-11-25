@@ -80,13 +80,13 @@ func (cr *ConnectionRegistry) IsAssociated(conn *Connection) bool {
 // RoomOperations defines callback functions for room operations.
 // This avoids circular dependencies by using function callbacks instead of importing room package.
 type RoomOperations struct {
-	CreateRoomFunc         func() (string, error)
-	JoinRoomFunc          func(roomCode string, conn *Connection) (RoomData, uint32, error)
-	LeaveRoomFunc         func(roomCode string, playerID uint32) error
-	GetRoomFunc           func(roomCode string) (RoomData, error)
-	StartMatchFunc        func(roomCode string, hostPlayerID uint32, clock session.Clock) error // May be nil if not implemented
+	CreateRoomFunc           func(conn *Connection) (RoomData, uint32, error)
+	JoinRoomFunc             func(roomCode string, conn *Connection) (RoomData, uint32, error)
+	LeaveRoomFunc            func(roomCode string, playerID uint32) error
+	GetRoomFunc              func(roomCode string) (RoomData, error)
+	StartMatchFunc           func(roomCode string, hostPlayerID uint32, clock session.Clock) error // May be nil if not implemented
 	EnqueueCommandToRoomFunc func(roomCode string, playerID uint32, seq uint32, cmd rules.InputCommand) error
-	GetWorldFromRoomFunc  func(roomCode string) (entities.World, error)
+	GetWorldFromRoomFunc     func(roomCode string) (entities.World, error)
 }
 
 // RoomData represents room data needed by transport layer.
@@ -106,20 +106,20 @@ type PlayerData struct {
 
 // RoomHandler handles room management messages and implements all room management handler interfaces.
 type RoomHandler struct {
-	registry  *ConnectionRegistry
-	ops       RoomOperations
-	conn      *Connection
-	clock     session.Clock
+	registry    *ConnectionRegistry
+	ops         RoomOperations
+	conn        *Connection
+	clock       session.Clock
 	broadcaster *SnapshotBroadcaster // Optional: will be wired in step 8
 }
 
 // NewRoomHandler creates a new RoomHandler.
 func NewRoomHandler(registry *ConnectionRegistry, ops RoomOperations, conn *Connection, clock session.Clock) *RoomHandler {
 	return &RoomHandler{
-		registry: registry,
-		ops:      ops,
-		conn:     conn,
-		clock:    clock,
+		registry:    registry,
+		ops:         ops,
+		conn:        conn,
+		clock:       clock,
 		broadcaster: nil, // Will be set in step 8
 	}
 }
@@ -130,29 +130,35 @@ func (h *RoomHandler) SetBroadcaster(broadcaster *SnapshotBroadcaster) {
 	h.broadcaster = broadcaster
 }
 
-// HandleCreateRoom handles CreateRoomMessage by creating a room and sending roomCreated response.
+// HandleCreateRoom handles CreateRoomMessage by creating a room, adding the creator as host,
+// tracking the connection, and sending roomState response.
 func (h *RoomHandler) HandleCreateRoom(msg *proto.CreateRoomMessage) error {
 	if h.ops.CreateRoomFunc == nil {
 		return fmt.Errorf("CreateRoomFunc not provided")
 	}
 
-	// Create room
-	roomCode, err := h.ops.CreateRoomFunc()
+	// Create room and automatically add creator as host
+	roomData, playerID, err := h.ops.CreateRoomFunc(h.conn)
 	if err != nil {
 		return fmt.Errorf("failed to create room: %w", err)
 	}
 
-	// Send roomCreated response
-	response := proto.RoomCreatedMessage{
-		Type:     "roomCreated",
-		RoomCode: roomCode,
-	}
-	data, err := json.Marshal(response)
+	// Track connection
+	h.registry.Associate(h.conn, roomData.RoomCode, playerID)
+
+	// Convert room to RoomStateMessage
+	roomState := roomToRoomStateMessage(roomData)
+
+	// Send roomState response to creator
+	data, err := json.Marshal(roomState)
 	if err != nil {
-		return fmt.Errorf("failed to marshal roomCreated response: %w", err)
+		return fmt.Errorf("failed to marshal roomState response: %w", err)
+	}
+	if err := h.conn.WriteMessage(data); err != nil {
+		return fmt.Errorf("failed to send roomState response: %w", err)
 	}
 
-	return h.conn.WriteMessage(data)
+	return nil
 }
 
 // HandleJoinRoom handles JoinRoomMessage by joining a room, tracking connection, and sending responses.
@@ -182,19 +188,21 @@ func (h *RoomHandler) HandleJoinRoom(msg *proto.JoinRoomMessage) error {
 		return fmt.Errorf("failed to send roomState response: %w", err)
 	}
 
-	// Broadcast playerJoined to all other players in room
-	playerJoined := proto.PlayerJoinedMessage{
-		Type: "playerJoined",
-		Player: proto.PlayerInfo{
-			ID:   playerID,
-			Name: "", // Empty name in v1
-		},
-	}
-	broadcastData, err := json.Marshal(playerJoined)
+	// Get fresh room data to ensure we have the latest state with all players
+	freshRoomData, err := h.ops.GetRoomFunc(msg.RoomCode)
 	if err != nil {
-		return fmt.Errorf("failed to marshal playerJoined message: %w", err)
+		return fmt.Errorf("failed to get room for broadcast: %w", err)
 	}
-	broadcastToRoom(roomData, h.conn, broadcastData) // Exclude joining player
+
+	// Convert fresh room data to RoomStateMessage for broadcast
+	freshRoomState := roomToRoomStateMessage(freshRoomData)
+
+	// Broadcast updated roomState to all existing players in room (so their UI updates)
+	broadcastData, err := json.Marshal(freshRoomState)
+	if err != nil {
+		return fmt.Errorf("failed to marshal roomState for broadcast: %w", err)
+	}
+	broadcastToRoom(freshRoomData, h.conn, broadcastData) // Exclude joining player
 
 	return nil
 }
@@ -366,7 +374,7 @@ type SnapshotBroadcaster struct {
 	ops      RoomOperations
 	mu       sync.RWMutex
 	rooms    map[string]*broadcastRoom // roomCode -> broadcastRoom
-	stopChan chan string                // Channel to signal room to stop broadcasting
+	stopChan chan string               // Channel to signal room to stop broadcasting
 }
 
 type broadcastRoom struct {
@@ -393,6 +401,8 @@ func (sb *SnapshotBroadcaster) StartBroadcasting(roomCode string) {
 
 	// Check if already broadcasting for this room
 	if _, exists := sb.rooms[roomCode]; exists {
+		logger := observability.NewLogger().WithValues("component", "broadcaster", "room_code", roomCode)
+		logger.Info("Already broadcasting for room, skipping", "room_code", roomCode)
 		return // Already broadcasting
 	}
 
@@ -402,6 +412,9 @@ func (sb *SnapshotBroadcaster) StartBroadcasting(roomCode string) {
 		done:     make(chan struct{}),
 	}
 	sb.rooms[roomCode] = br
+
+	logger := observability.NewLogger().WithValues("component", "broadcaster", "room_code", roomCode)
+	logger.Info("Starting snapshot broadcasting", "room_code", roomCode)
 
 	// Start broadcasting goroutine
 	go sb.broadcastLoop(roomCode, br.done)
@@ -425,6 +438,7 @@ func (sb *SnapshotBroadcaster) StopBroadcasting(roomCode string) {
 // broadcastLoop is the main broadcasting loop for a room.
 // Polls session world state at 10 Hz (100ms interval) and broadcasts to all players.
 func (sb *SnapshotBroadcaster) broadcastLoop(roomCode string, done chan struct{}) {
+	logger := observability.NewLogger().WithValues("component", "broadcaster", "room_code", roomCode)
 	ticker := time.NewTicker(100 * time.Millisecond) // 10 Hz
 	defer ticker.Stop()
 
@@ -473,7 +487,7 @@ func (sb *SnapshotBroadcaster) broadcastLoop(roomCode string, done chan struct{}
 					// Serialize snapshot
 					data, err := json.Marshal(snapshot)
 					if err != nil {
-						// Log error but continue
+						logger.Error(err, "Failed to marshal snapshot", "room_code", roomCode, "player_id", player.PlayerID)
 						continue
 					}
 
@@ -487,14 +501,15 @@ func (sb *SnapshotBroadcaster) broadcastLoop(roomCode string, done chan struct{}
 
 // Global connection registry and snapshot broadcaster (initialized on first use)
 var (
-	globalRegistry   *ConnectionRegistry
-	globalBroadcaster *SnapshotBroadcaster
-	initOnce         sync.Once
+	globalRegistry      *ConnectionRegistry
+	globalBroadcaster   *SnapshotBroadcaster
+	registryInitOnce    sync.Once
+	broadcasterInitOnce sync.Once
 )
 
 // getGlobalRegistry returns the global connection registry (initialized on first call).
 func getGlobalRegistry() *ConnectionRegistry {
-	initOnce.Do(func() {
+	registryInitOnce.Do(func() {
 		globalRegistry = NewConnectionRegistry()
 	})
 	return globalRegistry
@@ -502,7 +517,7 @@ func getGlobalRegistry() *ConnectionRegistry {
 
 // getGlobalBroadcaster returns the global snapshot broadcaster (initialized on first call).
 func getGlobalBroadcaster() *SnapshotBroadcaster {
-	initOnce.Do(func() {
+	broadcasterInitOnce.Do(func() {
 		// Create RoomOperations with adapter functions
 		// NOTE: SetRoomOperationsAdapter must be called from main.go to wire RoomManager
 		roomOps := createRoomOperations()
@@ -536,7 +551,7 @@ func createRoomOperations() RoomOperations {
 // and manages the connection lifecycle.
 func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	logger := observability.NewLogger().WithValues("component", "transport", "handler", "websocket")
-	
+
 	// Generate a simple connection ID from remote address and timestamp
 	connectionID := fmt.Sprintf("%s-%d", r.RemoteAddr, time.Now().UnixNano())
 	connLogger := logger.WithValues("connection_id", connectionID)
@@ -556,11 +571,11 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	// Create Connection wrapper
 	wsConn := NewConnection(conn)
 	connectionStartTime := wsConn.GetStartTime()
-	
+
 	defer func() {
 		// Calculate connection duration
 		duration := time.Since(connectionStartTime).Seconds()
-		
+
 		// Record disconnect event and duration
 		if eventsCounter := observability.GetConnectionEventsCounter(); eventsCounter != nil {
 			eventsCounter.WithLabelValues("disconnect").Inc()
@@ -571,10 +586,10 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		if durationHist := observability.GetConnectionDurationHistogram(); durationHist != nil {
 			durationHist.Observe(duration)
 		}
-		
+
 		// Log disconnect with duration
 		connLogger.Info("WebSocket connection closed", "message_type", "disconnect", "duration_seconds", duration)
-		
+
 		if err := wsConn.Close(); err != nil {
 			connLogger.Error(err, "Error closing WebSocket connection", "message_type", "close_error")
 		}
@@ -587,7 +602,7 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	if activeGauge := observability.GetActiveConnectionsGauge(); activeGauge != nil {
 		activeGauge.Inc()
 	}
-	
+
 	// Get global connection registry and create room operations
 	registry := getGlobalRegistry()
 	roomOps := createRoomOperations()
@@ -649,7 +664,7 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 // Returns a JSON response with status and observability metrics summary.
 func HealthzHandler(w http.ResponseWriter, r *http.Request) {
 	logger := observability.NewLogger().WithValues("component", "transport", "handler", "healthz")
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
@@ -658,7 +673,7 @@ func HealthzHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Build response with metrics
 	response := map[string]interface{}{
-		"status":        "ok",
+		"status":         "ok",
 		"uptime_seconds": healthMetrics.UptimeSeconds,
 		"metrics": map[string]interface{}{
 			"active_connections": healthMetrics.ActiveConnections,
@@ -678,4 +693,3 @@ func HealthzHandler(w http.ResponseWriter, r *http.Request) {
 		logger.Error(err, "Error encoding healthz response", "message_type", "encode_error")
 	}
 }
-

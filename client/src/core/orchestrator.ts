@@ -19,6 +19,7 @@ import { CommandHistory } from '../net/command-history'
 import { PredictionSystem } from '../sim/prediction'
 import { InterpolationSystem } from '../sim/interpolation'
 import { ReconciliationSystem } from '../sim/reconciliation'
+import type { SnapshotMessage } from '../net/protocol'
 
 // UI state type
 export type UIState = 'main-menu' | 'lobby' | 'in-game'
@@ -49,7 +50,7 @@ export interface INetworkClient {
   onMatchEnded(callback: (winnerId?: number) => void): void
   connect(url: string): Promise<void>
   disconnect(): void
-  createRoom(): Promise<string>
+  createRoom(): Promise<void>
   joinRoom(roomCode: string): Promise<void>
   leaveRoom(): void
   startMatch(): void
@@ -71,7 +72,7 @@ export interface IMainMenu {
 export interface IRoomLobby {
   show(): void
   hide(): void
-  update(roomState: RoomState): void
+  update(roomState: RoomState, isHost: boolean): void
   destroy(): void
 }
 
@@ -147,6 +148,7 @@ export class AppOrchestrator {
   private uiState: UIState = 'main-menu'
   private mainMenu: IMainMenu | null = null
   private roomLobby: IRoomLobby | null = null
+  private currentPlayerId: number | null = null
   private inputSendIntervalMs: number = 1000 / 30 // 30Hz input rate
   private lastInputSendTime: number = 0
   private commandSequence: number = 0
@@ -319,20 +321,23 @@ export class AppOrchestrator {
     }
 
     this.networkClient.onSnapshot((snapshot) => {
+      const snapshotMsg = snapshot as SnapshotMessage
+      
       // Update authoritative state from server
-      this.stateManager!.updateAuthoritative(snapshot)
+      this.stateManager!.updateAuthoritative(snapshotMsg)
       
       // Add snapshot to interpolation buffer
-      this.interpolationSystem!.addSnapshot(snapshot, performance.now())
+      this.interpolationSystem!.addSnapshot(snapshotMsg, performance.now())
       
       // Reconcile predicted state with authoritative
-      this.reconciliationSystem!.reconcile(snapshot)
+      this.reconciliationSystem!.reconcile(snapshotMsg)
     })
   }
 
   /**
    * Handles create room action.
-   * Creates a room via network client and transitions to lobby.
+   * Creates a room via network client. The creator is automatically added as host.
+   * Room state will be received via onRoomState callback, which will trigger transition to lobby.
    */
   private async handleCreateRoom(): Promise<void> {
     if (!this.networkClient) {
@@ -341,9 +346,9 @@ export class AppOrchestrator {
     }
 
     try {
-      const roomCode = await this.networkClient.createRoom()
-      console.log('Room created:', roomCode)
+      await this.networkClient.createRoom()
       // Room state will be received via onRoomState callback, which will trigger transition
+      // No need to join separately - server automatically adds creator to room
     } catch (error) {
       console.error('Failed to create room:', error)
     }
@@ -415,10 +420,17 @@ export class AppOrchestrator {
     }
 
     this.networkClient.onRoomState((roomState) => {
+      // Track current player ID if not set yet
+      // If there's only one player, that's us (the creator)
+      if (this.currentPlayerId === null && roomState.players.length === 1) {
+        this.currentPlayerId = roomState.players[0].id
+      }
+
       // Update room lobby with new state
       if (this.roomLobby) {
-        // Update room lobby with new state
-        this.roomLobby.update(roomState)
+        // Determine if current player is host
+        const isHost = this.currentPlayerId !== null && roomState.hostId === this.currentPlayerId
+        this.roomLobby.update(roomState, isHost)
       }
 
       if (roomState.state === 'lobby') {
@@ -502,7 +514,9 @@ export class AppOrchestrator {
     if (this.roomLobby) {
       this.roomLobby.show()
       if (roomState) {
-        this.roomLobby.update(roomState)
+        // Determine if current player is host
+        const isHost = this.currentPlayerId !== null && roomState.hostId === this.currentPlayerId
+        this.roomLobby.update(roomState, isHost)
       }
     }
     if (this.hud) {
