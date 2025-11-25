@@ -71,7 +71,7 @@ export interface IMainMenu {
 export interface IRoomLobby {
   show(): void
   hide(): void
-  update(roomState: RoomState): void
+  update(roomState: RoomState, isHost: boolean): void
   destroy(): void
 }
 
@@ -147,6 +147,7 @@ export class AppOrchestrator {
   private uiState: UIState = 'main-menu'
   private mainMenu: IMainMenu | null = null
   private roomLobby: IRoomLobby | null = null
+  private currentPlayerId: number | null = null
   private inputSendIntervalMs: number = 1000 / 30 // 30Hz input rate
   private lastInputSendTime: number = 0
   private commandSequence: number = 0
@@ -416,10 +417,17 @@ export class AppOrchestrator {
     }
 
     this.networkClient.onRoomState((roomState) => {
+      // Track current player ID if not set yet
+      // If there's only one player, that's us (the creator)
+      if (this.currentPlayerId === null && roomState.players.length === 1) {
+        this.currentPlayerId = roomState.players[0].id
+      }
+
       // Update room lobby with new state
       if (this.roomLobby) {
-        // Update room lobby with new state
-        this.roomLobby.update(roomState)
+        // Determine if current player is host
+        const isHost = this.currentPlayerId !== null && roomState.hostId === this.currentPlayerId
+        this.roomLobby.update(roomState, isHost)
       }
 
       if (roomState.state === 'lobby') {
@@ -503,7 +511,9 @@ export class AppOrchestrator {
     if (this.roomLobby) {
       this.roomLobby.show()
       if (roomState) {
-        this.roomLobby.update(roomState)
+        // Determine if current player is host
+        const isHost = this.currentPlayerId !== null && roomState.hostId === this.currentPlayerId
+        this.roomLobby.update(roomState, isHost)
       }
     }
     if (this.hud) {

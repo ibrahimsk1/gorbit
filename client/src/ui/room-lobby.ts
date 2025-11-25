@@ -238,9 +238,11 @@ export class RoomLobby {
    * Updates the lobby with new room state.
    * 
    * @param roomState New room state
+   * @param isHost Whether the current player is the host
    */
-  update(roomState: RoomState): void {
+  update(roomState: RoomState, isHost: boolean): void {
     this.roomState = roomState
+    this.isHost = isHost // Update isHost flag
 
     // Update room code
     this.roomCodeText.text = `Room Code: ${roomState.roomCode}`
@@ -248,8 +250,42 @@ export class RoomLobby {
     // Update player list
     this.updatePlayerList()
 
-    // Update "Start Match" button state (if host)
-    if (this.isHost && this.startButton && this.startButtonText) {
+    // Handle host UI elements
+    if (this.isHost) {
+      // Hide waiting message if visible
+      if (this.waitingText) {
+        this.waitingText.visible = false
+      }
+
+      // Create start button if it doesn't exist
+      if (!this.startButton) {
+        this.startButton = new Graphics()
+        this.startButton.label = 'room-lobby-start-button'
+        this.startButton.x = 0
+        this.startButton.y = 50
+        this.container.addChild(this.startButton)
+
+        this.startButtonText = new Text({
+          text: 'Start Match',
+          style: {
+            fontFamily: 'Arial',
+            fontSize: 20,
+            fill: 0xffffff
+          }
+        })
+        this.startButtonText.anchor.set(0.5)
+        this.startButtonText.x = 0
+        this.startButtonText.y = 50
+        this.container.addChild(this.startButtonText)
+      }
+
+      // Show start button
+      this.startButton.visible = true
+      if (this.startButtonText) {
+        this.startButtonText.visible = true
+      }
+
+      // Update "Start Match" button state
       const canStart = roomState.players.length >= 2
       this.startButton.eventMode = canStart ? 'static' : 'none'
       this.startButton.cursor = canStart ? 'pointer' : 'default'
@@ -260,11 +296,13 @@ export class RoomLobby {
       this.startButton.fill(canStart ? 0x4a90e2 : 0x666666)
 
       // Update button text
-      this.startButtonText.text = canStart ? 'Start Match' : 'Start Match (Need 2+ Players)'
+      if (this.startButtonText) {
+        this.startButtonText.text = canStart ? 'Start Match' : 'Start Match (Need 2+ Players)'
+      }
 
       // Re-setup event handlers if enabled
+      this.startButton.removeAllListeners()
       if (canStart) {
-        this.startButton.removeAllListeners()
         this.startButton.on('pointerdown', () => {
           this.startButton!.clear()
           this.startButton!.rect(-100, -20, 200, 40)
@@ -282,11 +320,35 @@ export class RoomLobby {
           this.startButton!.fill(0x4a90e2)
         })
       }
-    }
+    } else {
+      // Not host - hide start button, show waiting message
+      if (this.startButton) {
+        this.startButton.visible = false
+      }
+      if (this.startButtonText) {
+        this.startButtonText.visible = false
+      }
 
-    // Update host status (if changed)
-    // Note: isHost is set in constructor, but we can check if current player is host
-    // For now, we'll keep the original isHost value
+      // Create waiting message if it doesn't exist
+      if (!this.waitingText) {
+        this.waitingText = new Text({
+          text: 'Waiting for host to start match...',
+          style: {
+            fontFamily: 'Arial',
+            fontSize: 18,
+            fill: 0xaaaaaa
+          }
+        })
+        this.waitingText.label = 'room-lobby-waiting'
+        this.waitingText.anchor.set(0.5)
+        this.waitingText.x = 0
+        this.waitingText.y = 50
+        this.container.addChild(this.waitingText)
+      }
+
+      // Show waiting message
+      this.waitingText.visible = true
+    }
   }
 
   /**
