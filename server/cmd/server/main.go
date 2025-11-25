@@ -9,7 +9,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gorbit/orbitalrush/internal/adapter"
 	"github.com/gorbit/orbitalrush/internal/observability"
+	"github.com/gorbit/orbitalrush/internal/room"
 	"github.com/gorbit/orbitalrush/internal/transport"
 )
 
@@ -26,6 +28,14 @@ func main() {
 	gcMonitorInterval := 5 * time.Second
 	stopGCMonitor := observability.StartGCMonitor(ctx, gcMonitorInterval, logger)
 	logger.Info("GC monitor started", "interval_seconds", gcMonitorInterval.Seconds())
+
+	// Initialize RoomManager
+	roomManager := room.NewRoomManager()
+	logger.Info("RoomManager initialized")
+
+	// Wire RoomManager to Transport layer (adapter pattern)
+	adapter.WireRoomToTransport(roomManager)
+	logger.Info("Room-Transport adapter wired")
 
 	port := os.Getenv("PORT")
 	if port == "" {
