@@ -90,14 +90,22 @@ func (sm *SnapshotManager) ClearSnapshots() {
 // copyWorld creates a deep copy of a World struct.
 // This ensures that modifying the restored state doesn't affect the snapshot.
 func copyWorld(world entities.World) entities.World {
+	// Copy ships slice
+	shipsCopy := make([]entities.Ship, len(world.Ships))
+	copy(shipsCopy, world.Ships)
+
+	// Copy planets slice
+	planetsCopy := make([]entities.Planet, len(world.Planets))
+	copy(planetsCopy, world.Planets)
+
 	// Copy pallets slice
 	palletsCopy := make([]entities.Pallet, len(world.Pallets))
 	copy(palletsCopy, world.Pallets)
 
 	return entities.World{
-		Ship:    world.Ship,    // Ship is a struct, so this is a copy
-		Sun:     world.Sun,     // Sun is a struct, so this is a copy
-		Pallets: palletsCopy,   // Explicitly copy the slice
+		Ships:   shipsCopy,   // Copy the ships slice
+		Planets: planetsCopy, // Copy the planets slice
+		Pallets: palletsCopy, // Copy the pallets slice
 		Tick:    world.Tick,
 		Done:    world.Done,
 		Win:     world.Win,
