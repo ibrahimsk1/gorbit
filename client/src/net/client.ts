@@ -54,7 +54,7 @@ export class NetworkClient {
   private connectHandlers: Array<() => void> = []
   private disconnectHandlers: Array<() => void> = []
   private errorHandlers: Array<(error: Error) => void> = []
-  private createRoomPromise: { resolve: (roomCode: string) => void; reject: (error: Error) => void } | null = null
+  private createRoomPromise: { resolve: () => void; reject: (error: Error) => void } | null = null
   private joinRoomPromise: { resolve: () => void; reject: (error: Error) => void } | null = null
   private roomStateHandlers: Array<(state: RoomState) => void> = []
   private playerJoinedHandlers: Array<(player: PlayerInfo) => void> = []
@@ -85,19 +85,41 @@ export class NetworkClient {
         return
       }
 
-      // Handle roomCreated message (response to createRoom)
+      // Handle roomCreated message (legacy - server should send roomState, but handle this for backwards compatibility)
       if (isRoomCreatedMessage(data)) {
         const msg = data as RoomCreatedMessage
+        // If we're waiting for createRoom, automatically join the room
+        // (This is a fallback for old server versions that still send roomCreated)
         if (this.createRoomPromise) {
-          this.createRoomPromise.resolve(msg.roomCode)
-          this.createRoomPromise = null
+          // Automatically join the room we just created
+          this.joinRoom(msg.roomCode)
+            .then(() => {
+              // Resolve createRoom promise after joining
+              if (this.createRoomPromise) {
+                this.createRoomPromise.resolve()
+                this.createRoomPromise = null
+              }
+            })
+            .catch((error) => {
+              // Reject createRoom promise if join fails
+              if (this.createRoomPromise) {
+                this.createRoomPromise.reject(error)
+                this.createRoomPromise = null
+              }
+            })
         }
         return
       }
 
-      // Handle roomState message (response to joinRoom)
+      // Handle roomState message (response to createRoom or joinRoom)
       if (isRoomStateMessage(data)) {
         const msg = data as RoomStateMessage
+        // Resolve createRoom promise if waiting
+        if (this.createRoomPromise) {
+          this.createRoomPromise.resolve()
+          this.createRoomPromise = null
+        }
+        // Resolve joinRoom promise if waiting
         if (this.joinRoomPromise) {
           this.joinRoomPromise.resolve()
           this.joinRoomPromise = null
@@ -256,16 +278,17 @@ export class NetworkClient {
 
   /**
    * Create a new room.
-   * Sends createRoom message and waits for roomCreated response.
-   * @returns Promise that resolves with the room code
+   * Sends createRoom message and waits for roomState response.
+   * The creator is automatically added to the room as host.
+   * @returns Promise that resolves when successfully created and joined
    * @throws Error if not connected or operation fails
    */
-  async createRoom(): Promise<string> {
+  async createRoom(): Promise<void> {
     if (!this.isConnected()) {
       throw new Error('Not connected to server')
     }
 
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       this.createRoomPromise = { resolve, reject }
       
       const message: CreateRoomMessage = createCreateRoomMessage()

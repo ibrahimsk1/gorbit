@@ -49,7 +49,7 @@ export interface INetworkClient {
   onMatchEnded(callback: (winnerId?: number) => void): void
   connect(url: string): Promise<void>
   disconnect(): void
-  createRoom(): Promise<string>
+  createRoom(): Promise<void>
   joinRoom(roomCode: string): Promise<void>
   leaveRoom(): void
   startMatch(): void
@@ -332,7 +332,8 @@ export class AppOrchestrator {
 
   /**
    * Handles create room action.
-   * Creates a room via network client and transitions to lobby.
+   * Creates a room via network client. The creator is automatically added as host.
+   * Room state will be received via onRoomState callback, which will trigger transition to lobby.
    */
   private async handleCreateRoom(): Promise<void> {
     if (!this.networkClient) {
@@ -341,9 +342,9 @@ export class AppOrchestrator {
     }
 
     try {
-      const roomCode = await this.networkClient.createRoom()
-      console.log('Room created:', roomCode)
+      await this.networkClient.createRoom()
       // Room state will be received via onRoomState callback, which will trigger transition
+      // No need to join separately - server automatically adds creator to room
     } catch (error) {
       console.error('Failed to create room:', error)
     }
