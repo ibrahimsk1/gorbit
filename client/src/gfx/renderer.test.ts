@@ -43,6 +43,7 @@ describe('Renderer', () => {
     app = new App()
     await app.init(container)
     scene = new Scene(app)
+    scene.initialize() // Explicit initialization
     stateManager = new StateManager()
     renderer = new Renderer(stateManager, scene, app)
   })

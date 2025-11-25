@@ -22,6 +22,7 @@ describe('Scene Hierarchy', () => {
     app = new App()
     await app.init(container)
     scene = new Scene(app)
+    scene.initialize() // Explicit initialization
   })
 
   afterEach(() => {
@@ -43,11 +44,19 @@ describe('Scene Hierarchy', () => {
       expect(root).toBeInstanceOf(Container)
     })
 
-    it('root container is added to application stage', () => {
-      const root = scene.getRoot()
+    it('root container is added to application stage after initialization', () => {
+      const newScene = new Scene(app)
+      const root = newScene.getRoot()
       const pixiApp = app.getApplication()
       
+      // Before initialization, root is not on stage
+      expect(pixiApp.stage.children).not.toContain(root)
+      
+      // After initialization, root is on stage
+      newScene.initialize()
       expect(pixiApp.stage.children).toContain(root)
+      
+      newScene.destroy()
     })
   })
 
