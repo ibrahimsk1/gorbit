@@ -1,8 +1,6 @@
 package adapter
 
 import (
-	"fmt"
-
 	"github.com/gorbit/orbitalrush/internal/room"
 	"github.com/gorbit/orbitalrush/internal/session"
 	"github.com/gorbit/orbitalrush/internal/sim/entities"
@@ -48,10 +46,7 @@ func WireRoomToTransport(roomManager *room.RoomManager) {
 				return convertRoomToRoomData(rm), nil
 			},
 			StartMatchFunc: func(roomCode string, hostPlayerID uint32, clock session.Clock) error {
-				// TODO: Implement when RoomManager.StartMatch is available
-				// For now, return error indicating not implemented
-				// This will be wired to roomManager.StartMatch() once it's implemented
-				return fmt.Errorf("StartMatch not yet implemented in RoomManager")
+				return roomManager.StartMatch(roomCode, hostPlayerID, clock)
 			},
 			EnqueueCommandToRoomFunc: func(roomCode string, playerID uint32, seq uint32, cmd rules.InputCommand) error {
 				return roomManager.EnqueueCommandToRoom(roomCode, playerID, seq, cmd)

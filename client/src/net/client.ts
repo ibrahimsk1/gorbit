@@ -164,6 +164,8 @@ export class NetworkClient {
 
       // Handle snapshot messages (v1 multiplayer format)
       if (isSnapshotMessage(data)) {
+        const snapshot = data as SnapshotMessage
+        
         // v1 format: ships array, worldBounds, myShipId
         // Mark commands as confirmed when snapshot is received
         // For now, mark all unconfirmed commands as confirmed (simple heuristic)

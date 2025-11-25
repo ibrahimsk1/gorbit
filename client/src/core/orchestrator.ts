@@ -19,6 +19,7 @@ import { CommandHistory } from '../net/command-history'
 import { PredictionSystem } from '../sim/prediction'
 import { InterpolationSystem } from '../sim/interpolation'
 import { ReconciliationSystem } from '../sim/reconciliation'
+import type { SnapshotMessage } from '../net/protocol'
 
 // UI state type
 export type UIState = 'main-menu' | 'lobby' | 'in-game'
@@ -320,14 +321,16 @@ export class AppOrchestrator {
     }
 
     this.networkClient.onSnapshot((snapshot) => {
+      const snapshotMsg = snapshot as SnapshotMessage
+      
       // Update authoritative state from server
-      this.stateManager!.updateAuthoritative(snapshot)
+      this.stateManager!.updateAuthoritative(snapshotMsg)
       
       // Add snapshot to interpolation buffer
-      this.interpolationSystem!.addSnapshot(snapshot, performance.now())
+      this.interpolationSystem!.addSnapshot(snapshotMsg, performance.now())
       
       // Reconcile predicted state with authoritative
-      this.reconciliationSystem!.reconcile(snapshot)
+      this.reconciliationSystem!.reconcile(snapshotMsg)
     })
   }
 

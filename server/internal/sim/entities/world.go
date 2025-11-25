@@ -319,3 +319,168 @@ func ValidateWorld(world World) error {
 	}
 	return nil
 }
+
+// isPositionSafe checks if a position is safe from all planets (outside planet radius + safety margin).
+// Returns true if the position is safe, false otherwise.
+func isPositionSafe(pos Vec2, planets []Planet, safetyMargin float64) bool {
+	for _, planet := range planets {
+		distance := pos.Sub(planet.Pos).Length()
+		requiredDistance := float64(planet.Radius) + safetyMargin
+		if distance <= requiredDistance {
+			return false
+		}
+	}
+	return true
+}
+
+// GenerateSafePosition generates a random position that avoids all planets.
+// Uses retry logic to find a valid position.
+// Parameters:
+//   - planets: Array of planets to avoid
+//   - worldWidth: World width in meters
+//   - worldHeight: World height in meters
+//   - safetyMargin: Minimum distance from planet edges (meters)
+//   - maxRetries: Maximum number of retry attempts
+//
+// Returns a safe position, or a random position if max retries exceeded.
+func GenerateSafePosition(planets []Planet, worldWidth, worldHeight, safetyMargin float64, maxRetries int) Vec2 {
+	for retry := 0; retry < maxRetries; retry++ {
+		// Generate random position within world bounds
+		posX := (rand.Float64() - 0.5) * worldWidth
+		posY := (rand.Float64() - 0.5) * worldHeight
+		pos := NewVec2(posX, posY)
+
+		// Check if position is safe from all planets
+		if isPositionSafe(pos, planets, safetyMargin) {
+			return pos
+		}
+	}
+
+	// If we couldn't find a safe position after max retries, return a random position
+	// This should rarely happen with reasonable world size and planet count
+	posX := (rand.Float64() - 0.5) * worldWidth
+	posY := (rand.Float64() - 0.5) * worldHeight
+	return NewVec2(posX, posY)
+}
+
+// GeneratePallets generates multiple pallets with positions that avoid planets.
+// Pallets are distributed uniformly across the world and avoid planet collisions.
+// Parameters:
+//   - count: Number of pallets to generate (8–12 per match)
+//   - planets: Array of planets to avoid
+//   - worldWidth: World width in meters (typically WORLD_WIDTH)
+//   - worldHeight: World height in meters (typically WORLD_HEIGHT)
+//
+// Returns a slice of pallets with:
+//   - Random positions within world bounds
+//   - All positions avoid planets (distance > planet radius + safety margin)
+//   - All pallets active initially
+//   - Unique IDs starting from 1
+func GeneratePallets(count int, planets []Planet, worldWidth, worldHeight float64) []Pallet {
+	if count <= 0 {
+		return []Pallet{}
+	}
+
+	pallets := make([]Pallet, 0, count)
+	const safetyMargin = 30.0 // Minimum distance from planet edges (meters)
+	const maxRetries = 100    // Maximum retries per pallet
+
+	for i := 0; i < count; i++ {
+		id := uint32(i + 1)
+		pos := GenerateSafePosition(planets, worldWidth, worldHeight, safetyMargin, maxRetries)
+		pallet := NewPallet(id, pos, true) // All pallets start active
+		pallets = append(pallets, pallet)
+	}
+
+	return pallets
+}
+
+// GenerateShipPositions generates safe starting positions for ships that avoid planets.
+// Ships are distributed uniformly across the world perimeter to spread them out.
+// Parameters:
+//   - playerCount: Number of ships to generate (one per player)
+//   - planets: Array of planets to avoid
+//   - worldWidth: World width in meters (typically WORLD_WIDTH)
+//   - worldHeight: World height in meters (typically WORLD_HEIGHT)
+//
+// Returns a slice of positions with:
+//   - Positions distributed around world perimeter (uniform spacing)
+//   - All positions avoid planets (distance > planet radius + safety margin)
+//   - Positions spread out to prevent initial collisions
+func GenerateShipPositions(playerCount int, planets []Planet, worldWidth, worldHeight float64) []Vec2 {
+	if playerCount <= 0 {
+		return []Vec2{}
+	}
+
+	positions := make([]Vec2, 0, playerCount)
+	const safetyMargin = 50.0 // Minimum distance from planet edges (meters, larger for ships)
+	const maxRetries = 200    // Maximum retries per ship position
+
+	// Calculate perimeter length for uniform distribution
+	halfWidth := worldWidth / 2.0
+	halfHeight := worldHeight / 2.0
+	perimeter := 2.0 * (worldWidth + worldHeight)
+
+	// Distribute ships around the perimeter
+	for i := 0; i < playerCount; i++ {
+		// Calculate target position along perimeter (uniform spacing)
+		targetDistance := (float64(i) / float64(playerCount)) * perimeter
+
+		var pos Vec2
+		// Determine which edge of the rectangle we're on
+		if targetDistance < worldWidth {
+			// Top edge
+			pos = NewVec2(-halfWidth+targetDistance, -halfHeight)
+		} else if targetDistance < worldWidth+worldHeight {
+			// Right edge
+			pos = NewVec2(halfWidth, -halfHeight+(targetDistance-worldWidth))
+		} else if targetDistance < 2.0*worldWidth+worldHeight {
+			// Bottom edge
+			pos = NewVec2(halfWidth-(targetDistance-worldWidth-worldHeight), halfHeight)
+		} else {
+			// Left edge
+			pos = NewVec2(-halfWidth, halfHeight-(targetDistance-2.0*worldWidth-worldHeight))
+		}
+
+		// If position is not safe, try to find a nearby safe position
+		if !isPositionSafe(pos, planets, safetyMargin) {
+			// Try random positions near the target
+			found := false
+			for retry := 0; retry < maxRetries; retry++ {
+				// Generate position within 100m of target
+				offsetX := (rand.Float64() - 0.5) * 200.0
+				offsetY := (rand.Float64() - 0.5) * 200.0
+				candidatePos := NewVec2(pos.X+offsetX, pos.Y+offsetY)
+
+				// Clamp to world bounds
+				if candidatePos.X > halfWidth {
+					candidatePos.X = halfWidth
+				}
+				if candidatePos.X < -halfWidth {
+					candidatePos.X = -halfWidth
+				}
+				if candidatePos.Y > halfHeight {
+					candidatePos.Y = halfHeight
+				}
+				if candidatePos.Y < -halfHeight {
+					candidatePos.Y = -halfHeight
+				}
+
+				if isPositionSafe(candidatePos, planets, safetyMargin) {
+					pos = candidatePos
+					found = true
+					break
+				}
+			}
+
+			// If still not safe, use fully random safe position
+			if !found {
+				pos = GenerateSafePosition(planets, worldWidth, worldHeight, safetyMargin, maxRetries)
+			}
+		}
+
+		positions = append(positions, pos)
+	}
+
+	return positions
+}

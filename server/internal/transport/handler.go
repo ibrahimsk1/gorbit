@@ -401,6 +401,8 @@ func (sb *SnapshotBroadcaster) StartBroadcasting(roomCode string) {
 
 	// Check if already broadcasting for this room
 	if _, exists := sb.rooms[roomCode]; exists {
+		logger := observability.NewLogger().WithValues("component", "broadcaster", "room_code", roomCode)
+		logger.Info("Already broadcasting for room, skipping", "room_code", roomCode)
 		return // Already broadcasting
 	}
 
@@ -410,6 +412,9 @@ func (sb *SnapshotBroadcaster) StartBroadcasting(roomCode string) {
 		done:     make(chan struct{}),
 	}
 	sb.rooms[roomCode] = br
+
+	logger := observability.NewLogger().WithValues("component", "broadcaster", "room_code", roomCode)
+	logger.Info("Starting snapshot broadcasting", "room_code", roomCode)
 
 	// Start broadcasting goroutine
 	go sb.broadcastLoop(roomCode, br.done)
@@ -433,6 +438,7 @@ func (sb *SnapshotBroadcaster) StopBroadcasting(roomCode string) {
 // broadcastLoop is the main broadcasting loop for a room.
 // Polls session world state at 10 Hz (100ms interval) and broadcasts to all players.
 func (sb *SnapshotBroadcaster) broadcastLoop(roomCode string, done chan struct{}) {
+	logger := observability.NewLogger().WithValues("component", "broadcaster", "room_code", roomCode)
 	ticker := time.NewTicker(100 * time.Millisecond) // 10 Hz
 	defer ticker.Stop()
 
@@ -481,7 +487,7 @@ func (sb *SnapshotBroadcaster) broadcastLoop(roomCode string, done chan struct{}
 					// Serialize snapshot
 					data, err := json.Marshal(snapshot)
 					if err != nil {
-						// Log error but continue
+						logger.Error(err, "Failed to marshal snapshot", "room_code", roomCode, "player_id", player.PlayerID)
 						continue
 					}
 
@@ -495,14 +501,15 @@ func (sb *SnapshotBroadcaster) broadcastLoop(roomCode string, done chan struct{}
 
 // Global connection registry and snapshot broadcaster (initialized on first use)
 var (
-	globalRegistry    *ConnectionRegistry
-	globalBroadcaster *SnapshotBroadcaster
-	initOnce          sync.Once
+	globalRegistry      *ConnectionRegistry
+	globalBroadcaster   *SnapshotBroadcaster
+	registryInitOnce    sync.Once
+	broadcasterInitOnce sync.Once
 )
 
 // getGlobalRegistry returns the global connection registry (initialized on first call).
 func getGlobalRegistry() *ConnectionRegistry {
-	initOnce.Do(func() {
+	registryInitOnce.Do(func() {
 		globalRegistry = NewConnectionRegistry()
 	})
 	return globalRegistry
@@ -510,7 +517,7 @@ func getGlobalRegistry() *ConnectionRegistry {
 
 // getGlobalBroadcaster returns the global snapshot broadcaster (initialized on first call).
 func getGlobalBroadcaster() *SnapshotBroadcaster {
-	initOnce.Do(func() {
+	broadcasterInitOnce.Do(func() {
 		// Create RoomOperations with adapter functions
 		// NOTE: SetRoomOperationsAdapter must be called from main.go to wire RoomManager
 		roomOps := createRoomOperations()
