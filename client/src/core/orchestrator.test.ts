@@ -67,8 +67,8 @@ class FakeNetworkClient {
     this.connected = false
   }
 
-  async createRoom(): Promise<string> {
-    return 'ABC123'
+  async createRoom(): Promise<void> {
+    // Mock implementation - room state will be received via onRoomState callback
   }
 
   async joinRoom(_roomCode: string): Promise<void> {

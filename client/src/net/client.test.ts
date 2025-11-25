@@ -320,7 +320,7 @@ describe('NetworkClient', () => {
 
   describe('Room Management', () => {
     // Labels: scope:integration loop:g5-network layer:net dep:proto b:room-management
-    it('createRoom sends createRoom message and returns room code', async () => {
+    it('createRoom sends createRoom message and resolves on roomState', async () => {
       await client.connect('ws://localhost:8080/ws')
       
       const createRoomPromise = client.createRoom()
@@ -335,11 +335,16 @@ describe('NetworkClient', () => {
       const sentMessage = JSON.parse(mockWs.sentMessages[0])
       expect(sentMessage).toEqual({ t: 'createRoom' })
       
-      // Simulate roomCreated response
-      mockWs.simulateMessage(JSON.stringify({ t: 'roomCreated', roomCode: 'ABC123' }))
+      // Simulate roomState response (server now sends roomState instead of roomCreated)
+      mockWs.simulateMessage(JSON.stringify({
+        t: 'roomState',
+        roomCode: 'ABC123',
+        players: [{ id: 1, name: '' }],
+        state: 'lobby',
+        hostId: 1
+      }))
       
-      const roomCode = await createRoomPromise
-      expect(roomCode).toBe('ABC123')
+      await expect(createRoomPromise).resolves.toBeUndefined()
     })
 
     it('createRoom throws error when not connected', async () => {
