@@ -4,11 +4,8 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
-	"math"
-	"math/rand"
 	"sync"
 
-	"github.com/gorbit/orbitalrush/internal/session"
 	"github.com/gorbit/orbitalrush/internal/sim/entities"
 	"github.com/gorbit/orbitalrush/internal/sim/rules"
 	"github.com/gorbit/orbitalrush/internal/transport"
@@ -225,7 +222,6 @@ func (rm *RoomManager) LeaveRoom(roomCode string, playerID uint32) error {
 			break
 		}
 	}
-	playerCount := len(room.Players)
 	roomSession := room.Session
 	room.mu.RUnlock()
 
@@ -375,4 +371,3 @@ func (rm *RoomManager) CheckMatchEnd(roomCode string) (bool, error) {
 
 	return true, nil
 }
-
