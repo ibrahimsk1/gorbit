@@ -22,16 +22,15 @@ describe('ReconciliationSystem', () => {
   const createTestSnapshot = (tick: number, overrides?: Partial<SnapshotMessage>): SnapshotMessage => ({
     t: 'snapshot',
     tick,
-    ship: {
-      pos: { x: 10.0, y: 0.0 },
-      vel: { x: 0.0, y: 0.0 },
-      rot: 0.0,
-      energy: 100.0
-    },
+    ships: [
+      { id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+    ],
     planets: [
-      { pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
+      { id: 1, pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
     ],
     pallets: [],
+    worldBounds: { width: 2000, height: 2000 }],
+    myShipId: 1,
     done: false,
     win: false,
     ...overrides
@@ -39,16 +38,15 @@ describe('ReconciliationSystem', () => {
 
   const createTestState = (tick: number, overrides?: Partial<GameState>): GameState => ({
     tick,
-    ship: {
-      pos: { x: 10.0, y: 0.0 },
-      vel: { x: 0.0, y: 0.0 },
-      rot: 0.0,
-      energy: 100.0
-    },
+    ships: [
+      { id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+    ],
     planets: [
-      { pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
+      { id: 1, pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
     ],
     pallets: [],
+    worldBounds: { width: 2000, height: 2000 }],
+    myShipId: 1,
     done: false,
     win: false,
     ...overrides
@@ -116,12 +114,7 @@ describe('ReconciliationSystem', () => {
       
       // Create matching predicted state
       const predictedState = createTestState(1, {
-        ship: {
-          pos: { x: 10.0, y: 0.0 },
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       stateManager.updatePredicted(predictedState)
       
@@ -130,12 +123,7 @@ describe('ReconciliationSystem', () => {
       
       // New snapshot arrives (matches predicted state at tick 1)
       const newSnapshot = createTestSnapshot(1, {
-        ship: {
-          pos: { x: 10.0, y: 0.0 },
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       const result = reconciliationSystem.reconcile(newSnapshot)
@@ -159,13 +147,15 @@ describe('ReconciliationSystem', () => {
       const predicted = stateManager.getPredicted()!
       
       // New snapshot arrives (matches predicted state exactly)
+      const predictedShip = predicted.ships.find(s => s.id === predicted.myShipId)!
       const newSnapshot = createTestSnapshot(predicted.tick, {
-        ship: {
-          pos: { ...predicted.ship.pos },
-          vel: { ...predicted.ship.vel },
-          rot: predicted.ship.rot,
-          energy: predicted.ship.energy
-        },
+        ships: [{
+          id: predictedShip.id,
+          pos: { ...predictedShip.pos },
+          vel: { ...predictedShip.vel },
+          rot: predictedShip.rot,
+          energy: predictedShip.energy
+        }],
         planets: predicted.planets.map(p => ({ pos: { ...p.pos }, radius: p.radius })),
         pallets: predicted.pallets.map(p => ({ id: p.id, pos: { ...p.pos }, active: p.active })),
         done: predicted.done,
@@ -209,12 +199,7 @@ describe('ReconciliationSystem', () => {
       
       // New snapshot arrives with different ship position
       const newSnapshot = createTestSnapshot(1, {
-        ship: {
-          pos: { x: 15.0, y: 0.0 }, // Different position
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 15.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       const result = reconciliationSystem.reconcile(newSnapshot)
@@ -233,12 +218,7 @@ describe('ReconciliationSystem', () => {
       
       // New snapshot arrives with mismatch
       const newSnapshot = createTestSnapshot(1, {
-        ship: {
-          pos: { x: 15.0, y: 0.0 },
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 15.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       reconciliationSystem.reconcile(newSnapshot)
@@ -260,12 +240,7 @@ describe('ReconciliationSystem', () => {
       
       // New snapshot arrives with mismatch
       const newSnapshot = createTestSnapshot(1, {
-        ship: {
-          pos: { x: 15.0, y: 0.0 }, // Different position
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 15.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       const result = reconciliationSystem.reconcile(newSnapshot)
@@ -287,12 +262,7 @@ describe('ReconciliationSystem', () => {
       
       // New snapshot arrives with mismatch
       const newSnapshot = createTestSnapshot(1, {
-        ship: {
-          pos: { x: 15.0, y: 0.0 },
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 15.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       reconciliationSystem.reconcile(newSnapshot)
@@ -316,10 +286,10 @@ describe('ReconciliationSystem', () => {
 
     it('should return true when ship position differs', () => {
       const state1 = createTestState(0, {
-        ship: { pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       const state2 = createTestState(0, {
-        ship: { pos: { x: 15.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+        ships: [{ id: 1, pos: { x: 15.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       const hasMismatch = reconciliationSystem.hasMismatch(state1, state2)
@@ -329,10 +299,10 @@ describe('ReconciliationSystem', () => {
 
     it('should return true when ship velocity differs', () => {
       const state1 = createTestState(0, {
-        ship: { pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       const state2 = createTestState(0, {
-        ship: { pos: { x: 10.0, y: 0.0 }, vel: { x: 5.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 5.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       const hasMismatch = reconciliationSystem.hasMismatch(state1, state2)
@@ -342,10 +312,10 @@ describe('ReconciliationSystem', () => {
 
     it('should return true when ship rotation differs', () => {
       const state1 = createTestState(0, {
-        ship: { pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       const state2 = createTestState(0, {
-        ship: { pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 1.57, energy: 100.0 }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 1.57, energy: 100.0 }]
       })
       
       const hasMismatch = reconciliationSystem.hasMismatch(state1, state2)
@@ -355,10 +325,10 @@ describe('ReconciliationSystem', () => {
 
     it('should return true when ship energy differs', () => {
       const state1 = createTestState(0, {
-        ship: { pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       const state2 = createTestState(0, {
-        ship: { pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 50.0 }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 50.0 }]
       })
       
       const hasMismatch = reconciliationSystem.hasMismatch(state1, state2)
@@ -385,10 +355,10 @@ describe('ReconciliationSystem', () => {
 
     it('should use tolerance for floating-point comparisons', () => {
       const state1 = createTestState(0, {
-        ship: { pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       const state2 = createTestState(0, {
-        ship: { pos: { x: 10.0001, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+        ships: [{ id: 1, pos: { x: 10.0001, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       // Small difference within tolerance should not be considered a mismatch
@@ -550,15 +520,19 @@ describe('ReconciliationSystem', () => {
       const predicted = stateManager.getPredicted()!
       
       // New snapshot arrives (matches predicted state exactly)
+      const predictedShip = predicted.ships.find(s => s.id === predicted.myShipId)!
       const newSnapshot = createTestSnapshot(predicted.tick, {
-        ship: {
-          pos: { ...predicted.ship.pos },
-          vel: { ...predicted.ship.vel },
-          rot: predicted.ship.rot,
-          energy: predicted.ship.energy
-        },
-        planets: predicted.planets.map(p => ({ pos: { ...p.pos }, radius: p.radius })),
+        ships: [{
+          id: predictedShip.id,
+          pos: { ...predictedShip.pos }],
+          vel: { ...predictedShip.vel }],
+          rot: predictedShip.rot,
+          energy: predictedShip.energy
+        }],
+        planets: predicted.planets.map(p => ({ id: p.id, pos: { ...p.pos }, radius: p.radius })),
         pallets: predicted.pallets.map(p => ({ id: p.id, pos: { ...p.pos }, active: p.active })),
+        worldBounds: predicted.worldBounds,
+        myShipId: predicted.myShipId,
         done: predicted.done,
         win: predicted.win
       })
@@ -581,12 +555,7 @@ describe('ReconciliationSystem', () => {
       
       // New snapshot arrives with mismatch
       const newSnapshot = createTestSnapshot(1, {
-        ship: {
-          pos: { x: 15.0, y: 0.0 },
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 15.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       reconciliationSystem.reconcile(newSnapshot)
@@ -609,9 +578,11 @@ describe('ReconciliationSystem', () => {
       
       // Server sends matching snapshot
       const newSnapshot = createTestSnapshot(predicted.tick, {
-        ship: predicted.ship,
+        ships: predicted.ships,
         planets: predicted.planets,
         pallets: predicted.pallets,
+        worldBounds: predicted.worldBounds,
+        myShipId: predicted.myShipId,
         done: predicted.done,
         win: predicted.win
       })
@@ -630,12 +601,7 @@ describe('ReconciliationSystem', () => {
       
       // Server sends different snapshot
       const newSnapshot = createTestSnapshot(1, {
-        ship: {
-          pos: { x: 15.0, y: 0.0 },
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 15.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       const result = reconciliationSystem.reconcile(newSnapshot)
@@ -663,12 +629,7 @@ describe('ReconciliationSystem', () => {
       // Actually, the test expects tick 3, which means the authoritative snapshot should be at tick 0
       // Let me fix: authoritative at tick 0, apply 3 commands -> tick 3
       const newSnapshot = createTestSnapshot(0, {
-        ship: {
-          pos: { x: 20.0, y: 0.0 },
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 20.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       
       const result = reconciliationSystem.reconcile(newSnapshot)
@@ -751,13 +712,15 @@ describe('ReconciliationSystem', () => {
       const predicted = stateManager.getPredicted()!
       
       // Server sends snapshot with identical values (should match)
+      const predictedShip = predicted.ships.find(s => s.id === predicted.myShipId)!
       const newSnapshot = createTestSnapshot(predicted.tick, {
-        ship: {
-          pos: predicted.ship.pos, // Same position
-          vel: predicted.ship.vel, // Same velocity
-          rot: predicted.ship.rot, // Same rotation
-          energy: predicted.ship.energy // Same energy
-        },
+        ships: [{
+          id: predictedShip.id,
+          pos: predictedShip.pos, // Same position
+          vel: predictedShip.vel, // Same velocity
+          rot: predictedShip.rot, // Same rotation
+          energy: predictedShip.energy // Same energy
+        }],
         planets: predicted.planets,
         pallets: predicted.pallets,
         done: predicted.done,

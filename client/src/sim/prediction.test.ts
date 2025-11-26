@@ -20,16 +20,15 @@ describe('PredictionSystem', () => {
   const createTestSnapshot = (tick: number, overrides?: Partial<SnapshotMessage>): SnapshotMessage => ({
     t: 'snapshot',
     tick,
-    ship: {
-      pos: { x: 10.0, y: 0.0 },
-      vel: { x: 0.0, y: 0.0 },
-      rot: 0.0,
-      energy: 100.0
-    },
+    ships: [
+      { id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+    ],
     planets: [
-      { pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
+      { id: 1, pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
     ],
     pallets: [],
+    worldBounds: { width: 2000, height: 2000 },
+    myShipId: 1,
     done: false,
     win: false,
     ...overrides
@@ -37,20 +36,26 @@ describe('PredictionSystem', () => {
 
   const createTestState = (tick: number, overrides?: Partial<GameState>): GameState => ({
     tick,
-    ship: {
-      pos: { x: 10.0, y: 0.0 },
-      vel: { x: 0.0, y: 0.0 },
-      rot: 0.0,
-      energy: 100.0
-    },
+    ships: [
+      { id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+    ],
     planets: [
-      { pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
+      { id: 1, pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
     ],
     pallets: [],
+    worldBounds: { width: 2000, height: 2000 },
+    myShipId: 1,
     done: false,
     win: false,
     ...overrides
   })
+
+
+  // Helper to get player ship from state
+  const getPlayerShip = (state: GameState | null) => {
+    if (!state || !state.ships) return null
+    return state.ships.find(s => s.id === state.myShipId) || null
+  }
 
   beforeEach(() => {
     stateManager = new StateManager()
@@ -108,12 +113,7 @@ describe('PredictionSystem', () => {
 
     it('should use authoritative state as base for prediction', () => {
       const snapshot = createTestSnapshot(5, {
-        ship: {
-          pos: { x: 20.0, y: 10.0 },
-          vel: { x: 5.0, y: 2.0 },
-          rot: 1.57,
-          energy: 50.0
-        }
+        ships: [{ id: 1, pos: { x: 20.0, y: 10.0 }, vel: { x: 5.0, y: 2.0 }, rot: 1.57, energy: 50.0 }]
       })
       stateManager.updateAuthoritative(snapshot)
       
@@ -158,20 +158,17 @@ describe('PredictionSystem', () => {
       
       const predicted = predictionSystem.getPredictedState()
       expect(predicted).not.toBeNull()
+      const playerShip = getPlayerShip(predicted)
+      expect(playerShip).not.toBeNull()
       // Velocity should increase (thrust applied)
-      expect(predicted!.ship.vel.x).toBeGreaterThan(0)
+      expect(playerShip!.vel.x).toBeGreaterThan(0)
       // Energy should decrease (drained by thrust)
-      expect(predicted!.ship.energy).toBeLessThan(100.0)
+      expect(playerShip!.energy).toBeLessThan(100.0)
     })
 
     it('should predict with turn input correctly', () => {
       const snapshot = createTestSnapshot(0, {
-        ship: {
-          pos: { x: 0.0, y: 0.0 },
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 0.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       stateManager.updateAuthoritative(snapshot)
       
@@ -180,18 +177,15 @@ describe('PredictionSystem', () => {
       
       const predicted = predictionSystem.getPredictedState()
       expect(predicted).not.toBeNull()
+      const playerShip = getPlayerShip(predicted)
+      expect(playerShip).not.toBeNull()
       // Rotation should change
-      expect(predicted!.ship.rot).toBeGreaterThan(0)
+      expect(playerShip!.rot).toBeGreaterThan(0)
     })
 
     it('should predict with both thrust and turn input correctly', () => {
       const snapshot = createTestSnapshot(0, {
-        ship: {
-          pos: { x: 0.0, y: 0.0 },
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 0.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       stateManager.updateAuthoritative(snapshot)
       
@@ -200,20 +194,17 @@ describe('PredictionSystem', () => {
       
       const predicted = predictionSystem.getPredictedState()
       expect(predicted).not.toBeNull()
+      const playerShip = getPlayerShip(predicted)
+      expect(playerShip).not.toBeNull()
       // Both velocity and rotation should change
-      const velLength = Math.sqrt(predicted!.ship.vel.x ** 2 + predicted!.ship.vel.y ** 2)
+      const velLength = Math.sqrt(playerShip!.vel.x ** 2 + playerShip!.vel.y ** 2)
       expect(velLength).toBeGreaterThan(0)
-      expect(predicted!.ship.rot).toBeGreaterThan(0)
+      expect(playerShip!.rot).toBeGreaterThan(0)
     })
 
     it('should predict with no input (gravity only)', () => {
       const snapshot = createTestSnapshot(0, {
-        ship: {
-          pos: { x: 10.0, y: 0.0 },
-          vel: { x: 0.0, y: 0.0 },
-          rot: 0.0,
-          energy: 100.0
-        }
+        ships: [{ id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }]
       })
       stateManager.updateAuthoritative(snapshot)
       
@@ -222,8 +213,10 @@ describe('PredictionSystem', () => {
       
       const predicted = predictionSystem.getPredictedState()
       expect(predicted).not.toBeNull()
+      const playerShip = getPlayerShip(predicted)
+      expect(playerShip).not.toBeNull()
       // Position should change (gravity pulls ship toward planet)
-      const posChanged = predicted!.ship.pos.x !== 10.0 || predicted!.ship.pos.y !== 0.0
+      const posChanged = playerShip!.pos.x !== 10.0 || playerShip!.pos.y !== 0.0
       expect(posChanged).toBe(true)
     })
   })
@@ -292,20 +285,22 @@ describe('PredictionSystem', () => {
       predictionSystem.predict({ thrust: 1.0, turn: 0.0 })
       
       const firstState = predictionSystem.getPredictedState()!
-      const firstPosX = firstState.ship.pos.x
-      const firstPosY = firstState.ship.pos.y
-      const firstVelX = firstState.ship.vel.x
-      const firstVelY = firstState.ship.vel.y
+      const firstShip = getPlayerShip(firstState)!
+      const firstPosX = firstShip.pos.x
+      const firstPosY = firstShip.pos.y
+      const firstVelX = firstShip.vel.x
+      const firstVelY = firstShip.vel.y
       
       // Second prediction should build on first
       commandHistory.addCommand(2, 1.0, 0.0)
       predictionSystem.predict({ thrust: 1.0, turn: 0.0 })
       
       const secondState = predictionSystem.getPredictedState()!
-      const secondPosX = secondState.ship.pos.x
-      const secondPosY = secondState.ship.pos.y
-      const secondVelX = secondState.ship.vel.x
-      const secondVelY = secondState.ship.vel.y
+      const secondShip = getPlayerShip(secondState)!
+      const secondPosX = secondShip.pos.x
+      const secondPosY = secondShip.pos.y
+      const secondVelX = secondShip.vel.x
+      const secondVelY = secondShip.vel.y
       
       // Position and velocity should have progressed from first prediction
       // Check that tick incremented (proves we're using predicted state as base)
@@ -524,8 +519,10 @@ describe('PredictionSystem', () => {
       
       const predicted = predictionSystem.getPredictedState()
       expect(predicted).not.toBeNull()
+      const playerShip = getPlayerShip(predicted)
+      expect(playerShip).not.toBeNull()
       // Rotation should change (turn input)
-      expect(predicted!.ship.rot).toBeGreaterThan(0)
+      expect(playerShip!.rot).toBeGreaterThan(0)
     })
 
     it('should track which commands are predicted (not yet confirmed)', () => {

@@ -16,23 +16,28 @@ describe('InterpolationSystem', () => {
   const createTestSnapshot = (tick: number, overrides?: Partial<SnapshotMessage>): SnapshotMessage => ({
     t: 'snapshot',
     tick,
-    ship: {
-      pos: { x: 100, y: 200 },
-      vel: { x: 10, y: -5 },
-      rot: 1.57,
-      energy: 75.5
-    },
+    ships: [
+      { id: 1, pos: { x: 100, y: 200 }, vel: { x: 10, y: -5 }, rot: 1.57, energy: 75.5 }
+    ],
     planets: [
-      { pos: { x: 0, y: 0 }, radius: 15.0 }
+      { id: 1, pos: { x: 0, y: 0 }, radius: 15.0 }
     ],
     pallets: [
       { id: 1, pos: { x: 50, y: 50 }, active: true },
       { id: 2, pos: { x: -50, y: -50 }, active: false }
     ],
+    worldBounds: { width: 2000, height: 2000 },
+    myShipId: 1,
     done: false,
     win: false,
     ...overrides
   })
+
+  // Helper to get player's ship from interpolated state
+  const getPlayerShip = (state: any) => {
+    if (!state || !state.ships) return null
+    return state.ships.find((s: any) => s.id === state.myShipId) || null
+  }
 
   beforeEach(() => {
     stateManager = new StateManager()
@@ -105,8 +110,8 @@ describe('InterpolationSystem', () => {
     })
 
     it('should handle duplicate snapshots (same tick) by replacing with newer', () => {
-      const snapshot1 = createTestSnapshot(0, { ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 } })
-      const snapshot2 = createTestSnapshot(0, { ship: { pos: { x: 200, y: 300 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 } })
+      const snapshot1 = createTestSnapshot(0, { ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }] })
+      const snapshot2 = createTestSnapshot(0, { ships: [{ id: 1, pos: { x: 200, y: 300 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }] })
       const timestamp1 = 1000
       const timestamp2 = timestamp1 + 50
       
@@ -176,10 +181,10 @@ describe('InterpolationSystem', () => {
       const system = new InterpolationSystem(stateManager, bufferMs)
       
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 10, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 10, y: 0 }, rot: 0, energy: 100 }]
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 100, y: 0 }, vel: { x: 10, y: 0 }, rot: Math.PI / 2, energy: 50 }
+        ships: [{ id: 1, pos: { x: 100, y: 0 }, vel: { x: 10, y: 0 }, rot: Math.PI / 2, energy: 50 }]
       })
       
       const timestamp1 = 1000
@@ -200,9 +205,10 @@ describe('InterpolationSystem', () => {
       
       const interpolated = stateManager.getInterpolated()
       expect(interpolated).not.toBeNull()
-      expect(interpolated?.ship.pos.x).toBeCloseTo(50, 1) // Midpoint between 0 and 100
-      expect(interpolated?.ship.pos.y).toBeCloseTo(0, 1)
-      expect(interpolated?.ship.energy).toBeCloseTo(75, 1) // Midpoint between 100 and 50
+      const playerShip = getPlayerShip(interpolated)
+      expect(playerShip?.pos.x).toBeCloseTo(50, 1) // Midpoint between 0 and 100
+      expect(playerShip?.pos.y).toBeCloseTo(0, 1)
+      expect(playerShip?.energy).toBeCloseTo(75, 1) // Midpoint between 100 and 50
     })
 
     it('should interpolate at start (factor = 0.0, uses older snapshot)', () => {
@@ -210,10 +216,10 @@ describe('InterpolationSystem', () => {
       const system = new InterpolationSystem(stateManager, bufferMs)
       
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 100, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }
+        ships: [{ id: 1, pos: { x: 100, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }]
       })
       
       const timestamp1 = 1000
@@ -227,8 +233,9 @@ describe('InterpolationSystem', () => {
       
       const interpolated = stateManager.getInterpolated()
       expect(interpolated).not.toBeNull()
-      expect(interpolated?.ship.pos.x).toBeCloseTo(0, 0.1) // Should use older snapshot
-      expect(interpolated?.ship.energy).toBeCloseTo(100, 0.1)
+      const playerShip = getPlayerShip(interpolated)
+      expect(playerShip?.pos.x).toBeCloseTo(0, 0.1) // Should use older snapshot
+      expect(playerShip?.energy).toBeCloseTo(100, 0.1)
     })
 
     it('should interpolate at end (factor = 1.0, uses newer snapshot)', () => {
@@ -236,10 +243,10 @@ describe('InterpolationSystem', () => {
       const system = new InterpolationSystem(stateManager, bufferMs)
       
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 100, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }
+        ships: [{ id: 1, pos: { x: 100, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }]
       })
       
       const timestamp1 = 1000
@@ -253,8 +260,9 @@ describe('InterpolationSystem', () => {
       
       const interpolated = stateManager.getInterpolated()
       expect(interpolated).not.toBeNull()
-      expect(interpolated?.ship.pos.x).toBeCloseTo(100, 0.1) // Should use newer snapshot
-      expect(interpolated?.ship.energy).toBeCloseTo(50, 0.1)
+      const playerShip = getPlayerShip(interpolated)
+      expect(playerShip?.pos.x).toBeCloseTo(100, 0.1) // Should use newer snapshot
+      expect(playerShip?.energy).toBeCloseTo(50, 0.1)
     })
 
     it('should update interpolated state in StateManager', () => {
@@ -278,10 +286,10 @@ describe('InterpolationSystem', () => {
       const system = new InterpolationSystem(stateManager, bufferMs)
       
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 200, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 200, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
       })
       
       const timestamp1 = 1000
@@ -294,8 +302,9 @@ describe('InterpolationSystem', () => {
       system.update(currentTime)
       
       const interpolated = stateManager.getInterpolated()
-      expect(interpolated?.ship.pos.x).toBeCloseTo(50, 1) // 0 + (200-0) * 0.25
-      expect(interpolated?.ship.pos.y).toBeCloseTo(25, 1) // 0 + (100-0) * 0.25
+      const playerShip = getPlayerShip(interpolated)
+      expect(playerShip?.pos.x).toBeCloseTo(50, 1) // 0 + (200-0) * 0.25
+      expect(playerShip?.pos.y).toBeCloseTo(25, 1) // 0 + (100-0) * 0.25
     })
 
     it('should interpolate ship velocity correctly', () => {
@@ -303,10 +312,10 @@ describe('InterpolationSystem', () => {
       const system = new InterpolationSystem(stateManager, bufferMs)
       
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 20, y: 10 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 20, y: 10 }, rot: 0, energy: 100 }]
       })
       
       const timestamp1 = 1000
@@ -319,8 +328,9 @@ describe('InterpolationSystem', () => {
       system.update(currentTime)
       
       const interpolated = stateManager.getInterpolated()
-      expect(interpolated?.ship.vel.x).toBeCloseTo(10, 1) // 0 + (20-0) * 0.5
-      expect(interpolated?.ship.vel.y).toBeCloseTo(5, 1) // 0 + (10-0) * 0.5
+      const playerShip = getPlayerShip(interpolated)
+      expect(playerShip?.vel.x).toBeCloseTo(10, 1) // 0 + (20-0) * 0.5
+      expect(playerShip?.vel.y).toBeCloseTo(5, 1) // 0 + (10-0) * 0.5
     })
 
     it('should interpolate ship rotation correctly (with wrap-around)', () => {
@@ -328,10 +338,10 @@ describe('InterpolationSystem', () => {
       const system = new InterpolationSystem(stateManager, bufferMs)
       
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: Math.PI * 1.9, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: Math.PI * 1.9, energy: 100 }]
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: Math.PI * 0.1, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: Math.PI * 0.1, energy: 100 }]
       })
       
       const timestamp1 = 1000
@@ -347,7 +357,8 @@ describe('InterpolationSystem', () => {
       // Should interpolate along shortest path (crossing 0)
       // From 1.9π to 0.1π, shortest path is through 0
       // Expected: close to 0 (or 2π)
-      const rot = interpolated?.ship.rot ?? 0
+      const playerShip = getPlayerShip(interpolated)
+      const rot = playerShip?.rot ?? 0
       expect(rot).toBeLessThan(0.5) // Should be close to 0
     })
 
@@ -356,10 +367,10 @@ describe('InterpolationSystem', () => {
       const system = new InterpolationSystem(stateManager, bufferMs)
       
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 0 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 0 }]
       })
       
       const timestamp1 = 1000
@@ -372,7 +383,8 @@ describe('InterpolationSystem', () => {
       system.update(currentTime)
       
       const interpolated = stateManager.getInterpolated()
-      expect(interpolated?.ship.energy).toBeCloseTo(25, 1) // 100 + (0-100) * 0.75
+      const playerShip = getPlayerShip(interpolated)
+      expect(playerShip?.energy).toBeCloseTo(25, 1) // 100 + (0-100) * 0.75
     })
 
     it('should interpolate planet positions correctly', () => {
@@ -470,7 +482,7 @@ describe('InterpolationSystem', () => {
   describe('Interpolation with Single Snapshot', () => {
     it('should use snapshot directly when only one available', () => {
       const snapshot = createTestSnapshot(0, {
-        ship: { pos: { x: 100, y: 200 }, vel: { x: 10, y: -5 }, rot: 1.57, energy: 75.5 }
+        ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 10, y: -5 }, rot: 1.57, energy: 75.5 }]
       })
       const timestamp = performance.now()
       
@@ -479,9 +491,10 @@ describe('InterpolationSystem', () => {
       
       const interpolated = stateManager.getInterpolated()
       expect(interpolated).not.toBeNull()
-      expect(interpolated?.ship.pos.x).toBe(100)
-      expect(interpolated?.ship.pos.y).toBe(200)
-      expect(interpolated?.ship.energy).toBe(75.5)
+      const playerShip = getPlayerShip(interpolated)
+      expect(playerShip?.pos.x).toBe(100)
+      expect(playerShip?.pos.y).toBe(200)
+      expect(playerShip?.energy).toBe(75.5)
     })
 
     it('should update interpolated state correctly with single snapshot', () => {
@@ -516,10 +529,10 @@ describe('InterpolationSystem', () => {
   describe('Interpolation Edge Cases', () => {
     it('should use newer snapshot when snapshots have same timestamp', () => {
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 100, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }
+        ships: [{ id: 1, pos: { x: 100, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }]
       })
       const timestamp = 1000
       
@@ -530,7 +543,8 @@ describe('InterpolationSystem', () => {
       
       const interpolated = stateManager.getInterpolated()
       // Should use newer snapshot (snapshot2)
-      expect(interpolated?.ship.pos.x).toBe(100)
+      const playerShip = getPlayerShip(interpolated)
+      expect(playerShip?.pos.x).toBe(100)
     })
 
     it('should sort snapshots correctly when out of order', () => {
@@ -551,10 +565,10 @@ describe('InterpolationSystem', () => {
       const system = new InterpolationSystem(stateManager, bufferMs)
       
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 200, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }
+        ships: [{ id: 1, pos: { x: 200, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }]
       })
       
       const timestamp1 = 1000
@@ -569,7 +583,8 @@ describe('InterpolationSystem', () => {
       
       const interpolated = stateManager.getInterpolated()
       // Should use oldest snapshot
-      expect(interpolated?.ship.pos.x).toBe(100)
+      const playerShip = getPlayerShip(interpolated)
+      expect(playerShip?.pos.x).toBe(100)
     })
 
     it('should use newest snapshot when target time is after newest', () => {
@@ -577,10 +592,10 @@ describe('InterpolationSystem', () => {
       const system = new InterpolationSystem(stateManager, bufferMs)
       
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }]
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 200, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }
+        ships: [{ id: 1, pos: { x: 200, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }]
       })
       
       const timestamp1 = 1000
@@ -595,7 +610,8 @@ describe('InterpolationSystem', () => {
       
       const interpolated = stateManager.getInterpolated()
       // Should use newest snapshot
-      expect(interpolated?.ship.pos.x).toBe(200)
+      const playerShip = getPlayerShip(interpolated)
+      expect(playerShip?.pos.x).toBe(200)
     })
 
     it('should handle planets array length change (use newer array)', () => {
