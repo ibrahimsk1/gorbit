@@ -98,8 +98,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 0,
-        ship: initialSnapshot.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: initialSnapshot.ships,
+        worldBounds: initialSnapshot.worldBounds,
+        myShipId: initialSnapshot.myShipId,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -124,8 +126,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 1,
-        ship: serverSnapshot.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: serverSnapshot.ships,
+        worldBounds: serverSnapshot.worldBounds,
+        myShipId: serverSnapshot.myShipId,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -166,8 +170,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 0,
-        ship: initialSnapshot.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: initialSnapshot.ships,
+        worldBounds: initialSnapshot.worldBounds,
+        myShipId: initialSnapshot.myShipId,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -208,8 +214,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 0,
-        ship: snapshot.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -249,8 +257,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 0,
-        ship: snapshot.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -292,8 +302,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 0,
-        ship: snapshot1.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId1.ships,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -304,8 +316,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 1,
-        ship: snapshot2.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId2.ships,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -351,8 +365,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 0,
-        ship: snapshot1.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId1.ships,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -363,8 +379,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 1,
-        ship: snapshot2.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId2.ships,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -399,8 +417,10 @@ describe('End-to-End Client Flow', () => {
         mockWs.simulateMessage(JSON.stringify({
           t: 'snapshot',
           tick: i,
-          ship: snapshot.ship,
-          sun: { pos: { x: 0, y: 0 }, radius: 50 },
+          ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId,
+          planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
           pallets: [],
           done: false,
           win: false
@@ -432,8 +452,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 0,
-        ship: snapshot1.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId1.ships,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -444,8 +466,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 1,
-        ship: snapshot2.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId2.ships,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -479,8 +503,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 1,
-        ship: snapshot.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -507,17 +533,23 @@ describe('End-to-End Client Flow', () => {
 
       // Send snapshots
       const snapshot1 = createTestSnapshot(0, {
-        ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
       const snapshot2 = createTestSnapshot(1, {
-        ship: { pos: { x: 200, y: 300 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 200, y: 300 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
 
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 0,
-        ship: snapshot1.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId1.ships,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false
@@ -535,8 +567,10 @@ describe('End-to-End Client Flow', () => {
       mockWs.simulateMessage(JSON.stringify({
         t: 'snapshot',
         tick: 1,
-        ship: snapshot2.ship,
-        sun: { pos: { x: 0, y: 0 }, radius: 50 },
+        ships: snapshot.ships,
+        worldBounds: snapshot.worldBounds,
+        myShipId: snapshot.myShipId2.ships,
+        planets: [{ id: 1,  pos: { x: 0, y: 0 }, radius: 50 }],
         pallets: [],
         done: false,
         win: false

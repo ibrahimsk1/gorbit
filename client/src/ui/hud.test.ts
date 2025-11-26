@@ -152,12 +152,9 @@ describe('HUD', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: {
-          pos: { x: 100, y: 100 },
-          vel: { x: 0, y: 0 },
-          rot: 0,
-          energy: 100
-        },
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [],
         pallets: [
           { id: 1, pos: { x: 200, y: 200 }, active: true },
@@ -201,12 +198,9 @@ describe('HUD', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: {
-          pos: { x: 100, y: 100 },
-          vel: { x: 0, y: 0 },
-          rot: 0,
-          energy: 100
-        },
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [],
         pallets: [
           { id: 1, pos: { x: 200, y: 200 }, active: false },
@@ -230,12 +224,9 @@ describe('HUD', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: {
-          pos: { x: 100, y: 100 },
-          vel: { x: 0, y: 0 },
-          rot: 0,
-          energy: 100
-        },
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [],
         pallets: [],
         done: true,
@@ -255,12 +246,9 @@ describe('HUD', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: {
-          pos: { x: 100, y: 100 },
-          vel: { x: 0, y: 0 },
-          rot: 0,
-          energy: 100
-        },
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [],
         pallets: [],
         done: true,
@@ -281,12 +269,9 @@ describe('HUD', () => {
       const snapshot1: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: {
-          pos: { x: 100, y: 100 },
-          vel: { x: 0, y: 0 },
-          rot: 0,
-          energy: 100
-        },
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [],
         pallets: [],
         done: true,
@@ -327,12 +312,9 @@ describe('HUD', () => {
       const snapshot: SnapshotMessage = {
         t: 'snapshot',
         tick: 1,
-        ship: {
-          pos: { x: 100, y: 100 },
-          vel: { x: 0, y: 0 },
-          rot: 0,
-          energy: 75.0
-        },
+        ships: [{ id: 1, pos: { x: 100, y: 100 }, vel: { x: 0, y: 0 }, rot: 0, energy: 75.0 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [],
         pallets: [
           { id: 1, pos: { x: 200, y: 200 }, active: true },

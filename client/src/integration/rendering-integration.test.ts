@@ -70,9 +70,11 @@ describe('Rendering Integration', () => {
   })
 
   describe('Sprite Rendering from State', () => {
-    it('renders ship sprite from state.ship', () => {
+    it('renders ship sprite from state.ships[0]', () => {
       const gameState = createTestState(0, {
-        ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [] // No planets
       })
       
@@ -87,7 +89,9 @@ describe('Rendering Integration', () => {
 
     it('renders planet sprites from state.planets array', () => {
       const gameState = createTestState(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [
           { pos: { x: 400, y: 300 }, radius: 50 },
           { pos: { x: 600, y: 400 }, radius: 30 }
@@ -104,7 +108,9 @@ describe('Rendering Integration', () => {
 
     it('renders pallet sprites from state.pallets array', () => {
       const gameState = createTestState(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [], // No planets
         pallets: [
           { id: 1, pos: { x: 50, y: 50 }, active: true },
@@ -133,7 +139,9 @@ describe('Rendering Integration', () => {
   describe('Sprite Updates', () => {
     it('updates sprite positions from state', () => {
       const gameState1 = createTestState(0, {
-        ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
       
       stateManager.updateInterpolated(gameState1)
@@ -145,7 +153,9 @@ describe('Rendering Integration', () => {
       const y1 = sprite1.y
       
       const gameState2 = createTestState(0, {
-        ship: { pos: { x: 200, y: 300 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 200, y: 300 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
       
       stateManager.updateInterpolated(gameState2)
@@ -158,7 +168,9 @@ describe('Rendering Integration', () => {
 
     it('updates sprite rotations from state', () => {
       const gameState1 = createTestState(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
       
       stateManager.updateInterpolated(gameState1)
@@ -169,7 +181,9 @@ describe('Rendering Integration', () => {
       const rot1 = sprite1.rotation
       
       const gameState2 = createTestState(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 1.57, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 1.57, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
       
       stateManager.updateInterpolated(gameState2)
@@ -181,14 +195,18 @@ describe('Rendering Integration', () => {
 
     it('updates sprite visual states from state', () => {
       const gameState1 = createTestState(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
       
       stateManager.updateInterpolated(gameState1)
       renderer.update()
       
       const gameState2 = createTestState(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 50 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
       
       stateManager.updateInterpolated(gameState2)
@@ -201,7 +219,9 @@ describe('Rendering Integration', () => {
 
     it('reflects state changes correctly', () => {
       const gameState = createTestState(0, {
-        ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
       
       stateManager.updateInterpolated(gameState)
@@ -297,7 +317,9 @@ describe('Rendering Integration', () => {
 
     it('renders multiple entities correctly', () => {
       const gameState = createTestState(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [
           { pos: { x: 400, y: 300 }, radius: 50 },
           { pos: { x: 600, y: 400 }, radius: 30 }
@@ -392,7 +414,9 @@ describe('Headless Render Checks', () => {
 
     it('renders sprites to canvas (even if not visible)', () => {
       const gameState = createTestState(0, {
-        ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [
           { pos: { x: 400, y: 300 }, radius: 50 }
         ]
@@ -412,7 +436,9 @@ describe('Headless Render Checks', () => {
 
     it('sets sprite properties correctly (position, rotation, visual)', () => {
       const gameState = createTestState(0, {
-        ship: { pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 1.57, energy: 75 }
+        ships: [{ id: 1, pos: { x: 100, y: 200 }, vel: { x: 0, y: 0 }, rot: 1.57, energy: 75 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
       
       stateManager.updateInterpolated(gameState)
@@ -443,7 +469,9 @@ describe('Headless Render Checks', () => {
 
     it('sprites exist in scene hierarchy', () => {
       const gameState = createTestState(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [
           { pos: { x: 400, y: 300 }, radius: 50 }
         ]
@@ -462,7 +490,9 @@ describe('Headless Render Checks', () => {
 
     it('sprite positions match state positions', () => {
       const gameState = createTestState(0, {
-        ship: { pos: { x: 150, y: 250 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }
+        ships: [{ id: 1, pos: { x: 150, y: 250 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1
       })
       
       stateManager.updateInterpolated(gameState)
@@ -477,7 +507,9 @@ describe('Headless Render Checks', () => {
 
     it('sprite counts match entity counts', () => {
       const gameState = createTestState(0, {
-        ship: { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 },
+        ships: [{ id: 1, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, rot: 0, energy: 100 }],
+        worldBounds: { width: 2000, height: 2000 },
+        myShipId: 1,
         planets: [
           { pos: { x: 400, y: 300 }, radius: 50 },
           { pos: { x: 600, y: 400 }, radius: 30 }
