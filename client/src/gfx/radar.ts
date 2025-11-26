@@ -93,14 +93,18 @@ export class Radar {
   }
 
   /**
-   * Renders world bounds as rectangle outline.
+   * Renders world bounds as rectangle outline with gray background.
    */
   private renderWorldBounds(): void {
     if (!this.graphics) return
     
-    // Draw rectangle outline covering entire radar area
+    // Draw gray background covering entire radar area
     this.graphics.rect(0, 0, this.radarWidth, this.radarHeight)
-    this.graphics.stroke({ width: 2, color: 0xffffff }) // White outline
+    this.graphics.fill(0x808080) // Gray background
+    
+    // Draw rectangle outline on top
+    this.graphics.rect(0, 0, this.radarWidth, this.radarHeight)
+    this.graphics.stroke({ width: 2, color: 0xffffff }) // White outline for contrast
   }
 
   /**
