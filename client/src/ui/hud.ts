@@ -27,28 +27,28 @@ export class HUD {
     this.scene = scene
     this.stateManager = stateManager
 
-    // Get UI layer from scene
-    const uiLayer = this.scene.getLayer('ui')
+    // Get HUD layer from scene (separate from UI layer for menu components)
+    const hudLayer = this.scene.getLayer('hud')
 
-    // Initialize components
-    this.energyBar = new EnergyBar(uiLayer, {
+    // Initialize components - positioned at top-left
+    this.energyBar = new EnergyBar(hudLayer, {
       x: 20,
-      y: 20,
+      y: 10,
       width: 200,
       height: 20
     })
 
-    this.palletCounter = new PalletCounter(uiLayer, {
+    this.palletCounter = new PalletCounter(hudLayer, {
       x: 20,
-      y: 50
+      y: 40
     })
 
-    this.playerIndicator = new PlayerIndicator(uiLayer, {
+    this.playerIndicator = new PlayerIndicator(hudLayer, {
       x: 20,
-      y: 80
+      y: 70
     })
 
-    this.gameBanner = new GameBanner(uiLayer)
+    this.gameBanner = new GameBanner(hudLayer)
   }
 
   /**
@@ -108,7 +108,7 @@ export class HUD {
     // Update banner size if needed (for responsive layout)
     const app = this.scene.getRoot().parent
     if (app && 'screen' in app) {
-      const screen = (app as any).screen
+      const screen = (app as { screen?: { width?: number; height?: number } }).screen
       if (screen && screen.width && screen.height) {
         this.gameBanner.updateSize(screen.width, screen.height)
       }

@@ -174,7 +174,7 @@ export class HUD {
 Creates a new HUD coordinator.
 
 **Parameters:**
-- `scene: Scene` - Scene for UI layer access
+- `scene: Scene` - Scene for HUD layer access
 - `stateManager: StateManager` - State manager for game state
 
 **Returns:** HUD instance
@@ -204,9 +204,10 @@ hud.destroy()
 ### Semantics
 
 - HUD manages four UI components: EnergyBar, PalletCounter, GameBanner, PlayerIndicator
-- Components are created in UI layer during construction
+- Components are created in 'hud' layer during construction (separate from 'ui' layer used by menus)
+- HUD layer is positioned at (0, 0) by Renderer for absolute screen coordinates
 - Update reads game state and updates all components
-- Components are positioned at fixed screen coordinates
+- Components are positioned at fixed screen coordinates (top-left)
 - Game banner shows win/lose messages based on game state
 - Player indicator shows player name/ID (from myShipId)
 
@@ -218,8 +219,9 @@ hud.destroy()
 
 ### Invariants
 
-- HUD always has three components (energy bar, pallet counter, game banner)
-- Components are always in UI layer
+- HUD always has four components (energy bar, pallet counter, player indicator, game banner)
+- Components are always in 'hud' layer (not 'ui' layer)
+- HUD layer is positioned at (0, 0) for absolute screen coordinates
 - Update reads from render state (interpolated or authoritative)
 - Destroy cleans up all components
 

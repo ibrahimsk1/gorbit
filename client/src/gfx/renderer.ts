@@ -65,6 +65,11 @@ export class Renderer {
     const pixiAppScreen = pixiApp.screen
     radarLayer.x = pixiAppScreen.width - this.RADAR_WIDTH - 10 // 10px margin from edge
     radarLayer.y = 10 // 10px margin from top
+
+    // Position HUD layer at top-left (0, 0) for absolute screen coordinates
+    const hudLayer = scene.getLayer('hud')
+    hudLayer.x = 0
+    hudLayer.y = 0
   }
 
   /**

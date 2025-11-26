@@ -54,13 +54,13 @@ describe('HUD', () => {
     })
 
     it('initializes all components (EnergyBar, PalletCounter, PlayerIndicator, GameBanner)', () => {
-      const uiLayer = scene.getLayer('ui')
-      expect(uiLayer.children.length).toBeGreaterThan(0)
+      const hudLayer = scene.getLayer('hud')
+      expect(hudLayer.children.length).toBeGreaterThan(0)
       
-      const energyBar = uiLayer.children.find(child => child.label === 'energy-bar')
-      const palletCounter = uiLayer.children.find(child => child.label === 'pallet-counter')
-      const playerIndicator = uiLayer.children.find(child => child.label === 'player-indicator')
-      const gameBanner = uiLayer.children.find(child => child.label === 'game-banner')
+      const energyBar = hudLayer.children.find(child => child.label === 'energy-bar')
+      const palletCounter = hudLayer.children.find(child => child.label === 'pallet-counter')
+      const playerIndicator = hudLayer.children.find(child => child.label === 'player-indicator')
+      const gameBanner = hudLayer.children.find(child => child.label === 'game-banner')
       
       expect(energyBar).toBeDefined()
       expect(palletCounter).toBeDefined()
@@ -94,8 +94,8 @@ describe('HUD', () => {
 
       // Energy bar should be updated (we can't easily verify the exact width without accessing internals,
       // but we can verify the update doesn't throw and components exist)
-      const uiLayer = scene.getLayer('ui')
-      const energyBar = uiLayer.children.find(child => child.label === 'energy-bar')
+      const hudLayer = scene.getLayer('hud')
+      const energyBar = hudLayer.children.find(child => child.label === 'energy-bar')
       expect(energyBar).toBeDefined()
     })
 
@@ -141,8 +141,8 @@ describe('HUD', () => {
         hud.update()
       }
 
-      const uiLayer = scene.getLayer('ui')
-      const energyBar = uiLayer.children.find(child => child.label === 'energy-bar')
+      const hudLayer = scene.getLayer('hud')
+      const energyBar = hudLayer.children.find(child => child.label === 'energy-bar')
       expect(energyBar).toBeDefined()
     })
   })
@@ -168,8 +168,8 @@ describe('HUD', () => {
       stateManager.updateAuthoritative(snapshot)
       hud.update()
 
-      const uiLayer = scene.getLayer('ui')
-      const palletCounter = uiLayer.children.find(child => child.label === 'pallet-counter')
+      const hudLayer = scene.getLayer('hud')
+      const palletCounter = hudLayer.children.find(child => child.label === 'pallet-counter')
       expect(palletCounter).toBeDefined()
     })
 
@@ -189,8 +189,8 @@ describe('HUD', () => {
       stateManager.updateAuthoritative(snapshot)
       hud.update()
 
-      const uiLayer = scene.getLayer('ui')
-      const palletCounter = uiLayer.children.find(child => child.label === 'pallet-counter')
+      const hudLayer = scene.getLayer('hud')
+      const palletCounter = hudLayer.children.find(child => child.label === 'pallet-counter')
       expect(palletCounter).toBeDefined()
     })
 
@@ -213,8 +213,8 @@ describe('HUD', () => {
       stateManager.updateAuthoritative(snapshot)
       hud.update()
 
-      const uiLayer = scene.getLayer('ui')
-      const palletCounter = uiLayer.children.find(child => child.label === 'pallet-counter')
+      const hudLayer = scene.getLayer('hud')
+      const palletCounter = hudLayer.children.find(child => child.label === 'pallet-counter')
       expect(palletCounter).toBeDefined()
     })
   })
@@ -236,8 +236,8 @@ describe('HUD', () => {
       stateManager.updateAuthoritative(snapshot)
       hud.update()
 
-      const uiLayer = scene.getLayer('ui')
-      const gameBanner = uiLayer.children.find(child => child.label === 'game-banner')
+      const hudLayer = scene.getLayer('hud')
+      const gameBanner = hudLayer.children.find(child => child.label === 'game-banner')
       expect(gameBanner).toBeDefined()
       expect(gameBanner.visible).toBe(true)
     })
@@ -258,8 +258,8 @@ describe('HUD', () => {
       stateManager.updateAuthoritative(snapshot)
       hud.update()
 
-      const uiLayer = scene.getLayer('ui')
-      const gameBanner = uiLayer.children.find(child => child.label === 'game-banner')
+      const hudLayer = scene.getLayer('hud')
+      const gameBanner = hudLayer.children.find(child => child.label === 'game-banner')
       expect(gameBanner).toBeDefined()
       expect(gameBanner.visible).toBe(true)
     })
@@ -281,8 +281,8 @@ describe('HUD', () => {
       stateManager.updateAuthoritative(snapshot1)
       hud.update()
 
-      const uiLayer1 = scene.getLayer('ui')
-      const gameBanner1 = uiLayer1.children.find(child => child.label === 'game-banner')
+      const hudLayer1 = scene.getLayer('hud')
+      const gameBanner1 = hudLayer1.children.find(child => child.label === 'game-banner')
       expect(gameBanner1?.visible).toBe(true)
 
       // Then hide banner
@@ -301,8 +301,8 @@ describe('HUD', () => {
       stateManager.updateAuthoritative(snapshot2)
       hud.update()
 
-      const uiLayer2 = scene.getLayer('ui')
-      const gameBanner2 = uiLayer2.children.find(child => child.label === 'game-banner')
+      const hudLayer2 = scene.getLayer('hud')
+      const gameBanner2 = hudLayer2.children.find(child => child.label === 'game-banner')
       expect(gameBanner2?.visible).toBe(false)
     })
   })
@@ -327,11 +327,11 @@ describe('HUD', () => {
       stateManager.updateAuthoritative(snapshot)
       hud.update()
 
-      const uiLayer = scene.getLayer('ui')
-      const energyBar = uiLayer.children.find(child => child.label === 'energy-bar')
-      const palletCounter = uiLayer.children.find(child => child.label === 'pallet-counter')
-      const playerIndicator = uiLayer.children.find(child => child.label === 'player-indicator')
-      const gameBanner = uiLayer.children.find(child => child.label === 'game-banner')
+      const hudLayer = scene.getLayer('hud')
+      const energyBar = hudLayer.children.find(child => child.label === 'energy-bar')
+      const palletCounter = hudLayer.children.find(child => child.label === 'pallet-counter')
+      const playerIndicator = hudLayer.children.find(child => child.label === 'player-indicator')
+      const gameBanner = hudLayer.children.find(child => child.label === 'game-banner')
 
       expect(energyBar).toBeDefined()
       expect(palletCounter).toBeDefined()
@@ -342,12 +342,12 @@ describe('HUD', () => {
 
   describe('Destruction', () => {
     it('destroys HUD and cleans up all components', () => {
-      const uiLayer = scene.getLayer('ui')
-      const initialChildCount = uiLayer.children.length
+      const hudLayer = scene.getLayer('hud')
+      const initialChildCount = hudLayer.children.length
 
       hud.destroy()
 
-      expect(uiLayer.children.length).toBeLessThan(initialChildCount)
+      expect(hudLayer.children.length).toBeLessThan(initialChildCount)
     })
   })
 
@@ -368,8 +368,8 @@ describe('HUD', () => {
       stateManager.updateAuthoritative(snapshot)
       hud.update()
 
-      const uiLayer = scene.getLayer('ui')
-      const playerIndicator = uiLayer.children.find(child => child.label === 'player-indicator')
+      const hudLayer = scene.getLayer('hud')
+      const playerIndicator = hudLayer.children.find(child => child.label === 'player-indicator')
       expect(playerIndicator).toBeDefined()
       
       const indicatorText = playerIndicator?.children.find(child => child.label === 'player-indicator-text')

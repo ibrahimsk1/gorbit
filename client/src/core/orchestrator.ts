@@ -778,7 +778,8 @@ export class AppOrchestrator {
   }
 
   /**
-   * Centers the UI layer on screen (UI-specific logic moved from Scene).
+   * Centers the UI layer on screen for menu components.
+   * HUD components use separate 'hud' layer positioned at (0, 0) by Renderer.
    * Private helper method called during initialization.
    * Scene must be initialized before calling this.
    */

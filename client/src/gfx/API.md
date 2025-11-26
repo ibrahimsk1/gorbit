@@ -114,6 +114,7 @@ scene.destroy()
 - Scene manages a root container added to PixiJS stage
 - Layers are created on-demand when accessed
 - Default layers: background, game, ui
+- Dynamic layers: radar, hud (created by Renderer)
 - Root container is always attached to PixiJS stage
 - Destroy removes root from stage and cleans up all children
 
@@ -198,6 +199,8 @@ renderer.destroy()
 ### Semantics
 
 - Renderer transforms world coordinates to screen coordinates using camera
+- Renderer positions 'radar' layer at top-right corner (screen.width - 210, 10)
+- Renderer positions 'hud' layer at top-left corner (0, 0) for absolute screen coordinates
 - Camera follows player's ship smoothly (lerp factor ~0.1–0.15)
 - World (0,0) maps to screen center (adjusted by camera position)
 - Y-axis is flipped (world Y-up, screen Y-down)

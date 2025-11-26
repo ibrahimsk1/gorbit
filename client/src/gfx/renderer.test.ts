@@ -994,6 +994,20 @@ describe('Renderer', () => {
       expect(radarLayer.children.length).toBeGreaterThanOrEqual(0)
     })
 
+    it('positions HUD layer at top-left (0, 0)', () => {
+      const hudLayer = scene.getLayer('hud')
+      
+      // HUD layer should be positioned at top-left
+      expect(hudLayer.x).toBe(0)
+      expect(hudLayer.y).toBe(0)
+    })
+
+    it('HUD layer exists in Scene', () => {
+      const hudLayer = scene.getLayer('hud')
+      expect(hudLayer).toBeDefined()
+      expect(hudLayer).toBeInstanceOf(Container)
+    })
+
     it('handles radar lifecycle (destroy on cleanup)', () => {
       const gameState = createGameState()
 
