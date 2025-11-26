@@ -155,26 +155,41 @@ export class ReconciliationSystem {
   /**
    * Checks if two game states have a mismatch.
    * Uses tolerance for floating-point comparisons.
+   * v1 multiplayer format: compares player's ship by myShipId.
    * 
    * @param predicted Predicted state
    * @param authoritative Authoritative state
    * @returns True if mismatch detected, false otherwise
    */
   hasMismatch(predicted: GameState, authoritative: GameState): boolean {
+    // Compare myShipId (should match)
+    if (predicted.myShipId !== authoritative.myShipId) {
+      return true
+    }
+
+    // Find player's ship in both states
+    const predictedShip = predicted.ships.find(s => s.id === predicted.myShipId)
+    const authoritativeShip = authoritative.ships.find(s => s.id === authoritative.myShipId)
+
+    // If ship not found in either state, it's a mismatch
+    if (!predictedShip || !authoritativeShip) {
+      return true
+    }
+
     // Compare ship position
-    if (!this.vec2Equals(predicted.ship.pos, authoritative.ship.pos)) {
+    if (!this.vec2Equals(predictedShip.pos, authoritativeShip.pos)) {
       return true
     }
 
     // Compare ship velocity
-    if (!this.vec2Equals(predicted.ship.vel, authoritative.ship.vel)) {
+    if (!this.vec2Equals(predictedShip.vel, authoritativeShip.vel)) {
       return true
     }
 
     // Compare ship rotation (with tolerance)
-    if (Math.abs(predicted.ship.rot - authoritative.ship.rot) > FLOAT_TOLERANCE) {
+    if (Math.abs(predictedShip.rot - authoritativeShip.rot) > FLOAT_TOLERANCE) {
       // Handle rotation wrap-around (0 and 2π are the same)
-      const rotDiff = Math.abs(predicted.ship.rot - authoritative.ship.rot)
+      const rotDiff = Math.abs(predictedShip.rot - authoritativeShip.rot)
       const rotDiffWrapped = Math.abs(rotDiff - 2 * Math.PI)
       if (Math.min(rotDiff, rotDiffWrapped) > FLOAT_TOLERANCE) {
         return true
@@ -182,17 +197,19 @@ export class ReconciliationSystem {
     }
 
     // Compare ship energy (exact comparison for discrete value)
-    if (predicted.ship.energy !== authoritative.ship.energy) {
+    if (predictedShip.energy !== authoritativeShip.energy) {
       return true
     }
 
-    // Compare planets
+    // Compare planets (match by id)
     if (predicted.planets.length !== authoritative.planets.length) {
       return true
     }
-    for (let i = 0; i < predicted.planets.length; i++) {
-      const predPlanet = predicted.planets[i]
-      const authPlanet = authoritative.planets[i]
+    for (const predPlanet of predicted.planets) {
+      const authPlanet = authoritative.planets.find(p => p.id === predPlanet.id)
+      if (!authPlanet) {
+        return true
+      }
       if (!this.vec2Equals(predPlanet.pos, authPlanet.pos)) {
         return true
       }
@@ -201,14 +218,13 @@ export class ReconciliationSystem {
       }
     }
 
-    // Compare pallets
+    // Compare pallets (match by id)
     if (predicted.pallets.length !== authoritative.pallets.length) {
       return true
     }
-    for (let i = 0; i < predicted.pallets.length; i++) {
-      const predPallet = predicted.pallets[i]
-      const authPallet = authoritative.pallets[i]
-      if (predPallet.id !== authPallet.id) {
+    for (const predPallet of predicted.pallets) {
+      const authPallet = authoritative.pallets.find(p => p.id === predPallet.id)
+      if (!authPallet) {
         return true
       }
       if (!this.vec2Equals(predPallet.pos, authPallet.pos)) {
@@ -218,6 +234,12 @@ export class ReconciliationSystem {
       if (predPallet.active !== authPallet.active) {
         return true
       }
+    }
+
+    // Compare worldBounds
+    if (predicted.worldBounds.width !== authoritative.worldBounds.width ||
+        predicted.worldBounds.height !== authoritative.worldBounds.height) {
+      return true
     }
 
     // Compare game state flags (exact comparison)

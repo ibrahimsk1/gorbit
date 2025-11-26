@@ -261,11 +261,18 @@ function checkWinCondition(state: GameState): boolean {
 
 /**
  * Checks lose condition (matching server rules.CheckLoseCondition).
+ * v1 multiplayer format: checks player's ship by myShipId.
  */
 function checkLoseCondition(state: GameState): boolean {
+  // Find player's ship
+  const playerShip = state.ships.find(s => s.id === state.myShipId)
+  if (!playerShip) {
+    return false // No ship found, can't lose
+  }
+
   // Check collision with all planets
   for (const planet of state.planets) {
-    if (shipPlanetCollision(state.ship.pos, planet.pos, planet.radius)) {
+    if (shipPlanetCollision(playerShip.pos, planet.pos, planet.radius)) {
       return true
     }
   }
@@ -305,6 +312,7 @@ function evaluateGameState(state: GameState): GameState {
 
 /**
  * Performs one complete game loop step (matching server rules.Step).
+ * v1 multiplayer format: updates player's ship in ships array by myShipId.
  */
 function step(
   state: GameState,
@@ -322,9 +330,19 @@ function step(
     }
   }
   
+  // Find player's ship
+  const playerShipIndex = state.ships.findIndex(s => s.id === state.myShipId)
+  if (playerShipIndex === -1) {
+    // Player's ship not found, return state unchanged except tick
+    return {
+      ...state,
+      tick: state.tick + 1
+    }
+  }
+  
   // Step 1: Apply Input
   // Process player input (thrust, turn) - updates rotation, velocity, and energy
-  let ship = applyInput(state.ship, input, dt)
+  let ship = applyInput(state.ships[playerShipIndex], input, dt)
   
   // Step 2: Update Physics
   // Calculate gravity acceleration from all planets (sum accelerations)
@@ -366,11 +384,15 @@ function step(
     return pallet
   })
   
+  // Update ships array with updated player ship
+  const ships = [...state.ships]
+  ships[playerShipIndex] = ship
+  
   // Step 4: Evaluate Rules
   // Check win/lose conditions and update Done/Win flags
   let newState: GameState = {
     ...state,
-    ship,
+    ships,
     pallets,
     tick: state.tick + 1
   }

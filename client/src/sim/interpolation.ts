@@ -217,13 +217,16 @@ export class InterpolationSystem {
 
   /**
    * Converts a SnapshotMessage to GameState format.
+   * v1 multiplayer format: uses ships array, includes myShipId and worldBounds.
    */
   private snapshotToGameState(snapshot: SnapshotMessage): GameState {
     return {
       tick: snapshot.tick,
-      ship: snapshot.ship,
+      ships: snapshot.ships,
       planets: snapshot.planets,
       pallets: snapshot.pallets,
+      worldBounds: snapshot.worldBounds,
+      myShipId: snapshot.myShipId,
       done: snapshot.done,
       win: snapshot.win
     }
@@ -231,6 +234,7 @@ export class InterpolationSystem {
 
   /**
    * Interpolates between two snapshots.
+   * v1 multiplayer format: interpolates ships array by matching IDs.
    * 
    * @param older Older snapshot
    * @param newer Newer snapshot
@@ -242,19 +246,28 @@ export class InterpolationSystem {
     newer: SnapshotMessage,
     factor: number
   ): GameState {
-    // Interpolate ship
-    const ship = {
-      pos: this.lerpVec2(older.ship.pos, newer.ship.pos, factor),
-      vel: this.lerpVec2(older.ship.vel, newer.ship.vel, factor),
-      rot: this.lerpAngle(older.ship.rot, newer.ship.rot, factor),
-      energy: this.lerp(older.ship.energy, newer.ship.energy, factor)
-    }
+    // Interpolate ships (match by id)
+    const ships = newer.ships.map(newShip => {
+      const oldShip = older.ships.find(s => s.id === newShip.id)
+      if (oldShip) {
+        return {
+          id: newShip.id,
+          pos: this.lerpVec2(oldShip.pos, newShip.pos, factor),
+          vel: this.lerpVec2(oldShip.vel, newShip.vel, factor),
+          rot: this.lerpAngle(oldShip.rot, newShip.rot, factor),
+          energy: this.lerp(oldShip.energy, newShip.energy, factor)
+        }
+      }
+      // New ship, use newer snapshot
+      return newShip
+    })
 
-    // Interpolate planets (match by index)
-    const planets = newer.planets.map((newPlanet, index) => {
-      const oldPlanet = older.planets[index]
+    // Interpolate planets (match by id)
+    const planets = newer.planets.map(newPlanet => {
+      const oldPlanet = older.planets.find(p => p.id === newPlanet.id)
       if (oldPlanet) {
         return {
+          id: newPlanet.id,
           pos: this.lerpVec2(oldPlanet.pos, newPlanet.pos, factor),
           radius: newPlanet.radius // Use newer radius (discrete)
         }
@@ -285,9 +298,11 @@ export class InterpolationSystem {
     // Use discrete values for game state flags
     return {
       tick: newer.tick, // Use newer tick
-      ship,
+      ships,
       planets,
       pallets,
+      worldBounds: newer.worldBounds, // Use newer worldBounds (discrete)
+      myShipId: newer.myShipId, // Use newer myShipId (discrete)
       done: newer.done, // Use newer done state (discrete)
       win: newer.win // Use newer win state (discrete)
     }

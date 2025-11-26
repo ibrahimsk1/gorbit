@@ -74,21 +74,14 @@ export class HUD {
   /**
    * Updates all HUD components from current game state.
    * Should be called each frame or when state changes.
+   * v1 multiplayer format: uses ships array with myShipId.
    */
   update(): void {
     const state = this.stateManager.getRenderState()
 
     // Get player's ship from ships array (v1 multiplayer format)
-    // Handle both v0 (single ship) and v1 (ships array) formats for backward compatibility
-    let energy = 0
-    if (state.ships && Array.isArray(state.ships)) {
-      // v1 format: ships array
-      const playerShip = state.ships.find(ship => ship.id === state.myShipId)
-      energy = playerShip?.energy ?? 0
-    } else if ((state as any).ship) {
-      // v0 format: single ship (backward compatibility)
-      energy = (state as any).ship.energy ?? 0
-    }
+    const playerShip = state.ships.find(ship => ship.id === state.myShipId)
+    const energy = playerShip?.energy ?? 0
 
     // Update energy bar
     this.energyBar.update(energy, this.maxEnergy)
@@ -99,9 +92,7 @@ export class HUD {
     this.palletCounter.update(activePallets, totalPallets)
 
     // Update player indicator with player's ship ID
-    // Handle both v0 and v1 formats
-    const myShipId = state.myShipId ?? ((state as any).ship?.id ?? 0)
-    this.playerIndicator.update(myShipId)
+    this.playerIndicator.update(state.myShipId)
 
     // Update game banner based on done/win flags
     if (state.done) {
