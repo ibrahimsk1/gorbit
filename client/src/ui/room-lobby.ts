@@ -24,6 +24,8 @@ export class RoomLobby {
   private leaveButtonText: Text
   private waitingText: Text | null = null
   private playerTexts: Text[] = []
+  private minPlayers: number = 1
+  private maxPlayers: number = 8
 
   constructor(
     parent: Container,
@@ -86,7 +88,7 @@ export class RoomLobby {
     if (this.isHost) {
       this.startButton = new Graphics()
       this.startButton.label = 'room-lobby-start-button'
-      const canStart = this.roomState.players.length >= 2
+      const canStart = this.roomState.players.length >= this.minPlayers
       this.startButton.eventMode = canStart ? 'static' : 'none'
       this.startButton.cursor = canStart ? 'pointer' : 'default'
       this.startButton.rect(-100, -20, 200, 40)
@@ -114,7 +116,7 @@ export class RoomLobby {
       this.container.addChild(this.startButton)
 
       this.startButtonText = new Text({
-        text: canStart ? 'Start Match' : 'Start Match (Need 2+ Players)',
+        text: canStart ? 'Start Match' : `Start Match (Need ${this.minPlayers}+ Players)`,
         style: {
           fontFamily: 'Arial',
           fontSize: 20,
@@ -286,7 +288,7 @@ export class RoomLobby {
       }
 
       // Update "Start Match" button state
-      const canStart = roomState.players.length >= 2
+      const canStart = roomState.players.length >= this.minPlayers
       this.startButton.eventMode = canStart ? 'static' : 'none'
       this.startButton.cursor = canStart ? 'pointer' : 'default'
       
@@ -297,7 +299,7 @@ export class RoomLobby {
 
       // Update button text
       if (this.startButtonText) {
-        this.startButtonText.text = canStart ? 'Start Match' : 'Start Match (Need 2+ Players)'
+        this.startButtonText.text = canStart ? 'Start Match' : `Start Match (Need ${this.minPlayers}+ Players)`
       }
 
       // Re-setup event handlers if enabled

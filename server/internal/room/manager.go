@@ -22,6 +22,10 @@ const (
 	maxRetries = 10
 	// characterSet contains all valid characters for room codes (A-Z, 0-9).
 	characterSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	// MIN_PLAYERS is the minimum number of players required to start a match.
+	MIN_PLAYERS = 1
+	// MAX_PLAYERS is the maximum number of players allowed in a room.
+	MAX_PLAYERS = 8
 )
 
 var (
@@ -187,7 +191,7 @@ func (rm *RoomManager) JoinRoom(roomCode string, conn *transport.Connection) (*R
 	}
 
 	// Check capacity (max 8 players)
-	if playerCount >= 8 {
+	if playerCount >= MAX_PLAYERS {
 		return nil, 0, ErrRoomFull
 	}
 
@@ -417,7 +421,7 @@ func (rm *RoomManager) StartMatch(roomCode string, hostPlayerID uint32, clock se
 	}
 
 	// Validate minimum players
-	if len(players) < 2 {
+	if len(players) < MIN_PLAYERS {
 		return ErrNotEnoughPlayers
 	}
 
