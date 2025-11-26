@@ -9,21 +9,21 @@ import type { GameState } from '../sim/state-manager'
 
 /**
  * Creates a test SnapshotMessage with default values.
+ * v1 multiplayer format: uses ships array, includes myShipId and worldBounds.
  */
 export function createTestSnapshot(tick: number, overrides?: Partial<SnapshotMessage>): SnapshotMessage {
   return {
     t: 'snapshot',
     tick,
-    ship: {
-      pos: { x: 10.0, y: 0.0 },
-      vel: { x: 0.0, y: 0.0 },
-      rot: 0.0,
-      energy: 100.0
-    },
+    ships: [
+      { id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+    ],
     planets: [
-      { pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
+      { id: 1, pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
     ],
     pallets: [],
+    worldBounds: { width: 2000, height: 2000 },
+    myShipId: 1,
     done: false,
     win: false,
     ...overrides
@@ -32,20 +32,20 @@ export function createTestSnapshot(tick: number, overrides?: Partial<SnapshotMes
 
 /**
  * Creates a test GameState with default values.
+ * v1 multiplayer format: uses ships array, includes myShipId and worldBounds.
  */
 export function createTestState(tick: number, overrides?: Partial<GameState>): GameState {
   return {
     tick,
-    ship: {
-      pos: { x: 10.0, y: 0.0 },
-      vel: { x: 0.0, y: 0.0 },
-      rot: 0.0,
-      energy: 100.0
-    },
+    ships: [
+      { id: 1, pos: { x: 10.0, y: 0.0 }, vel: { x: 0.0, y: 0.0 }, rot: 0.0, energy: 100.0 }
+    ],
     planets: [
-      { pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
+      { id: 1, pos: { x: 0.0, y: 0.0 }, radius: 50.0 }
     ],
     pallets: [],
+    worldBounds: { width: 2000, height: 2000 },
+    myShipId: 1,
     done: false,
     win: false,
     ...overrides
@@ -54,9 +54,11 @@ export function createTestState(tick: number, overrides?: Partial<GameState>): G
 
 /**
  * Creates a test ShipSnapshot.
+ * v1 format includes id field.
  */
 export function createTestShip(overrides?: Partial<ShipSnapshot>): ShipSnapshot {
   return {
+    id: 1,
     pos: { x: 10.0, y: 0.0 },
     vel: { x: 0.0, y: 0.0 },
     rot: 0.0,
@@ -67,9 +69,11 @@ export function createTestShip(overrides?: Partial<ShipSnapshot>): ShipSnapshot 
 
 /**
  * Creates a test PlanetSnapshot.
+ * v1 format includes id field.
  */
 export function createTestPlanet(overrides?: Partial<PlanetSnapshot>): PlanetSnapshot {
   return {
+    id: 1,
     pos: { x: 0.0, y: 0.0 },
     radius: 50.0,
     ...overrides
@@ -111,6 +115,7 @@ export function rotationDifference(rot1: number, rot2: number): number {
 
 /**
  * Checks if two states are approximately equal (within threshold).
+ * v1 multiplayer format: compares player's ship by myShipId.
  */
 export function statesApproximatelyEqual(
   state1: GameState,
@@ -121,17 +126,26 @@ export function statesApproximatelyEqual(
 ): { equal: boolean; errors: { position?: number; rotation?: number; energy?: number } } {
   const errors: { position?: number; rotation?: number; energy?: number } = {}
   
-  const posError = distance(state1.ship.pos, state2.ship.pos)
+  // Find player's ship in both states
+  const ship1 = state1.ships.find(s => s.id === state1.myShipId)
+  const ship2 = state2.ships.find(s => s.id === state2.myShipId)
+  
+  if (!ship1 || !ship2) {
+    // Ships not found, return not equal
+    return { equal: false, errors: { position: Infinity } }
+  }
+  
+  const posError = distance(ship1.pos, ship2.pos)
   if (posError > positionThreshold) {
     errors.position = posError
   }
   
-  const rotError = rotationDifference(state1.ship.rot, state2.ship.rot)
+  const rotError = rotationDifference(ship1.rot, ship2.rot)
   if (rotError > rotationThreshold) {
     errors.rotation = rotError
   }
   
-  const energyError = Math.abs(state1.ship.energy - state2.ship.energy)
+  const energyError = Math.abs(ship1.energy - ship2.energy)
   if (energyError > energyThreshold) {
     errors.energy = energyError
   }
